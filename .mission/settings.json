@@ -1,0 +1,8 @@
+{
+  "runtimeProvider": "copilot-cli",
+  "runtimeCommand": "copilot",
+  "trackingProvider": "github",
+  "instructionsPath": ".agents",
+  "skillsPath": ".agents/skills",
+  "serverPort": 4317
+}

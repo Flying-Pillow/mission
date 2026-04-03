@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || {
+	CDPATH= cd -- "$script_dir/../.."
+	pwd
+})
+preload_file="$script_dir/bun-preload.ts"
+
+hmr_mode=0
+if [ "${1:-}" = "--hmr" ]; then
+	hmr_mode=1
+	shift
+fi
+
+runner="tsx"
+first_arg=${1:-}
+cockpit_mode=0
+if [ -z "$first_arg" ]; then
+	cockpit_mode=1
+elif [ "${first_arg#--}" != "$first_arg" ]; then
+	cockpit_mode=1
+fi
+
+if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then
+	exec env MISSION_REPO_ROOT="$repo_root" pnpm --dir "$repo_root" exec bun --preload "$preload_file" --watch "$script_dir/src/index.ts" "$@"
+elif [ "$hmr_mode" -eq 1 ]; then
+	runner="tsx watch"
+elif [ "$cockpit_mode" -eq 1 ]; then
+	exec env MISSION_REPO_ROOT="$repo_root" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+fi
+
+exec env MISSION_REPO_ROOT="$repo_root" pnpm --dir "$script_dir" exec $runner src/index.ts "$@"

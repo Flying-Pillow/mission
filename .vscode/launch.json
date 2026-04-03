@@ -1,0 +1,53 @@
+{
+    "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "Mission Full Stack",
+            "configurations": [
+                "Mission Daemon",
+                "Mission Extension Host"
+            ],
+            "stopAll": true
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Mission Daemon",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/packages/adapters",
+            "runtimeExecutable": "node",
+            "runtimeArgs": [
+                "--import",
+                "tsx"
+            ],
+            "program": "${workspaceFolder}/packages/adapters/src/main.ts",
+            "args": [
+                "--socket",
+                "${workspaceFolder}/.mission/daemon/debug.sock"
+            ],
+            "env": {
+                "MISSION_REPO_ROOT": "${workspaceFolder}"
+            },
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "name": "Mission Extension Host",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--disable-extension=mission.mission",
+                "--extensionDevelopmentPath=${workspaceFolder}/apps/vscode-extension",
+                "${workspaceFolder}/mission.code-workspace"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/apps/vscode-extension/out/**/*.js"
+            ],
+            "preLaunchTask": "mission: build"
+        }
+    ]
+}

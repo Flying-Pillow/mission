@@ -1,0 +1,4 @@
+{
+    "mission.settingsFolder": "${workspaceFolder}/.mission",
+    "mission.agentsFolder": "${workspaceFolder}/.agents"
+}
