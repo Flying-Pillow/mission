@@ -26,11 +26,9 @@ import type {
 import {
 	bootstrapMissionFromIssue,
 	executeCommand as executeDaemonOperation,
-	getControlStatus,
 	evaluateMissionGate,
 	getMissionStatus,
 	getSessionConsoleState,
-	launchControlSession,
 	launchTaskSession,
 	listOpenGitHubIssues,
 	sendSessionInput,
@@ -39,7 +37,6 @@ import {
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement, untrack } from 'solid-js';
 import { CockpitScreen } from './components/CockpitScreen.js';
-import { ControlStatusPanel } from './components/ControlStatusPanel.js';
 import {
 	applyCockpitTheme,
 	cockpitThemes,
@@ -171,10 +168,13 @@ type ConsoleTabDescriptor =
 	| {
 		id: string;
 		label: string;
+		kind: 'control';
+	  }
+	| {
+		id: string;
+		label: string;
 		kind: 'daemon';
 	  };
-
-const CONTROL_SESSION_CHANNEL_ID = '__control__';
 
 const missionFocusOrder: FocusArea[] = ['header', 'stages', 'tasks', 'sessions', 'command'];
 const controlFocusOrder: FocusArea[] = ['header', 'command'];
@@ -241,10 +241,8 @@ function MissionCockpitApp({
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
-
 	const client = createMemo(() => connection()?.client);
 	const currentMissionId = createMemo(() => selector().missionId ?? status().missionId);
-	const currentSessionChannelId = createMemo(() => currentMissionId() ?? CONTROL_SESSION_CHANNEL_ID);
 	const controlStatus = createMemo(() => status().control);
 	const stages = createMemo(() => status().stages ?? []);
 	const sessions = createMemo(() => status().agentSessions ?? []);
@@ -273,6 +271,7 @@ function MissionCockpitApp({
 				return left.sessionId.localeCompare(right.sessionId);
 			});
 	});
+	const visibleSessions = createMemo(() => sessionsForTask());
 	const currentTask = createMemo(() =>
 		selectedTask() ?? status().activeTasks?.[0] ?? status().readyTasks?.[0]
 	);
@@ -482,6 +481,7 @@ function MissionCockpitApp({
 			availableCommands: availableCommands(),
 			inputValue: inputValue(),
 			status: status(),
+			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
 			selectedSessionId: selectedSessionId(),
 			selectedStageId: selectedStageId(),
 			currentTaskLabel: currentTask()?.subject
@@ -532,12 +532,20 @@ function MissionCockpitApp({
 			});
 		}
 
-		for (const session of sessionsForTask()) {
+		for (const session of visibleSessions()) {
 			tabs.push({
 				id: createSessionTabId(session.sessionId),
 				label: formatSessionTabLabel(session),
 				kind: 'session',
 				sessionId: session.sessionId
+			});
+		}
+
+		if (!status().found) {
+			tabs.push({
+				id: controlTabId,
+				label: 'CONTROL',
+				kind: 'control'
 			});
 		}
 
@@ -573,6 +581,13 @@ function MissionCockpitApp({
 				kind: 'output',
 				lines: lines.slice(-availableConsoleHeight()),
 				emptyLabel: 'No output has been recorded for this session yet.'
+			};
+		}
+		if (selectedTab.kind === 'control') {
+			return {
+				kind: 'output',
+				lines: buildControlStatusLines(status(), workspaceContext),
+				emptyLabel: 'Control status is unavailable.'
 			};
 		}
 		const documentState = markdownDocumentByPath()[selectedTab.sourcePath];
@@ -684,16 +699,7 @@ function MissionCockpitApp({
 						);
 					}
 				}
-				return cockpitMode() === 'mission'
-					? undefined
-					: (
-						<ControlStatusPanel
-							mode={cockpitMode() === 'setup' ? 'setup' : 'root'}
-							control={controlStatus()}
-							availableMissions={status().availableMissions ?? []}
-							workspaceContextLabel={describeWorkspaceContext(workspaceContext)}
-						/>
-					);
+				return undefined;
 		}
 	});
 
@@ -717,7 +723,7 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		setSelectedSessionId((current) => pickPreferredSessionId(sessionsForTask(), current));
+		setSelectedSessionId((current) => pickPreferredSessionId(visibleSessions(), current));
 	});
 
 	createEffect(() => {
@@ -893,7 +899,7 @@ function MissionCockpitApp({
 		}
 		const subscription = currentClient.onDidEvent((event) => {
 			setLastEvent(event.type);
-			if (event.missionId !== currentSessionChannelId()) {
+			if (event.missionId !== currentMissionId()) {
 				return;
 			}
 			const missionStatusEvent = asMissionStatusNotification(event);
@@ -918,10 +924,6 @@ function MissionCockpitApp({
 				}
 				return;
 			}
-			if (event.type === 'session.lifecycle') {
-				appendLog(`session ${event.phase}: ${event.sessionId} (${event.lifecycleState})`);
-				return;
-			}
 			if (event.type === 'session.event') {
 				appendLog(describeAgentEvent(event.event));
 			}
@@ -934,15 +936,19 @@ function MissionCockpitApp({
 	createEffect(() => {
 		const currentClient = client();
 		const missionSelector = currentMissionSelector();
-		const taskSessions = sessionsForTask();
-		if (!currentClient || !missionSelector || taskSessions.length === 0) {
+		const targetSessions = visibleSessions();
+		if (!currentClient || targetSessions.length === 0) {
 			return;
 		}
-		for (const session of taskSessions) {
+		if (status().found && !missionSelector) {
+			return;
+		}
+		const sessionSelector = status().found ? missionSelector : undefined;
+		for (const session of targetSessions) {
 			if (consoleStateBySessionId()[session.sessionId]) {
 				continue;
 			}
-			void getSessionConsoleState(currentClient, missionSelector, session.sessionId)
+			void getSessionConsoleState(currentClient, sessionSelector, session.sessionId)
 				.then((nextConsole: MissionAgentConsoleState | null) => {
 					const nextSessionId = nextConsole?.sessionId;
 					if (nextSessionId) {
@@ -992,10 +998,6 @@ function MissionCockpitApp({
 		}
 		if (key.ctrl && key.name === 'p' && canToggleExpandedPreview()) {
 			setExpandedComposerTab((current) => (current === 'write' ? 'preview' : 'write'));
-			return;
-		}
-		if (key.ctrl && key.name === 'g' && canGenerateBodyDraft()) {
-			void generateMissionBodyDraft();
 			return;
 		}
 		if (key.name === 'tab' && focusArea() === 'flow' && canToggleExpandedPreview()) {
@@ -1250,6 +1252,8 @@ function MissionCockpitApp({
 		const nextTab = consoleTabs().find((tab) => tab.id === tabId);
 		if (nextTab?.kind === 'session') {
 			setSelectedSessionId(nextTab.sessionId);
+		} else {
+			setSelectedSessionId(undefined);
 		}
 		if (nextTab) {
 			void reloadConsoleTab(nextTab);
@@ -1305,6 +1309,10 @@ function MissionCockpitApp({
 		for (const line of lines) {
 			appendLog(line);
 		}
+	}
+
+	function resolveInputTargetSessionId(): string | undefined {
+		return selectedSessionId();
 	}
 
 	function openMissionPicker(): void {
@@ -1706,6 +1714,13 @@ function MissionCockpitApp({
 		return nextSelector;
 	}
 
+	function updateMissionSessionRecord(record: MissionAgentSessionRecord): void {
+		setStatus((currentStatus) => ({
+			...currentStatus,
+			agentSessions: upsertSessionRecord(currentStatus.agentSessions, record)
+		}));
+	}
+
 	async function selectThemeById(themeId: string): Promise<void> {
 		if (!isCockpitThemeName(themeId)) {
 			appendLog(`Unknown theme '${themeId}'.`);
@@ -1855,14 +1870,15 @@ function MissionCockpitApp({
 		setIsRunningCommand(true);
 		try {
 			if (!trimmed.startsWith('/')) {
-				const sessionId = selectedSessionId();
+				const sessionId = resolveInputTargetSessionId();
 				const missionSelector = currentMissionSelector();
 				const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
 				if (!sessionId || !currentClient) {
 					appendLog('No selected session is available. Use /launch first.');
 					return;
 				}
-				await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
+				const updatedSession = await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
+				updateMissionSessionRecord(updatedSession);
 				appendLog(`Sent input to ${sessionId}.`);
 				return;
 			}
@@ -1880,10 +1896,9 @@ function MissionCockpitApp({
 						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
 						'/issues',
 						'/issue <number>',
-							'/start',
-							'/select',
-						'/draft [guidance]',
-						'/launch [runtimeId]',
+						'/start',
+						'/select',
+						...(status().found ? ['/launch [runtimeId]'] : []),
 						'/gate [implement|verify|audit|deliver]',
 						'/transition <stage>',
 						'/cancel [sessionId]',
@@ -2001,17 +2016,6 @@ function MissionCockpitApp({
 						appendLog('Unable to connect to launch an agent session.');
 						return;
 					}
-					if (!status().found) {
-						const session = await launchControlSession(currentClient, {
-							...(runtimeId ? { runtimeId } : {})
-						});
-						setSelectedSessionId(session.sessionId);
-						setSelectedConsoleTabId(createSessionTabId(session.sessionId));
-						const next = await getControlStatus(currentClient);
-						applyMissionStatus(next);
-						appendLog(`Launched ${session.runtimeId} for repository root.`);
-						return;
-					}
 					if (!missionSelector) {
 						appendLog(noMissionSelectedMessage(status()));
 						return;
@@ -2037,10 +2041,11 @@ function MissionCockpitApp({
 					appendLog(`Launched ${session.runtimeId} for ${task.subject}.`);
 					return;
 				}
-				case '/draft':
-					await generateMissionBodyDraft(args.join(' ').trim());
-					return;
 				case '/sessions':
+					if (!status().found) {
+						appendLog('No mission is selected.');
+						return;
+					}
 					if (sessions().length === 0) {
 						appendLog('No agent sessions are currently attached to this mission.');
 						return;
@@ -2211,63 +2216,6 @@ function MissionCockpitApp({
 		</Show>
 	);
 
-	function canGenerateBodyDraft(): boolean {
-		const step = currentCommandFlowStep();
-		if (!step || step.kind !== 'text') {
-			return false;
-		}
-		return step.id === 'body' && step.inputMode === 'expanded';
-	}
-
-	async function generateMissionBodyDraft(operatorGuidance = ''): Promise<void> {
-		if (!canGenerateBodyDraft()) {
-			appendLog('Body draft generation is available during the BODY step of /start.');
-			return;
-		}
-
-		const flow = currentCommandFlow();
-		if (!flow) {
-			appendLog('No active command flow is available for draft generation.');
-			return;
-		}
-
-		const missionTitle = commandFlowTextStepValue(flow.steps, 'title')?.value.trim();
-		const missionType = commandFlowSelectionStepValue(flow.steps, 'type')?.optionLabels[0]
-			?? commandFlowSelectionStepValue(flow.steps, 'type')?.optionIds[0];
-		if (!missionTitle || !missionType) {
-			appendLog('Complete TYPE and TITLE before generating a BODY draft.');
-			return;
-		}
-
-		setIsRunningCommand(true);
-		const controlSettings = status().control?.settings as ConfiguredControlAgentSettings | undefined;
-		appendLog(`Generating BODY draft with ${describeConfiguredAgentDraftTarget(controlSettings)}...`);
-		try {
-			const prompt = buildMissionBodyDraftPromptTemplate({
-				title: missionTitle,
-				type: missionType,
-				currentBody: commandFlowTextValue(),
-				operatorGuidance
-			});
-			const draft = await runConfiguredAgentPrompt(prompt, workspaceContext.repoRoot, controlSettings);
-			if (draft.trim().length === 0) {
-				appendLog('Copilot returned an empty draft.');
-				return;
-			}
-			const currentBody = commandFlowTextValue().trim();
-			const nextBody = currentBody.length > 0
-				? `${commandFlowTextValue().trimEnd()}\n\n${draft.trim()}`
-				: draft.trim();
-			setCommandFlowTextValue(nextBody);
-			setExpandedComposerTab('write');
-			setFocusArea('flow');
-			appendLog('BODY draft appended from copilot output.');
-		} catch (error) {
-			appendLog(toErrorMessage(error));
-		} finally {
-			setIsRunningCommand(false);
-		}
-	}
 }
 
 function buildAdaptiveSetupCommandFlowSteps(
@@ -2603,6 +2551,7 @@ function normalizeCommandInputValue(value: string): string {
 	return value;
 }
 
+const controlTabId = 'control';
 const daemonTabId = 'daemon';
 
 function stageArtifactProductKey(stage: MissionStageId): MissionProductKey | undefined {
@@ -2622,6 +2571,28 @@ function createTaskTabId(taskId: string): string {
 
 function createSessionTabId(sessionId: string): string {
 	return `session:${sessionId}`;
+}
+
+function inferConsoleTabKindFromId(tabId: string | undefined): ConsoleTabDescriptor['kind'] | undefined {
+	if (!tabId) {
+		return undefined;
+	}
+	if (tabId.startsWith('artifact:')) {
+		return 'artifact';
+	}
+	if (tabId.startsWith('task:')) {
+		return 'task';
+	}
+	if (tabId.startsWith('session:')) {
+		return 'session';
+	}
+	if (tabId === controlTabId) {
+		return 'control';
+	}
+	if (tabId === daemonTabId) {
+		return 'daemon';
+	}
+	return undefined;
 }
 
 function formatSessionTabLabel(session: MissionAgentSessionRecord): string {
@@ -2779,138 +2750,6 @@ function buildFocusOrder(input: {
 		return baseOrder;
 	}
 	return ['flow', ...baseOrder.filter((area) => area !== 'flow' && area !== 'command'), 'command'];
-}
-
-function commandFlowSelectionStepValue(
-	steps: CommandFlowStepValue[],
-	stepId: string
-): CommandFlowSelectionValue | undefined {
-	return steps.find(
-		(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === stepId
-	);
-}
-
-function commandFlowTextStepValue(
-	steps: CommandFlowStepValue[],
-	stepId: string
-): CommandFlowTextValue | undefined {
-	return steps.find(
-		(step): step is CommandFlowTextValue => step.kind === 'text' && step.stepId === stepId
-	);
-}
-
-function buildMissionBodyDraftPromptTemplate(input: {
-	title: string;
-	type: string;
-	currentBody: string;
-	operatorGuidance: string;
-}): string {
-	const guidance = input.operatorGuidance.trim();
-	return [
-		'You are helping draft a Mission brief BODY in Markdown.',
-		'',
-		'Produce a concise, actionable brief body with these sections:',
-		'## Objective',
-		'## Scope',
-		'## Constraints',
-		'## Acceptance Criteria',
-		'## Risks',
-		'',
-		'Rules:',
-		'- Tailor to the mission type and title.',
-		'- Be specific and implementation-aware for a software repository.',
-		'- Keep total length between 180 and 350 words.',
-		'- Return only Markdown body content, no code fences and no preamble.',
-		'',
-		`Mission type: ${input.type}`,
-		`Mission title: ${input.title}`,
-		...(guidance.length > 0
-			? [
-				'',
-				'Operator guidance from command dock:',
-				guidance
-			]
-			: []),
-		'',
-		'Current draft body (may be empty):',
-		input.currentBody.trim().length > 0 ? input.currentBody : '(empty)'
-	].join('\n');
-}
-
-function describeConfiguredAgentDraftTarget(settings: ConfiguredControlAgentSettings | undefined): string {
-	const agentRunner = settings?.agentRunner?.trim();
-	const defaultModel = settings?.defaultModel?.trim();
-	if (!agentRunner) {
-		return 'the configured agent runner';
-	}
-	return defaultModel ? `${agentRunner} (${defaultModel})` : agentRunner;
-}
-
-async function runConfiguredAgentPrompt(
-	prompt: string,
-	cwd: string,
-	settings: ConfiguredControlAgentSettings | undefined
-): Promise<string> {
-	const agentRunner = settings?.agentRunner?.trim();
-	if (agentRunner !== 'copilot') {
-		throw new Error(
-			agentRunner
-				? `Mission BODY draft generation does not support agent runner '${agentRunner}'.`
-				: 'Mission control agent runner is not configured. Run /setup first.'
-		);
-	}
-
-	const defaultModel = settings?.defaultModel?.trim();
-	if (!defaultModel) {
-		throw new Error('Mission control default model is not configured. Run /setup first.');
-	}
-
-	return new Promise<string>((resolve, reject) => {
-		let stdout = '';
-		let stderr = '';
-		const child = spawn(
-			'copilot',
-			[
-				'--model',
-				defaultModel,
-				'--prompt',
-				prompt,
-				'--allow-all-tools',
-				'--allow-all-paths',
-				'--allow-all-urls',
-				'--no-ask-user',
-				'--silent'
-			],
-			{
-				cwd,
-				env: {
-					...process.env,
-					NO_COLOR: '1',
-					TERM: 'dumb'
-				},
-				stdio: ['ignore', 'pipe', 'pipe']
-			}
-		);
-		child.stdout.setEncoding('utf8');
-		child.stderr.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => {
-			stdout += chunk;
-		});
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-		});
-		child.once('error', (error) => {
-			reject(new Error(`Failed to launch copilot: ${error.message}`));
-		});
-		child.once('close', (code) => {
-			if (code === 0) {
-				resolve(stdout.trim());
-				return;
-			}
-			const detail = stderr.trim() || stdout.trim() || 'No output from copilot.';
-			reject(new Error(`Copilot draft generation failed (exit ${String(code ?? 'unknown')}): ${detail}`));
-		});
-	});
 }
 
 async function resolveGitHubCliUser(cwd: string): Promise<string | undefined> {
@@ -3083,6 +2922,69 @@ function describeWorkspaceContext(workspaceContext: MissionWorkspaceContext): st
 		: 'the repository root';
 }
 
+function buildControlStatusLines(
+	status: MissionStatus,
+	workspaceContext: MissionWorkspaceContext
+): string[] {
+	const control = status.control;
+	if (!control) {
+		return ['Waiting for daemon control status...'];
+	}
+	const lines = [
+		status.operationalMode === 'setup'
+			? 'Finish setup before starting your first mission.'
+			: 'Mission control is ready.',
+		`Opened from ${describeWorkspaceContext(workspaceContext)}.`,
+		'',
+		`Files: ${control.initialized ? 'ready' : 'missing'} | Settings: ${control.settingsComplete ? 'ready' : 'needs attention'} | Issue intake: ${controlIssueStatusLabel(control)}`,
+		`GitHub auth: ${controlGithubStatusLabel(control)} | Active missions: ${String(control.availableMissionCount)}`
+	];
+	if (control.githubRepository) {
+		lines.push(`GitHub repository: ${control.githubRepository}`);
+	}
+	for (const notice of [...control.problems, ...control.warnings].slice(0, 4)) {
+		lines.push(`* ${notice}`);
+	}
+	const missions = status.availableMissions ?? [];
+	if (missions.length === 0) {
+		lines.push(
+			status.operationalMode === 'setup'
+				? 'No mission worktrees yet. Finish setup, then create your first mission with /start.'
+				: 'No mission worktrees yet. Use /start from the repository root to create your first mission.'
+		);
+		return lines;
+	}
+	lines.push('Missions:');
+	for (const mission of missions.slice(0, 10)) {
+		const issueLabel = mission.issueId !== undefined ? `#${String(mission.issueId)} ` : '';
+		lines.push(`${issueLabel}${mission.missionId} | ${mission.branchRef}`);
+	}
+	return lines;
+}
+
+function controlIssueStatusLabel(control: MissionStatus['control']): string {
+	if (!control?.issuesConfigured) {
+		return 'not ready';
+	}
+	if (control.githubAuthenticated === false) {
+		return 'waiting for GitHub auth';
+	}
+	if (control.githubAuthenticated === true) {
+		return 'ready';
+	}
+	return 'preparing';
+}
+
+function controlGithubStatusLabel(control: MissionStatus['control']): string {
+	if (control?.githubAuthenticated === true) {
+		return 'ok';
+	}
+	if (control?.githubAuthenticated === false) {
+		return 'required';
+	}
+	return 'n/a';
+}
+
 function shouldExecuteCommandSelection(command: string): boolean {
 	return command === '/setup'
 		|| command === '/init'
@@ -3105,6 +3007,7 @@ function buildCommandDockDescriptor(input: {
 	availableCommands: MissionCommandDescriptor[];
 	inputValue: string;
 	status: MissionStatus;
+	selectedConsoleTabKind: ConsoleTabDescriptor['kind'] | undefined;
 	selectedSessionId: string | undefined;
 	selectedStageId: MissionStageId | undefined;
 	currentTaskLabel: string | undefined;
@@ -3150,9 +3053,9 @@ function buildCommandDockDescriptor(input: {
 	}
 	const trimmed = input.inputValue.trim();
 	if (!trimmed) {
-		if (input.status.found && input.selectedSessionId) {
+		if (input.selectedConsoleTabKind === 'session' && input.selectedSessionId) {
 			return {
-				title: 'AGENT <> SEND',
+				title: 'AGENT > SEND',
 				placeholder: 'Type a reply for the selected agent session or start a command with /'
 			};
 		}
@@ -3166,7 +3069,7 @@ function buildCommandDockDescriptor(input: {
 	}
 	if (!trimmed.startsWith('/')) {
 		return {
-			title: 'AGENT <> SEND',
+			title: 'AGENT > SEND',
 			placeholder: 'Type a reply for the selected agent session'
 		};
 	}
@@ -3334,11 +3237,6 @@ function describeCommandDockIntent(
 					? `Launch an agent for ${currentTaskLabel}.`
 					: 'Launch an agent for the selected task.'
 			};
-		case '/draft':
-			return {
-				title: 'BODY > DRAFT > COPILOT',
-				placeholder: 'Press Enter to spawn Copilot draft generation. Add optional guidance after /draft.'
-			};
 		case '/sessions':
 			return {
 				title: 'AGENT > LIST',
@@ -3471,11 +3369,13 @@ function buildHeaderFooterBadges(input: {
 	const control = input.status.control;
 	if (input.mode === 'root') {
 		return [
+			...buildControlHeaderAgentConnectionBadges(input.status),
 			...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
 			{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 		];
 	}
 	return [
+		...buildControlHeaderAgentConnectionBadges(input.status),
 		...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
 		{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 	];
@@ -3517,6 +3417,29 @@ function buildControlHeaderGitHubBadges(
 		return [{ text: githubUser, tone: 'success' }];
 	}
 	return [];
+}
+
+function buildControlHeaderAgentConnectionBadges(
+	_status: MissionStatus
+): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
+	return [];
+}
+
+function upsertSessionRecord(
+	sessions: MissionAgentSessionRecord[] | undefined,
+	record: MissionAgentSessionRecord
+): MissionAgentSessionRecord[] {
+	if (!sessions || sessions.length === 0) {
+		return [record];
+	}
+	const next = sessions.slice();
+	const existingIndex = next.findIndex((session) => session.sessionId === record.sessionId);
+	if (existingIndex >= 0) {
+		next[existingIndex] = record;
+		return next;
+	}
+	next.push(record);
+	return next;
 }
 
 function parseGitHubUserFromAuthDetail(detail: string | undefined): string | undefined {
