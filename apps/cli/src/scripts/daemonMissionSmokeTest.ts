@@ -133,8 +133,8 @@ function parseArgs(argv: string[]): SmokeTestOptions {
 function createSmokeBrief(): MissionBrief {
     return {
         issueId: 9001,
-        title: 'Generate the game doom in pure html, css and javascript',
-        body: 'Generate the game doom in pure html, css and javascript',
+        title: 'Validate the mission workflow smoke test end to end',
+        body: 'Validate the mission workflow smoke test end to end',
         type: 'task'
     };
 }
