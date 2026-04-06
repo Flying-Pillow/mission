@@ -2,13 +2,14 @@ import * as net from 'node:net';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
-} from '../daemon/MissionAgentRuntime.js';
+	} from '../daemon/events.js';
 import type {
 	Message,
 	Method,
 	Notification,
+	Response,
 	Request
-} from '../daemon/protocol.js';
+} from '../daemon/contracts.js';
 import {
 	readDaemonManifest,
 	resolveDaemonSocketPath
@@ -25,15 +26,17 @@ export class DaemonClient implements MissionAgentDisposable {
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
 	private readonly eventEmitter = new MissionAgentEventEmitter<Notification>();
+	private surfacePath = '';
 
 	public readonly onDidEvent = this.eventEmitter.event;
 
-	public async connect(options: { repoRoot: string; socketPath?: string }): Promise<this> {
+	public async connect(options: { surfacePath: string; socketPath?: string }): Promise<this> {
+		this.surfacePath = options.surfacePath;
 		if (this.socket && !this.socket.destroyed) {
 			return this;
 		}
 
-		const socketPath = options.socketPath?.trim() || (await this.resolveSocketPath(options.repoRoot));
+		const socketPath = options.socketPath?.trim() || (await this.resolveSocketPath());
 		await new Promise<void>((resolve, reject) => {
 			const socket = net.createConnection(socketPath);
 			socket.setEncoding('utf8');
@@ -59,10 +62,12 @@ export class DaemonClient implements MissionAgentDisposable {
 		}
 
 		const id = `request-${String(++this.nextRequestId)}`;
+		const includeSurfacePath = shouldIncludeSurfacePath(method);
 		const request: Request = {
 			type: 'request',
 			id,
 			method,
+			...(includeSurfacePath ? { surfacePath: this.surfacePath } : {}),
 			...(params === undefined ? {} : { params })
 		};
 
@@ -130,7 +135,7 @@ export class DaemonClient implements MissionAgentDisposable {
 			return;
 		}
 
-		pendingRequest.reject(new Error(message.error.message));
+		pendingRequest.reject(createDaemonClientError(message));
 	}
 
 	private rejectPendingRequests(error: Error): void {
@@ -140,8 +145,40 @@ export class DaemonClient implements MissionAgentDisposable {
 		this.pendingRequests.clear();
 	}
 
-	private async resolveSocketPath(repoRoot: string): Promise<string> {
-		const manifest = await readDaemonManifest(repoRoot);
-		return manifest?.endpoint.path ?? resolveDaemonSocketPath(repoRoot);
+	private async resolveSocketPath(): Promise<string> {
+		const manifest = await readDaemonManifest();
+		return manifest?.endpoint.path ?? resolveDaemonSocketPath();
 	}
+}
+
+function createDaemonClientError(message: Extract<Response, { type: 'response'; ok: false }>): Error {
+	const error = new Error(message.error.message) as Error & {
+		code?: string;
+		validationErrors?: unknown;
+	};
+	if (message.error.code) {
+		error.code = message.error.code;
+	}
+	if (message.error.validationErrors) {
+		error.validationErrors = message.error.validationErrors;
+	}
+	return error;
+}
+
+function shouldIncludeSurfacePath(method: Method): boolean {
+	if (
+		method === 'control.status'
+		|| method === 'control.settings.update'
+		|| method === 'control.action.execute'
+		|| method === 'control.workflow.settings.get'
+		|| method === 'control.workflow.settings.initialize'
+		|| method === 'control.workflow.settings.update'
+		|| method === 'control.issues.list'
+		|| method === 'mission.from-brief'
+		|| method === 'mission.from-issue'
+	) {
+		return true;
+	}
+
+	return false;
 }

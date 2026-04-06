@@ -1,15 +1,18 @@
 import {
-	connectDaemonClient,
-	getControlStatus,
-	getMissionStatus,
-	type MissionSelector,
-	resolveDaemonLaunchModeFromModule
+	DaemonApi,
+	DaemonMissionApi,
+	readMissionDaemonSettings,
+	type MissionSelector
 } from '@flying-pillow/mission-core';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveCockpitWorkspaceContext } from '../commands/daemonClient.js';
 import type { CommandContext } from '../commands/types.js';
+import {
+	connectSurfaceDaemon,
+	resolveSurfaceDaemonLaunchMode
+} from '../daemon/connectSurfaceDaemon.js';
 import { applyCockpitTheme, type CockpitThemeName } from './components/cockpitTheme.js';
 import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
 
@@ -51,16 +54,21 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 
 	const workspaceContext = resolveCockpitWorkspaceContext(context);
 	const selector = workspaceContext.selector;
-	const initialTheme: CockpitThemeName = 'ocean';
+	const configuredTheme = readMissionDaemonSettings(context.controlRoot)?.cockpitTheme;
+	const initialTheme: CockpitThemeName = configuredTheme === 'sand' || configuredTheme === 'mono' || configuredTheme === 'paper' || configuredTheme === 'ocean'
+		? configuredTheme
+		: 'ocean';
 	applyCockpitTheme(initialTheme);
 	const connect = async (nextSelector: MissionSelector = selector) => {
-		const client = await connectDaemonClient({
-			repoRoot: context.repoRoot,
-			preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
+		const client = await connectSurfaceDaemon({
+			surfacePath: context.launchCwd,
+			launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
 		});
+		const api = new DaemonApi(client);
+		const discoveryStatus = await api.control.getStatus();
 		const status = nextSelector.missionId
-			? await getMissionStatus(client, nextSelector)
-			: await getControlStatus(client);
+			? await api.mission.getStatus(nextSelector)
+			: discoveryStatus;
 		return {
 			client,
 			status,
@@ -75,7 +83,7 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 	let initialSelector = selector;
 	try {
 		initialConnection = await connect(selector);
-		initialSelector = buildSelectorFromStatus(initialConnection.status, selector);
+		initialSelector = DaemonMissionApi.selectorFromStatus(initialConnection.status, selector);
 	} catch (error) {
 		initialConnectionError = error instanceof Error ? error.message : String(error);
 	}
@@ -86,7 +94,7 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 		);
 	}
 
-	if (!flags.has('no-banner')) {
+	if (flags.has('banner') && !flags.has('no-banner')) {
 		await playMissionStartupBanner();
 	}
 
@@ -128,7 +136,7 @@ async function runCockpitWithHmr(
 			stdio: 'inherit',
 			env: {
 				...process.env,
-				MISSION_REPO_ROOT: context.repoRoot,
+				MISSION_CONTROL_ROOT: context.controlRoot,
 				MISSION_LAUNCH_CWD: context.launchCwd
 			}
 		}
@@ -149,14 +157,4 @@ async function runCockpitWithHmr(
 function resolveCliPackageRoot(): string {
 	const launchCockpitPath = fileURLToPath(import.meta.url);
 	return path.resolve(path.dirname(launchCockpitPath), '..', '..');
-}
-
-function buildSelectorFromStatus(
-	status: { missionId?: string },
-	fallback: MissionSelector
-): MissionSelector {
-	if (status.missionId) {
-		return { missionId: status.missionId };
-	}
-	return fallback.missionId ? { missionId: fallback.missionId } : {};
 }

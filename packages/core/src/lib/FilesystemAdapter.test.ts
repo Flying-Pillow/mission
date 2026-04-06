@@ -2,7 +2,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ArtifactTypeError, FilesystemAdapter } from './FilesystemAdapter.js';
+import { FilesystemAdapter } from './FilesystemAdapter.js';
+import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/engine/defaultWorkflow.js';
+import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
 
 describe('FilesystemAdapter', () => {
 	it('derives mission branch names with a normalized title slug', () => {
@@ -59,133 +61,70 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 
-	it('stores mutable task workflow state in mission.json instead of task markdown', async () => {
+	it('derives the mission title from the BRIEF heading when frontmatter is absent', async () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
+			await fs.mkdir(path.join(missionDir, 'flight-deck'), { recursive: true });
+			await fs.writeFile(
+				path.join(missionDir, 'flight-deck', 'BRIEF.md'),
+				[
+					'# BRIEF: Filesystem metadata recovery',
+					'',
+					'Issue: #108',
+					'',
+					'Recover the display title from the document heading.'
+				].join('\n'),
+				'utf8'
+			);
+
+			await expect(adapter.readMissionDescriptor(missionDir)).resolves.toEqual({
+				missionId: path.basename(missionDir),
+				missionDir,
+				brief: {
+					title: 'Filesystem metadata recovery',
+					body: 'Recover the display title from the document heading.',
+					type: 'task'
+				},
+				branchRef: '',
+				createdAt: expect.any(String)
+			});
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
+
+	it('writes task definitions without runtime fallback metadata', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			await adapter.initializeMissionRuntimeRecord({
+				missionDir,
+				missionId: 'mission-109-runtime-document',
+				configuration: createMissionWorkflowConfigurationSnapshot({
+					workflowVersion: DEFAULT_WORKFLOW_VERSION,
+					workflow: createDefaultWorkflowSettings()
+				}),
+				createdAt: '2026-04-01T00:00:00.000Z'
+			});
 			await adapter.writeTaskRecord(missionDir, 'spec', '01-control-plane.md', {
 				subject: 'Control Plane',
 				instruction: 'Persist workflow state in mission.json.',
-				agent: 'planner',
-				status: 'blocked',
-				retries: 2
+				agent: 'planner'
 			});
 
-			const taskPath = path.join(missionDir, 'tasks', 'SPEC', '01-control-plane.md');
-			const originalTaskContent = await fs.readFile(taskPath, 'utf8');
-			expect(originalTaskContent.startsWith('---\n')).toBe(false);
-
-			const controlState = await adapter.readMissionControlState(missionDir);
-			expect(controlState?.tasks['spec/01-control-plane']).toMatchObject({
-				status: 'blocked',
-				agent: 'planner',
-				retries: 2
-			});
+			const taskPath = path.join(adapter.getStageTasksPath(missionDir, 'spec'), '01-control-plane.md');
+			const taskContent = await fs.readFile(taskPath, 'utf8');
+			expect(taskContent).toContain('agent: "planner"');
+			expect(taskContent).not.toContain('status:');
+			expect(taskContent).not.toContain('retries:');
 
 			const [task] = await adapter.listTaskStates(missionDir, 'spec');
-			expect(task?.status).toBe('blocked');
+			expect(task?.status).toBe('todo');
 			expect(task?.agent).toBe('planner');
 
-			if (!task) {
-				throw new Error('Expected Mission to rehydrate the task control state.');
-			}
-
-			await adapter.updateTaskState(task, { status: 'done', retries: 3 });
-
-			const updatedTaskContent = await fs.readFile(taskPath, 'utf8');
-			expect(updatedTaskContent).toBe(originalTaskContent);
-
-			const updatedControlState = await adapter.readMissionControlState(missionDir);
-			expect(updatedControlState?.tasks['spec/01-control-plane']).toMatchObject({
-				status: 'done',
-				agent: 'planner',
-				retries: 3
-			});
-		} finally {
-			await fs.rm(missionDir, { recursive: true, force: true });
-		}
-	});
-
-	it('migrates legacy task frontmatter once and ignores later frontmatter edits', async () => {
-		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
-		try {
-			const adapter = new FilesystemAdapter('/tmp/repo');
-			const stagePath = path.join(missionDir, 'tasks', 'SPEC');
-			const taskPath = path.join(stagePath, '01-legacy.md');
-			await fs.mkdir(stagePath, { recursive: true });
-			await fs.writeFile(
-				taskPath,
-				[
-					'---',
-					'status: "active"',
-					'agent: "planner"',
-					'retries: 1',
-					'---',
-					'',
-					'# Legacy Task',
-					'',
-					'Migrate the current state into mission.json.'
-				].join('\n'),
-				'utf8'
-			);
-
-			const initialControlState = await adapter.reconcileMissionControlState(missionDir);
-			expect(initialControlState.tasks['spec/01-legacy']).toMatchObject({
-				status: 'active',
-				agent: 'planner',
-				retries: 1
-			});
-
-			await fs.writeFile(
-				taskPath,
-				[
-					'---',
-					'status: "done"',
-					'agent: "claude"',
-					'retries: 9',
-					'---',
-					'',
-					'# Legacy Task',
-					'',
-					'Try to change state from the content plane.'
-				].join('\n'),
-				'utf8'
-			);
-
-			const nextControlState = await adapter.reconcileMissionControlState(missionDir);
-			expect(nextControlState.tasks['spec/01-legacy']).toMatchObject({
-				status: 'active',
-				agent: 'planner',
-				retries: 1
-			});
-		} finally {
-			await fs.rm(missionDir, { recursive: true, force: true });
-		}
-	});
-
-	it('signals invalid task frontmatter types instead of silently coercing them', async () => {
-		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
-		try {
-			const adapter = new FilesystemAdapter('/tmp/repo');
-			const stagePath = path.join(missionDir, 'tasks', 'SPEC');
-			await fs.mkdir(stagePath, { recursive: true });
-			await fs.writeFile(
-				path.join(stagePath, '01-invalid.md'),
-				[
-					'---',
-					'status: "nonsense"',
-					'agent: "copilot"',
-					'retries: 0',
-					'---',
-					'',
-					'# Invalid Task',
-					'',
-					'This task has an invalid status.'
-				].join('\n'),
-				'utf8'
-			);
-
-			await expect(adapter.listTaskStates(missionDir, 'spec')).rejects.toThrow(ArtifactTypeError);
+			const workflowDocument = await adapter.readMissionRuntimeRecord(missionDir);
+			expect(workflowDocument?.runtime.tasks).toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}

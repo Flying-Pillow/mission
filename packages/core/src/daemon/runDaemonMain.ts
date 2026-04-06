@@ -1,13 +1,17 @@
-import { getRepoRoot } from '../lib/repoPaths.js';
-import type { MissionAgentRuntime } from './MissionAgentRuntime.js';
 import { startDaemon } from './Daemon.js';
+import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
+import type { AgentRunner } from '../runtime/AgentRunner.js';
 
 type RuntimeFactoryModule = {
-	createConfiguredMissionRuntimes?: (options: {
-		repoRoot: string;
+	createConfiguredAgentRunners?: (options: {
+		controlRoot: string;
 		logLine?: (line: string) => void;
-	}) => Promise<MissionAgentRuntime[]> | MissionAgentRuntime[];
+	}) => Promise<AgentRunner[]> | AgentRunner[];
 };
+
+function writeDaemonLogLine(line: string): void {
+	process.stdout.write(`[Mission daemon ${new Date().toISOString()}] ${line}\n`);
+}
 
 function readSocketPathFromArgv(argv: string[]): string | undefined {
 	const socketFlagIndex = argv.indexOf('--socket');
@@ -18,35 +22,42 @@ function readSocketPathFromArgv(argv: string[]): string | undefined {
 	return argv[socketFlagIndex + 1];
 }
 
-async function loadConfiguredRuntimes(repoRoot: string): Promise<MissionAgentRuntime[]> {
+async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Promise<AgentRunner[]> {
 	const modulePath = process.env['MISSION_RUNTIME_FACTORY_MODULE']?.trim();
 	if (!modulePath) {
 		return [];
 	}
+	const surfacePath = process.env['MISSION_SURFACE_PATH']?.trim() || process.cwd();
+	const controlRoot = resolveGitWorkspaceRoot(surfacePath) ?? surfacePath;
 
 	const loadedModule = (await import(modulePath)) as RuntimeFactoryModule;
-	if (typeof loadedModule.createConfiguredMissionRuntimes !== 'function') {
+	if (typeof loadedModule.createConfiguredAgentRunners !== 'function') {
 		throw new Error(
-			`Mission runtime factory module '${modulePath}' does not export createConfiguredMissionRuntimes(...).`
+			`Mission runtime factory module '${modulePath}' does not export createConfiguredAgentRunners(...).`
 		);
 	}
 
-	return await loadedModule.createConfiguredMissionRuntimes({ repoRoot });
+	return await loadedModule.createConfiguredAgentRunners({
+		controlRoot,
+		...(logLine ? { logLine } : {})
+	});
 }
 
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
-	const repoRoot = process.env['MISSION_REPO_ROOT']?.trim() || getRepoRoot();
 	const socketPath = readSocketPathFromArgv(argv);
-	const runtimes = await loadConfiguredRuntimes(repoRoot);
+	const logLine = writeDaemonLogLine;
+	const runners = await loadConfiguredAgentRunners(logLine);
 	const daemon = await startDaemon({
-		repoRoot,
-		runtimes,
+		logLine,
+		runners,
 		...(socketPath ? { socketPath } : {})
 	});
 
+	logLine(`Listening on ${daemon.getManifest()?.endpoint.path ?? 'unknown socket'}.`);
 	process.stdout.write(`${JSON.stringify(daemon.getManifest(), null, 2)}\n`);
 
 	const stopDaemon = async () => {
+		logLine('Shutdown requested.');
 		await daemon.close();
 	};
 

@@ -12,8 +12,9 @@ import {
 
 export type MissiondCommand = 'start' | 'stop' | 'restart' | 'status' | 'run';
 
+export type MissionDaemonLaunchMode = 'build' | 'source';
+
 export type DaemonStatusResult = {
-	repoRoot: string;
 	manifestPath: string;
 	running: boolean;
 	message: string;
@@ -37,12 +38,11 @@ export type DaemonStopResult = {
 	message: string;
 };
 
-export async function getMissionDaemonStatus(repoRoot: string): Promise<DaemonStatusResult> {
-	const manifestPath = getDaemonManifestPath(repoRoot);
-	const manifest = await readDaemonManifest(repoRoot);
+export async function getMissionDaemonStatus(): Promise<DaemonStatusResult> {
+	const manifestPath = getDaemonManifestPath();
+	const manifest = await readDaemonManifest();
 	if (!manifest) {
 		return {
-			repoRoot,
 			manifestPath,
 			running: false,
 			message: 'Mission daemon is not running.'
@@ -51,10 +51,9 @@ export async function getMissionDaemonStatus(repoRoot: string): Promise<DaemonSt
 
 	const client = new DaemonClient();
 	try {
-		await client.connect({ repoRoot, socketPath: manifest.endpoint.path });
+		await client.connect({ surfacePath: process.cwd(), socketPath: manifest.endpoint.path });
 		const ping = await client.request<Ping>('ping');
 		return {
-			repoRoot,
 			manifestPath,
 			running: true,
 			message: 'Mission daemon is running.',
@@ -65,7 +64,6 @@ export async function getMissionDaemonStatus(repoRoot: string): Promise<DaemonSt
 		};
 	} catch (error) {
 		return {
-			repoRoot,
 			manifestPath,
 			running: false,
 			message: `Mission daemon manifest exists but is unreachable: ${error instanceof Error ? error.message : String(error)}`,
@@ -80,10 +78,12 @@ export async function getMissionDaemonStatus(repoRoot: string): Promise<DaemonSt
 }
 
 export async function startMissionDaemon(options: {
-	repoRoot: string;
 	socketPath?: string;
+	surfacePath?: string;
+	launchMode?: MissionDaemonLaunchMode;
+	runtimeFactoryModulePath?: string;
 }): Promise<DaemonStartResult> {
-	const currentStatus = await getMissionDaemonStatus(options.repoRoot);
+	const currentStatus = await getMissionDaemonStatus();
 	if (currentStatus.running) {
 		return {
 			...currentStatus,
@@ -98,7 +98,7 @@ export async function startMissionDaemon(options: {
 	let latestStatus = currentStatus;
 	while (Date.now() < timeoutAt) {
 		await new Promise((resolve) => setTimeout(resolve, 150));
-		latestStatus = await getMissionDaemonStatus(options.repoRoot);
+		latestStatus = await getMissionDaemonStatus();
 		if (latestStatus.running) {
 			return {
 				...latestStatus,
@@ -111,9 +111,9 @@ export async function startMissionDaemon(options: {
 	throw new Error(`Mission daemon did not become ready: ${latestStatus.message}`);
 }
 
-export async function stopMissionDaemon(repoRoot: string): Promise<DaemonStopResult> {
-	const manifestPath = getDaemonManifestPath(repoRoot);
-	const manifest = await readDaemonManifest(repoRoot);
+export async function stopMissionDaemon(): Promise<DaemonStopResult> {
+	const manifestPath = getDaemonManifestPath();
+	const manifest = await readDaemonManifest();
 
 	if (!manifest) {
 		return {
@@ -139,7 +139,7 @@ export async function stopMissionDaemon(repoRoot: string): Promise<DaemonStopRes
 	if (manifest.endpoint.transport === 'ipc') {
 		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
 	}
-	await fs.rm(getDaemonRuntimePath(repoRoot), { recursive: true, force: true }).catch(() => undefined);
+	await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 
 	return {
 		stopped: true,
@@ -153,15 +153,25 @@ export async function stopMissionDaemon(repoRoot: string): Promise<DaemonStopRes
 	};
 }
 
-function spawnMissionDaemonRunner(options: { repoRoot: string; socketPath?: string }) {
+function spawnMissionDaemonRunner(options: {
+	socketPath?: string;
+	surfacePath?: string;
+	launchMode?: MissionDaemonLaunchMode;
+	runtimeFactoryModulePath?: string;
+}) {
 	const cliRoot = resolveCliPackageRoot();
-	const launchMode = process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() || 'build';
+	const launchMode =
+		options.launchMode ?? (process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() || 'build');
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
 	const sourceEntry = path.join(cliRoot, 'src', 'daemon.ts');
 	const buildEntry = path.join(cliRoot, 'build', 'daemon.js');
 	const env = {
 		...process.env,
-		MISSION_REPO_ROOT: options.repoRoot
+		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
+		MISSION_DAEMON_LAUNCH_MODE: launchMode,
+		...(options.runtimeFactoryModulePath
+			? { MISSION_RUNTIME_FACTORY_MODULE: options.runtimeFactoryModulePath }
+			: {})
 	};
 
 	if (launchMode === 'source') {
@@ -169,9 +179,9 @@ function spawnMissionDaemonRunner(options: { repoRoot: string; socketPath?: stri
 			'pnpm',
 			['--dir', cliRoot, 'exec', 'tsx', sourceEntry, 'run', ...socketArgs],
 			{
-				cwd: options.repoRoot,
+				cwd: cliRoot,
 				env,
-				stdio: 'ignore',
+				stdio: ['ignore', 'inherit', 'inherit'],
 				detached: true,
 				windowsHide: true
 			}
@@ -179,9 +189,9 @@ function spawnMissionDaemonRunner(options: { repoRoot: string; socketPath?: stri
 	}
 
 	return spawn(process.execPath, [buildEntry, 'run', ...socketArgs], {
-		cwd: options.repoRoot,
+		cwd: cliRoot,
 		env,
-		stdio: 'ignore',
+		stdio: ['ignore', 'inherit', 'inherit'],
 		detached: true,
 		windowsHide: true
 	});
