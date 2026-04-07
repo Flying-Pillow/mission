@@ -42,6 +42,9 @@ import type {
 } from '../types.js';
 import {
 	type ControlActionExecute,
+	type ControlDocumentRead,
+	type ControlDocumentResponse,
+	type ControlDocumentWrite,
 	type ControlIssuesList,
 	type MissionFromBriefRequest,
 	type MissionFromIssueRequest,
@@ -116,6 +119,10 @@ export class MissionWorkspace {
 				return this.buildIdleMissionStatus();
 			case 'control.settings.update':
 				return this.updateControlSettings((request.params ?? {}) as ControlSettingsUpdate);
+			case 'control.document.read':
+				return this.readControlDocument((request.params ?? {}) as ControlDocumentRead);
+			case 'control.document.write':
+				return this.writeControlDocument((request.params ?? {}) as ControlDocumentWrite);
 			case 'control.workflow.settings.get':
 				return this.getWorkflowSettings();
 			case 'control.workflow.settings.initialize':
@@ -345,6 +352,28 @@ export class MissionWorkspace {
 	private async updateControlSettings(params: ControlSettingsUpdate): Promise<MissionStatus> {
 		await this.writeControlSetting(params.field, params.value);
 		return this.buildIdleMissionStatus();
+	}
+
+	private async readControlDocument(params: ControlDocumentRead): Promise<ControlDocumentResponse> {
+		const resolvedPath = this.resolveWorkspaceDocumentPath(params.filePath);
+		const content = await fs.readFile(resolvedPath, 'utf8');
+		const stats = await fs.stat(resolvedPath);
+		return {
+			filePath: resolvedPath,
+			content,
+			updatedAt: stats.mtime.toISOString()
+		};
+	}
+
+	private async writeControlDocument(params: ControlDocumentWrite): Promise<ControlDocumentResponse> {
+		const resolvedPath = this.resolveWorkspaceDocumentPath(params.filePath);
+		await fs.writeFile(resolvedPath, params.content, 'utf8');
+		const stats = await fs.stat(resolvedPath);
+		return {
+			filePath: resolvedPath,
+			content: params.content,
+			updatedAt: stats.mtime.toISOString()
+		};
 	}
 
 	private async getWorkflowSettings(): Promise<WorkflowSettingsGetResult> {
@@ -866,7 +895,7 @@ export class MissionWorkspace {
 					delete nextSettings.agentRunner;
 					break;
 				}
-				if (value !== 'copilot') {
+				if (value !== 'copilot' && value !== 'tmux') {
 					throw new Error(`Unsupported Mission agent runner '${value}'.`);
 				}
 				nextSettings.agentRunner = value;
@@ -1021,6 +1050,19 @@ export class MissionWorkspace {
 		}
 
 		return params as MissionSelect;
+	}
+
+	private resolveWorkspaceDocumentPath(filePath: string): string {
+		const trimmedPath = filePath.trim();
+		if (trimmedPath.length === 0) {
+			throw new Error('Document path is required.');
+		}
+		const resolvedPath = path.resolve(this.workspaceRoot, trimmedPath);
+		const relativePath = path.relative(this.workspaceRoot, resolvedPath);
+		if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+			throw new Error(`Document path '${filePath}' is outside the Mission workspace.`);
+		}
+		return resolvedPath;
 	}
 
 	private async resolveLoadedMission(

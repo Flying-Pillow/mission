@@ -335,7 +335,7 @@ describe('Daemon', () => {
 					{
 						kind: 'selection',
 						stepId: 'value',
-						optionIds: ['copilot']
+						optionIds: ['tmux']
 					}
 				]);
 				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
@@ -343,12 +343,12 @@ describe('Daemon', () => {
 				expect(result).toMatchObject({
 					control: expect.objectContaining({
 						settings: expect.objectContaining({
-							agentRunner: 'copilot'
+							agentRunner: 'tmux'
 						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
-					agentRunner: 'copilot'
+					agentRunner: 'tmux'
 				});
 			} finally {
 				client.dispose();

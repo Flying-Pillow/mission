@@ -18,8 +18,13 @@ export type MissionRepositoryInitialization = {
 	worktreesRoot: string;
 };
 
+export type InitializeMissionRepositoryOptions = {
+	includeRuntimeDirectories?: boolean;
+};
+
 export async function initializeMissionRepository(
-	workspaceRoot: string
+	workspaceRoot: string,
+	options: InitializeMissionRepositoryOptions = {}
 ): Promise<MissionRepositoryInitialization> {
 	// This is the low-level scaffolder used inside temporary proposal worktrees and tests.
 	// Operator-facing repository initialization is routed through RepositoryPreparationService.
@@ -32,15 +37,22 @@ export async function initializeMissionRepository(
 	const pendingRoot = getMissionPendingPath(workspaceRoot);
 	const activeRoot = getMissionActivePath(workspaceRoot);
 	const completedRoot = getMissionCompletedPath(workspaceRoot);
+ 	const includeRuntimeDirectories = options.includeRuntimeDirectories !== false;
 
-	await Promise.all([
+	const directoriesToCreate = [
 		fs.mkdir(controlDirectoryPath, { recursive: true }),
-		fs.mkdir(missionsRoot, { recursive: true }),
-		fs.mkdir(worktreesRoot, { recursive: true }),
-		fs.mkdir(pendingRoot, { recursive: true }),
-		fs.mkdir(activeRoot, { recursive: true }),
-		fs.mkdir(completedRoot, { recursive: true })
-	]);
+		fs.mkdir(missionsRoot, { recursive: true })
+	];
+	if (includeRuntimeDirectories) {
+		directoriesToCreate.push(
+			fs.mkdir(worktreesRoot, { recursive: true }),
+			fs.mkdir(pendingRoot, { recursive: true }),
+			fs.mkdir(activeRoot, { recursive: true }),
+			fs.mkdir(completedRoot, { recursive: true })
+		);
+	}
+
+	await Promise.all(directoriesToCreate);
 	await new WorkflowSettingsStore(workspaceRoot).initialize();
 
 	return {

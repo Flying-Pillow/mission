@@ -22,4 +22,21 @@ describe('initializeMissionRepository', () => {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
+
+	it('can skip ignored runtime directories for repository bootstrap worktrees', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-init-'));
+
+		try {
+			const initialization = await initializeMissionRepository(workspaceRoot, {
+				includeRuntimeDirectories: false
+			});
+
+			await expect(fs.access(initialization.daemonSettingsPath)).resolves.toBeUndefined();
+			await expect(fs.access(path.join(workspaceRoot, '.missions', 'pending'))).rejects.toThrow();
+			await expect(fs.access(path.join(workspaceRoot, '.missions', 'active'))).rejects.toThrow();
+			await expect(fs.access(path.join(workspaceRoot, '.missions', 'completed'))).rejects.toThrow();
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
 });

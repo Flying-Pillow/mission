@@ -26,10 +26,14 @@ export class RepositoryPreparationService {
 
 		try {
 			await this.store.materializeLinkedWorktree(proposalWorktreePath, branchRef, baseBranch);
-			await initializeMissionRepository(proposalWorktreePath);
+			const initialization = await initializeMissionRepository(proposalWorktreePath, {
+				includeRuntimeDirectories: false
+			});
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
-			proposalStore.stagePaths(['.missions'], proposalWorktreePath);
+			proposalStore.stagePaths([
+				path.relative(proposalWorktreePath, initialization.daemonSettingsPath)
+			], proposalWorktreePath, { force: true });
 			proposalStore.commit(this.buildCommitMessage(), proposalWorktreePath);
 			proposalStore.pushBranch(branchRef, proposalWorktreePath);
 

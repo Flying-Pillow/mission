@@ -51,34 +51,35 @@ resolve_tmux_side_pane_command() {
 		printf '%s' "$MISSION_TMUX_AGENT_COMMAND"
 		return
 	fi
-
-	daemon_log_path=$(resolve_daemon_log_path)
-	printf 'clear && tail -n 200 -F %s' "$(shell_quote "$daemon_log_path")"
+	printf '%s' "$(build_command_string "$script_dir/mission-sidepane")"
 }
 
-tmux_session_has_live_primary_pane() {
+tmux_session_has_live_layout() {
 	session_name=$1
 	pane_state=$("$tmux_binary" list-panes -t "$session_name":0 -F '#{pane_index}:#{pane_dead}' 2>/dev/null || true)
 	if [ -z "$pane_state" ]; then
 		return 1
 	fi
-	printf '%s\n' "$pane_state" | grep -q '^0:0$'
+	printf '%s\n' "$pane_state" | grep -q '^0:0$' || return 1
+	printf '%s\n' "$pane_state" | grep -q '^1:0$' || return 1
+	[ "$(printf '%s\n' "$pane_state" | wc -l | tr -d ' ')" = "2" ]
 }
 
 launch_tmux_session() {
 	session_name=$(resolve_tmux_session_name)
 	split_size=${MISSION_TMUX_SIDE_PANE_SIZE:-${MISSION_TMUX_AGENT_PANE_SIZE:-40%}}
 	if [ "$hmr_mode" -eq 1 ]; then
-		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 "$script_dir/mission" --hmr "$@")
+		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 MISSION_TMUX_SESSION_NAME="$session_name" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" --hmr "$@")
 	else
-		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 "$script_dir/mission" "$@")
+		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 MISSION_TMUX_SESSION_NAME="$session_name" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" "$@")
 	fi
 	right_command=$(resolve_tmux_side_pane_command)
 
 	if "$tmux_binary" has-session -t "$session_name" 2>/dev/null; then
-		if ! tmux_session_has_live_primary_pane "$session_name"; then
+		if ! tmux_session_has_live_layout "$session_name"; then
 			"$tmux_binary" kill-session -t "$session_name" >/dev/null 2>&1 || true
 		else
+		"$tmux_binary" respawn-pane -k -t "$session_name":0.1 -c "$repo_root" sh -lc "$right_command"
 		"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
 		exec "$tmux_binary" attach-session -t "$session_name"
 		fi
@@ -141,10 +142,13 @@ done
 runner="tsx"
 first_arg=${1:-}
 cockpit_mode=0
+artifact_mode=0
 if [ -z "$first_arg" ]; then
 	cockpit_mode=1
 elif [ "${first_arg#--}" != "$first_arg" ]; then
 	cockpit_mode=1
+elif [ "$first_arg" = "artifact" ]; then
+	artifact_mode=1
 fi
 
 if [ "$first_arg" = "--help" ] || [ "$first_arg" = "-h" ]; then
@@ -161,6 +165,8 @@ elif [ "$hmr_mode" -eq 1 ]; then
 	runner="tsx watch"
 elif [ "$cockpit_mode" -eq 1 ]; then
 	exec env MISSION_DAEMON_COMMAND="$daemon_command" MISSION_DAEMON_LAUNCH_MODE=source pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+elif [ "$artifact_mode" -eq 1 ]; then
+	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 fi
 
 exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$script_dir" exec $runner src/index.ts "$@"

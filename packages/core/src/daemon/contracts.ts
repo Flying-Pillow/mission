@@ -261,12 +261,14 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 12;
 
 export type Method =
 	| 'ping'
 	| 'control.status'
 	| 'control.settings.update'
+	| 'control.document.read'
+	| 'control.document.write'
 	| 'control.workflow.settings.get'
 	| 'control.workflow.settings.initialize'
 	| 'control.workflow.settings.update'
@@ -320,6 +322,21 @@ export type MissionFromIssueRequest = {
 export type ControlSettingsUpdate = {
 	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'cockpitTheme' | 'instructionsPath' | 'skillsPath';
 	value: string;
+};
+
+export type ControlDocumentRead = {
+	filePath: string;
+};
+
+export type ControlDocumentWrite = {
+	filePath: string;
+	content: string;
+};
+
+export type ControlDocumentResponse = {
+	filePath: string;
+	content: string;
+	updatedAt?: string;
 };
 
 export type ControlWorkflowSettingsGet = Record<string, never>;
@@ -434,6 +451,7 @@ export type SuccessResponse = {
 	result:
 	| Ping
 	| MissionStatus
+	| ControlDocumentResponse
 	| MissionGateResult
 	| WorkflowSettingsGetResult
 	| ControlWorkflowSettingsInitializeResponse

@@ -13,7 +13,7 @@ This document defines the routing and layout model for the Mission CLI cockpit a
 3. Separate context selection from center-panel routing.
 4. Keep repository interaction in a dedicated center flow panel.
 5. Keep the command dock as a stable shell region.
-6. Keep mission layout deterministic with a bounded left flight-deck width and a true right console panel.
+6. Keep mission layout deterministic and focused on the flight deck.
 
 ## Shell Layout
 
@@ -77,18 +77,15 @@ The header tab strip represents:
 
 ## Mission Mode
 
-Mission mode uses a two-column center layout:
+Mission mode uses one center panel: the mission flight deck.
 
-- left: flight deck
-- right: mission console panel
+The mission console panel is no longer rendered in the center region.
 
-### Width Rules
+### Flight Deck Rules
 
-- left column target: 25% of center width
-- left column minimum: 24
-- left column maximum: 36
-- right column uses the remaining width
-- right column must never render underneath the left column
+- the center region is owned entirely by the flight deck tree
+- selecting a mission tab must never fall back to repository flow content
+- repository setup flows must not continue rendering after the shell switches to mission mode
 
 ### Command Panel
 
@@ -156,7 +153,7 @@ type CockpitMode = 'repository' | 'mission'
 ```ts
 type CenterRoute =
   | { kind: 'repository-flow' }
-  | { kind: 'mission-split' }
+  | { kind: 'mission-flight-deck' }
 ```
 
 ### Overlay Layer
@@ -177,8 +174,7 @@ Overlays do not redefine the shell layout. They layer on top of it.
 
 1. header
 2. tree
-3. console
-4. command
+3. command
 
 ### Repository Mode Focus Order
 
@@ -196,7 +192,7 @@ type FocusArea = 'header' | 'tree' | 'console' | 'flow' | 'command'
 
 ### Mission
 
-- center owner: mission split panel
+- center owner: mission flight deck panel
 - command owner: command dock
 
 ### Repository
@@ -209,8 +205,8 @@ type FocusArea = 'header' | 'tree' | 'console' | 'flow' | 'command'
 ### Mission Mode
 
 - selecting a mission tab always shows the mission split layout
-- left flight deck stays within bounded width
-- right console panel never overlaps the left column
+- selecting a mission tab never shows repository setup flow content in the center region
+- the center panel shows only the mission flight deck
 - command panel remains visible
 
 ### Repository Mode
@@ -224,6 +220,6 @@ type FocusArea = 'header' | 'tree' | 'console' | 'flow' | 'command'
 ## Non-Goals
 
 - redesigning mission header content
-- redesigning mission console behavior
+- redesigning future right-panel markdown behavior
 - redesigning command dock confirmation behavior
 - adding a separate daemon-log cockpit mode

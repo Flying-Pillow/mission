@@ -1,4 +1,7 @@
 import type {
+	ControlDocumentRead,
+	ControlDocumentResponse,
+	ControlDocumentWrite,
 	ControlIssuesList,
 	ControlSettingsUpdate,
 	ControlWorkflowSettingsInitialize,
@@ -43,6 +46,16 @@ export class DaemonControlApi {
 		value: string
 	): Promise<MissionStatus> {
 		return this.client.request<MissionStatus>('control.settings.update', { field, value });
+	}
+
+	public async readDocument(filePath: string): Promise<ControlDocumentResponse> {
+		const params: ControlDocumentRead = { filePath };
+		return this.client.request<ControlDocumentResponse>('control.document.read', params);
+	}
+
+	public async writeDocument(filePath: string, content: string): Promise<ControlDocumentResponse> {
+		const params: ControlDocumentWrite = { filePath, content };
+		return this.client.request<ControlDocumentResponse>('control.document.write', params);
 	}
 
 	public async getWorkflowSettings(): Promise<WorkflowSettingsGetResult> {

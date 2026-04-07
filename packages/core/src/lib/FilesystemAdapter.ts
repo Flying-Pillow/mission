@@ -258,11 +258,20 @@ export class FilesystemAdapter {
 		this.assertGit(['worktree', 'remove', '--force', worktreePath]);
 	}
 
-	public stagePaths(pathsToStage: string[], cwd = this.workspaceRoot): void {
+	public stagePaths(
+		pathsToStage: string[],
+		cwd = this.workspaceRoot,
+		options: { force?: boolean } = {}
+	): void {
 		if (pathsToStage.length === 0) {
 			return;
 		}
-		this.assertGit(['add', '--', ...pathsToStage], cwd);
+		this.assertGit([
+			'add',
+			...(options.force ? ['-f'] : []),
+			'--',
+			...pathsToStage
+		], cwd);
 	}
 
 	public commit(message: string, cwd = this.workspaceRoot): void {

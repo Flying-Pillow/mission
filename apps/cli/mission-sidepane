@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+resolve_runtime_root() {
+	runtime_root=${XDG_RUNTIME_DIR:-}
+	if [ -z "$runtime_root" ]; then
+		runtime_root=${TMPDIR:-/tmp}
+	fi
+	printf '%s/mission' "$runtime_root"
+}
+
+daemon_log_path="$(resolve_runtime_root)/daemon.stdout.log"
+printf '\033[H\033[2J\033[3J'
+printf 'MISSION SIDE PANE [daemon log]\n\n'
+mkdir -p "$(dirname "$daemon_log_path")"
+touch "$daemon_log_path"
+exec tail -n 200 -F "$daemon_log_path"

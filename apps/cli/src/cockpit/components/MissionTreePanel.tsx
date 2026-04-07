@@ -58,11 +58,7 @@ type TreeLine = PanelBodyLine & {
 export function MissionTreePanel(props: MissionTreePanelProps) {
 	const terminal = useTerminalDimensions();
 	const lines = createMemo<TreeLine[]>(() => buildTreeLines(props.stages));
-	const treeContentWidth = createMemo(() => {
-		const centerWidth = Math.max(terminal().width - 2, 20);
-		const treePaneWidth = Math.max(Math.floor((centerWidth - 1) * 0.25), 20);
-		return Math.max(treePaneWidth + 5, 8);
-	});
+	const treeContentWidth = createMemo(() => Math.max(terminal().width - 8, 20));
 	const bodyLines = createMemo<PanelBodyLine[]>(() =>
 		lines().map((line) => ({
 			text: line.text,
@@ -78,7 +74,7 @@ export function MissionTreePanel(props: MissionTreePanelProps) {
 			bodyLines={bodyLines()}
 			bodyRows={bodyLines().length > 0 ? bodyLines().length : 1}
 			contentWidth={treeContentWidth()}
-			style={{ flexGrow: 1, width: '100%', minWidth: '100%', maxWidth: '100%' }}
+			style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}
 			{...(bodyLines().length === 0
 				? {
 					bodyLines: [{ text: props.emptyLabel, fg: cockpitTheme.secondaryText }],

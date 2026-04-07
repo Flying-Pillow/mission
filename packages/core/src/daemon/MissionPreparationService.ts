@@ -66,7 +66,7 @@ export class MissionPreparationService {
 
 			proposalStore.stagePaths([
 				path.relative(proposalWorktreePath, missionRootDir)
-			], proposalWorktreePath);
+			], proposalWorktreePath, { force: true });
 			proposalStore.commit(this.buildCommitMessage(missionId, input.brief), proposalWorktreePath);
 			proposalStore.pushBranch(branchRef, proposalWorktreePath);
 
