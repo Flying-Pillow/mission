@@ -19,8 +19,12 @@ class FakeAgentSession implements AgentSession {
 		this.snapshot = { ...snapshot, acceptedCommands: [...snapshot.acceptedCommands] };
 	}
 
-	public get runnerId(): string {
-		return this.snapshot.runnerId;
+	public get runtimeId(): string {
+		return this.snapshot.runtimeId;
+	}
+
+	public get transportId(): string | undefined {
+		return this.snapshot.transportId;
 	}
 
 	public get sessionId(): string {
@@ -161,7 +165,8 @@ export class FakeAgentRunner implements AgentRunner {
 
 	public constructor(
 		public readonly id: string,
-		public readonly displayName: string
+		public readonly displayName: string,
+		public readonly transportId: string = 'direct'
 	) { }
 
 	public async isAvailable(): Promise<{ available: true }> {
@@ -171,7 +176,8 @@ export class FakeAgentRunner implements AgentRunner {
 	public async startSession(request: AgentSessionStartRequest): Promise<AgentSession> {
 		const sessionId = `${this.id}-session-${String(++this.nextSessionId)}`;
 		const session = new FakeAgentSession({
-			runnerId: this.id,
+			runtimeId: this.id,
+			transportId: this.transportId,
 			sessionId,
 			phase: 'running',
 			workingDirectory: request.workingDirectory,

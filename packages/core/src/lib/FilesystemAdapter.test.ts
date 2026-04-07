@@ -137,25 +137,25 @@ describe('FilesystemAdapter', () => {
 			await adapter.writeTaskRecord(missionDir, 'implementation', '01-base.md', {
 				subject: 'Base',
 				instruction: 'Lay the foundation.',
-				agent: 'copilot'
+				agent: 'copilot-cli'
 			});
 			await adapter.writeTaskRecord(missionDir, 'implementation', '02-api.md', {
 				subject: 'API',
 				instruction: 'Build the API slice.',
 				dependsOn: ['01-base'],
-				agent: 'copilot'
+				agent: 'copilot-cli'
 			});
 			await adapter.writeTaskRecord(missionDir, 'implementation', '03-ui.md', {
 				subject: 'UI',
 				instruction: 'Build the UI slice.',
 				dependsOn: ['01-base'],
-				agent: 'copilot'
+				agent: 'copilot-cli'
 			});
 			await adapter.writeTaskRecord(missionDir, 'implementation', '04-polish.md', {
 				subject: 'Polish',
 				instruction: 'Integrate the parallel slices.',
 				dependsOn: ['02-api', '03-ui'],
-				agent: 'copilot'
+				agent: 'copilot-cli'
 			});
 
 			const tasks = await adapter.listTaskStates(missionDir, 'implementation');

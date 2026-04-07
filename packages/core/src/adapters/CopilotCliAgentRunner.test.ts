@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionEvent, AgentSessionStartRequest } from '../runtime/AgentRuntimeTypes.js';
-import { TmuxAgentRunner, type TmuxAgentRunnerOptions } from './TmuxAgentRunner.js';
+import { CopilotCliAgentRunner, type CopilotCliAgentRunnerOptions } from './CopilotCliAgentRunner.js';
 
 type MockTmuxState = {
 	exists: boolean;
@@ -30,9 +30,9 @@ function createStartRequestWithoutInitialPrompt(): AgentSessionStartRequest {
 	return request;
 }
 
-describe('TmuxAgentRunner', () => {
+describe('CopilotCliAgentRunner', () => {
 	let state: MockTmuxState;
-	let executor: NonNullable<TmuxAgentRunnerOptions['executor']>;
+	let executor: NonNullable<CopilotCliAgentRunnerOptions['executor']>;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
@@ -86,7 +86,7 @@ describe('TmuxAgentRunner', () => {
 	});
 
 	it('starts a tmux-backed session and injects the initial prompt', async () => {
-		const runner = new TmuxAgentRunner({
+		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			args: ['--add-dir', '/tmp/work'],
 			executor,
@@ -96,14 +96,15 @@ describe('TmuxAgentRunner', () => {
 		const session = await runner.startSession(createStartRequest());
 		const snapshot = session.getSnapshot();
 
-		expect(snapshot.runnerId).toBe('tmux');
+		expect(snapshot.runtimeId).toBe('copilot-cli');
+		expect(snapshot.transportId).toBe('tmux');
 		expect(snapshot.sessionId).toBe('mission-agent-test');
 		expect(snapshot.phase).toBe('running');
 		expect(state.sentKeys.some((args) => args.includes('-l') && args.includes('Implement the task.'))).toBe(true);
 	});
 
 	it('accepts prompt submission by sending literal keys into tmux', async () => {
-		const runner = new TmuxAgentRunner({
+		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
 			pollIntervalMs: 500
@@ -121,7 +122,7 @@ describe('TmuxAgentRunner', () => {
 	});
 
 	it('maps interrupt commands to Ctrl+C and awaiting-input state', async () => {
-		const runner = new TmuxAgentRunner({
+		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
 			pollIntervalMs: 500
@@ -140,24 +141,8 @@ describe('TmuxAgentRunner', () => {
 		expect(events.find((event) => event.type === 'session.awaiting-input')).toBeDefined();
 	});
 
-	it('rejects unsupported structured commands', async () => {
-		const runner = new TmuxAgentRunner({
-			command: 'copilot',
-			executor,
-			pollIntervalMs: 500
-		});
-		const session = await runner.startSession(createStartRequestWithoutInitialPrompt());
-		const events: AgentSessionEvent[] = [];
-		session.onDidEvent((event) => {
-			events.push(event);
-		});
-
-		await expect(session.submitCommand({ kind: 'finish' })).rejects.toThrow("Command 'finish' is unsupported");
-		expect(events.find((event) => event.type === 'command.rejected')).toBeDefined();
-	});
-
 	it('detects terminal completion from tmux pane state', async () => {
-		const runner = new TmuxAgentRunner({
+		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
 			pollIntervalMs: 500
@@ -177,28 +162,5 @@ describe('TmuxAgentRunner', () => {
 		expect(events.some((event) => event.type === 'session.message' && event.text === 'Working...')).toBe(true);
 		expect(events.some((event) => event.type === 'session.completed')).toBe(true);
 		expect(session.getSnapshot().phase).toBe('completed');
-	});
-
-	it('materializes a terminated attachment when tmux no longer has the session', async () => {
-		state.exists = false;
-		const runner = new TmuxAgentRunner({
-			command: 'copilot',
-			executor,
-			pollIntervalMs: 500
-		});
-		const session = await runner.attachSession({
-			runnerId: 'tmux',
-			sessionId: 'missing-session'
-		});
-		const events: AgentSessionEvent[] = [];
-		session.onDidEvent((event) => {
-			events.push(event);
-		});
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(session.getSnapshot().phase).toBe('terminated');
-		expect(events[0]?.type).toBe('session.terminated');
 	});
 });

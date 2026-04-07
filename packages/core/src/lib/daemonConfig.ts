@@ -7,17 +7,22 @@ import {
     createDefaultWorkflowSettings,
     type WorkflowGlobalSettings
 } from '../workflow/engine/index.js';
+import {
+    COPILOT_CLI_AGENT_RUNTIME_ID,
+    COPILOT_SDK_AGENT_RUNTIME_ID,
+    isSupportedAgentRuntime
+} from './agentRuntimes.js';
 import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
-export const MISSION_AGENT_RUNNERS = ['copilot', 'tmux'] as const;
+export const MISSION_AGENT_RUNTIMES = [COPILOT_CLI_AGENT_RUNTIME_ID, COPILOT_SDK_AGENT_RUNTIME_ID] as const;
 
-export type MissionAgentRunner = (typeof MISSION_AGENT_RUNNERS)[number];
+export type MissionAgentRuntime = (typeof MISSION_AGENT_RUNTIMES)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
 
 export type MissionDaemonSettings = {
-    agentRunner?: MissionAgentRunner;
+    agentRuntime?: MissionAgentRuntime;
     defaultAgentMode?: MissionDefaultAgentMode;
     defaultModel?: string;
     cockpitTheme?: string;
@@ -55,7 +60,7 @@ export function getDefaultMissionDaemonSettings(): MissionDaemonSettings {
 export function getDefaultMissionDaemonSettingsWithOverrides(
     overrides: MissionDaemonSettings = {}
 ): MissionDaemonSettings {
-    const agentRunner = normalizeOptionalAgentRunner(overrides.agentRunner);
+    const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNTIME_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
     const cockpitTheme = normalizeOptionalString(overrides.cockpitTheme);
@@ -66,7 +71,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         instructionsPath: '.agents',
         skillsPath: '.agents/skills',
         workflow: normalizeWorkflowSettings(overrides.workflow ?? createDefaultWorkflowSettings()),
-        ...(agentRunner ? { agentRunner } : {}),
+		agentRuntime,
         ...(defaultAgentMode ? { defaultAgentMode } : {}),
         ...(defaultModel ? { defaultModel } : {}),
         ...(cockpitTheme ? { cockpitTheme } : {}),
@@ -124,8 +129,8 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeOptionalAgentRunner(value: MissionAgentRunner | undefined): MissionAgentRunner | undefined {
-    return value === 'copilot' || value === 'tmux' ? value : undefined;
+function normalizeOptionalAgentRuntime(value: MissionAgentRuntime | undefined): MissionAgentRuntime | undefined {
+	return isSupportedAgentRuntime(value) ? value : undefined;
 }
 
 function normalizeOptionalAgentMode(

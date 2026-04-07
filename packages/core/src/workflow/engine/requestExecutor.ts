@@ -1,5 +1,6 @@
 import type { MissionDescriptor, MissionStageId } from '../../types.js';
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
+import { DEFAULT_AGENT_RUNTIME_ID, normalizeLegacyAgentRuntimeId } from '../../lib/agentRuntimes.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
@@ -18,7 +19,7 @@ import {
 	generateMissionWorkflowTasks,
 	type MissionWorkflowTaskGenerationResult
 } from './generator.js';
-import type { MissionRuntimeRecord } from './types.js';
+import type { MissionAgentSessionRuntimeState, MissionRuntimeRecord } from './types.js';
 import type { AgentRunner } from '../../runtime/AgentRunner.js';
 import { AgentSessionOrchestrator } from '../../runtime/AgentSessionOrchestrator.js';
 import { AgentSessionEventEmitter } from '../../runtime/AgentSessionEventEmitter.js';
@@ -28,6 +29,7 @@ import type {
 	AgentCommandKind,
 	AgentPrompt,
 	AgentSessionEvent,
+	AgentSessionReference,
 	AgentSessionId,
 	AgentPromptSource,
 	AgentSessionSnapshot,
@@ -55,6 +57,7 @@ export class MissionWorkflowRequestExecutor {
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 	private readonly runtimeEvents: MissionWorkflowEvent[] = [];
 	private readonly runtimeEventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
+	private readonly orchestratorSubscription: { dispose(): void };
 
 	public readonly onDidRuntimeEvent = this.runtimeEventEmitter.event;
 
@@ -66,7 +69,7 @@ export class MissionWorkflowRequestExecutor {
 			runners: this.runners.values(),
 			...(this.sessionStore ? { store: this.sessionStore } : {})
 		});
-		this.orchestrator.onDidEvent((event) => {
+		this.orchestratorSubscription = this.orchestrator.onDidEvent((event) => {
 			this.runtimeEventEmitter.fire(event);
 			const translated = this.translateRuntimeEvent(event);
 			if (translated) {
@@ -78,6 +81,32 @@ export class MissionWorkflowRequestExecutor {
 		this.workingDirectoryResolver =
 			options.workingDirectoryResolver ??
 			((_task, descriptor) => descriptor.missionDir);
+	}
+
+	public dispose(): void {
+		this.orchestratorSubscription.dispose();
+		this.orchestrator.dispose();
+		this.runtimeEventEmitter.dispose();
+		this.runtimeEvents.length = 0;
+	}
+
+	public normalizePersistedSessionIdentity(
+		session: MissionAgentSessionRuntimeState
+	): MissionAgentSessionRuntimeState {
+		if (session.transportId || session.runtimeId !== 'tmux') {
+			return session;
+		}
+
+		const tmuxRuntime = [...this.runners.values()].find((runner) => runner.transportId === 'tmux');
+		if (!tmuxRuntime) {
+			return session;
+		}
+
+		return {
+			...session,
+			runtimeId: tmuxRuntime.id,
+			transportId: 'tmux'
+		};
 	}
 
 	public async executeRequests(input: {
@@ -120,7 +149,7 @@ export class MissionWorkflowRequestExecutor {
 					}
 
 					const runtimeId =
-						task.agentRunner ??
+						normalizeLegacyAgentRuntimeId(task.agentRunner) ??
 						(typeof request.payload['runtimeId'] === 'string' ? request.payload['runtimeId'] : undefined);
 					if (!runtimeId) {
 						events.push({
@@ -136,10 +165,14 @@ export class MissionWorkflowRequestExecutor {
 					}
 
 					try {
+						const transportId = this.runners.get(runtimeId)?.transportId;
 						const session = await this.orchestrator.startSession(runtimeId, {
 							missionId: input.missionId,
 							taskId: task.taskId,
 							workingDirectory: this.workingDirectoryResolver(task, input.descriptor),
+							...(transportId
+								? { transportId }
+								: {}),
 							initialPrompt: {
 								source: 'engine',
 								text: task.instruction,
@@ -160,7 +193,8 @@ export class MissionWorkflowRequestExecutor {
 							causedByRequestId: request.requestId,
 							sessionId: snapshot.sessionId,
 							taskId: task.taskId,
-							runtimeId: snapshot.runnerId
+							runtimeId: snapshot.runtimeId,
+							...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
 						});
 					} catch (error) {
 						events.push({
@@ -309,15 +343,20 @@ export class MissionWorkflowRequestExecutor {
 	}
 
 	public async startSession(input: {
-		runnerId: string;
+		runtimeId: string;
 		request: AgentSessionStartRequest;
 	}): Promise<AgentSessionSnapshot> {
-		const session = await this.orchestrator.startSession(input.runnerId, input.request);
+		const session = await this.orchestrator.startSession(input.runtimeId, input.request);
 		return session.getSnapshot();
 	}
 
 	public listRuntimeSessions(): AgentSessionSnapshot[] {
 		return this.orchestrator.listSessions();
+	}
+
+	public async attachSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
+		const session = await this.orchestrator.attachSession(reference);
+		return session.getSnapshot();
 	}
 
 	public getRuntimeSession(sessionId: AgentSessionId): AgentSessionSnapshot | undefined {
@@ -448,7 +487,7 @@ export class MissionWorkflowRequestExecutor {
 				subject: task.title,
 				instruction: task.instruction,
 				...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
-				agent: task.agentRunner ?? 'copilot'
+				agent: normalizeLegacyAgentRuntimeId(task.agentRunner) ?? DEFAULT_AGENT_RUNTIME_ID
 			});
 		}
 	}

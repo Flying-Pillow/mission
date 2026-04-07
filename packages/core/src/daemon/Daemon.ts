@@ -85,7 +85,7 @@ export class Daemon {
 			}
 		};
 		await this.writeManifest();
-		this.logLine?.(`[Daemon] Listening on ${this.socketPath} (pid ${String(process.pid)})`);
+		this.logLine?.(`Listening on ${this.socketPath} (pid ${String(process.pid)})`);
 		return structuredClone(this.manifest);
 	}
 
@@ -100,7 +100,7 @@ export class Daemon {
 		}
 
 		this.closed = true;
-		this.logLine?.('[Daemon] Closing server.');
+		this.logLine?.('Closing server.');
 		for (const client of this.clients) {
 			client.end();
 			client.destroy();
@@ -127,7 +127,7 @@ export class Daemon {
 
 	private handleConnection(socket: Socket): void {
 		this.clients.add(socket);
-		this.logLine?.(`[Daemon] Client connected (${String(this.clients.size)} total).`);
+		this.logLine?.(`Client connected (${String(this.clients.size)} total).`);
 		socket.setEncoding('utf8');
 		let buffer = '';
 
@@ -145,11 +145,11 @@ export class Daemon {
 
 		socket.on('close', () => {
 			this.clients.delete(socket);
-			this.logLine?.(`[Daemon] Client disconnected (${String(this.clients.size)} remaining).`);
+			this.logLine?.(`Client disconnected (${String(this.clients.size)} remaining).`);
 		});
 		socket.on('error', (error) => {
 			this.clients.delete(socket);
-			this.logLine?.(`[Daemon] Client socket error: ${error instanceof Error ? error.message : String(error)}`);
+			this.logLine?.(`Client socket error: ${error instanceof Error ? error.message : String(error)}`);
 		});
 	}
 
@@ -159,14 +159,14 @@ export class Daemon {
 			if (message.type !== 'request') return;
 
 			this.logLine?.(
-				`[Daemon] Incoming ${message.method} request (${message.id})${message.surfacePath ? ` surface=${message.surfacePath}` : ''}`
+				`Incoming ${message.method} request (${message.id})${message.surfacePath ? ` surface=${message.surfacePath}` : ''}`
 			);
 			const response = await this.handleRequest(message);
 			if (this.clients.has(socket)) {
 				socket.write(JSON.stringify(response) + '\n');
 			}
 		} catch (error) {
-			this.logLine?.(`[Daemon] Failed to handle message: ${error}`);
+			this.logLine?.(`Failed to handle message: ${error}`);
 		}
 	}
 
@@ -195,7 +195,7 @@ export class Daemon {
 
 	private broadcastEvent(event: Notification): void {
 		this.logLine?.(
-			`[Daemon] Broadcasting ${event.type}${'missionId' in event ? ` mission=${event.missionId}` : ''}`
+			`Broadcasting ${event.type}${'missionId' in event ? ` mission=${event.missionId}` : ''}`
 		);
 		const message: EventMessage = { type: 'event', event };
 		const wire = JSON.stringify(message) + '\n';

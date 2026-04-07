@@ -1,4 +1,5 @@
 import type {
+	ControlActionDescribe,
 	ControlDocumentRead,
 	ControlDocumentResponse,
 	ControlDocumentWrite,
@@ -14,6 +15,7 @@ import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
 	MissionActionDescriptor,
 	MissionActionExecutionStep,
+	MissionActionFlowDescriptor,
 	MissionStatus,
 	TrackedIssueSummary
 } from '../types.js';
@@ -39,6 +41,17 @@ export class DaemonControlApi {
 			...(steps.length > 0 ? { steps } : {})
 		};
 		return this.client.request<MissionStatus>('control.action.execute', params);
+	}
+
+	public async describeActionFlow(
+		actionId: string,
+		steps: MissionActionExecutionStep[] = []
+	): Promise<MissionActionFlowDescriptor> {
+		const params: ControlActionDescribe = {
+			actionId,
+			...(steps.length > 0 ? { steps } : {})
+		};
+		return this.client.request<MissionActionFlowDescriptor>('control.action.describe', params);
 	}
 
 	public async updateSetting(

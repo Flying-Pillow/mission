@@ -61,8 +61,15 @@ tmux_session_has_live_layout() {
 		return 1
 	fi
 	printf '%s\n' "$pane_state" | grep -q '^0:0$' || return 1
-	printf '%s\n' "$pane_state" | grep -q '^1:0$' || return 1
-	[ "$(printf '%s\n' "$pane_state" | wc -l | tr -d ' ')" = "2" ]
+	if printf '%s\n' "$pane_state" | grep -q '^1:'; then
+		printf '%s\n' "$pane_state" | grep -q '^1:0$' || return 1
+	fi
+	return 0
+}
+
+tmux_session_has_side_pane() {
+	session_name=$1
+	"$tmux_binary" list-panes -t "$session_name":0 -F '#{pane_index}' 2>/dev/null | grep -q '^1$'
 }
 
 launch_tmux_session() {
@@ -79,8 +86,12 @@ launch_tmux_session() {
 		if ! tmux_session_has_live_layout "$session_name"; then
 			"$tmux_binary" kill-session -t "$session_name" >/dev/null 2>&1 || true
 		else
-		"$tmux_binary" respawn-pane -k -t "$session_name":0.1 -c "$repo_root" sh -lc "$right_command"
+		"$tmux_binary" respawn-pane -k -t "$session_name":0.0 -c "$repo_root" sh -lc "$left_command"
+		if tmux_session_has_side_pane "$session_name"; then
+			"$tmux_binary" kill-pane -t "$session_name":0.1 >/dev/null 2>&1 || true
+		fi
 		"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
+		"$tmux_binary" select-pane -t "$session_name":0.0 >/dev/null
 		exec "$tmux_binary" attach-session -t "$session_name"
 		fi
 	fi
@@ -88,7 +99,6 @@ launch_tmux_session() {
 	"$tmux_binary" new-session -d -s "$session_name" -c "$repo_root" sh -lc "$left_command"
 	"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
 	"$tmux_binary" setw -t "$session_name":0 remain-on-exit on >/dev/null
-	"$tmux_binary" split-window -h -l "$split_size" -t "$session_name":0.0 -c "$repo_root" sh -lc "$right_command"
 	"$tmux_binary" select-pane -t "$session_name":0.0 >/dev/null
 
 	exec "$tmux_binary" attach-session -t "$session_name"
@@ -160,7 +170,7 @@ if [ "$tmux_mode" != "off" ] && should_launch_tmux; then
 fi
 
 if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then
-	exec env MISSION_COCKPIT_HMR=1 MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --watch --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_COCKPIT_HMR=1 MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --watch --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 elif [ "$hmr_mode" -eq 1 ]; then
 	runner="tsx watch"
 elif [ "$cockpit_mode" -eq 1 ]; then

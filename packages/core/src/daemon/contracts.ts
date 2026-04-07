@@ -158,6 +158,7 @@ export type MissionAgentTurnRequest = {
 
 export type MissionAgentSessionState = {
 	runtimeId: string;
+	transportId?: string;
 	runtimeLabel: string;
 	sessionId: string;
 	lifecycleState: MissionAgentLifecycleState;
@@ -173,6 +174,7 @@ export type MissionAgentSessionState = {
 export type MissionAgentSessionRecord = {
 	sessionId: string;
 	runtimeId: string;
+	transportId?: string;
 	runtimeLabel: string;
 	lifecycleState: MissionAgentLifecycleState;
 	taskId?: string;
@@ -188,6 +190,7 @@ export type MissionAgentSessionRecord = {
 
 export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
 	runtimeId: string;
+	transportId?: string;
 	sessionId?: string;
 	taskId?: string;
 	assignmentLabel?: string;
@@ -196,6 +199,17 @@ export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
 export type MissionAgentEvent =
 	| {
 		type: 'session-state-changed';
+		state: MissionAgentSessionState;
+	}
+	| {
+		type: 'prompt-accepted';
+		prompt: string;
+		state: MissionAgentSessionState;
+	}
+	| {
+		type: 'prompt-rejected';
+		prompt: string;
+		reason: string;
 		state: MissionAgentSessionState;
 	}
 	| {
@@ -261,7 +275,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 export type Method =
 	| 'ping'
@@ -273,6 +287,7 @@ export type Method =
 	| 'control.workflow.settings.initialize'
 	| 'control.workflow.settings.update'
 	| 'control.issues.list'
+	| 'control.action.describe'
 	| 'control.action.execute'
 	| 'mission.from-brief'
 	| 'mission.from-issue'
@@ -320,7 +335,7 @@ export type MissionFromIssueRequest = {
 };
 
 export type ControlSettingsUpdate = {
-	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'cockpitTheme' | 'instructionsPath' | 'skillsPath';
+	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'cockpitTheme' | 'instructionsPath' | 'skillsPath';
 	value: string;
 };
 
@@ -358,6 +373,11 @@ export type MissionGateEvaluate = MissionSelect & {
 };
 
 export type ControlActionExecute = {
+	actionId: string;
+	steps?: MissionActionExecutionStep[];
+};
+
+export type ControlActionDescribe = {
 	actionId: string;
 	steps?: MissionActionExecutionStep[];
 };

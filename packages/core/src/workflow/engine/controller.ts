@@ -3,6 +3,7 @@ import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import type {
     AgentCommand,
     AgentPrompt,
+    AgentSessionReference,
     AgentSessionSnapshot,
     AgentSessionStartRequest
 } from '../../runtime/AgentRuntimeTypes.js';
@@ -48,6 +49,9 @@ export class MissionWorkflowController {
 
     public async initialize(): Promise<MissionRuntimeRecord | undefined> {
         let document = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        if (document) {
+            document = await this.normalizePersistedDocument(document);
+        }
         if (!document) {
             if (!this.resolveWorkflow().autostart.mission) {
                 this.document = undefined;
@@ -64,7 +68,8 @@ export class MissionWorkflowController {
     }
 
     public async refresh(): Promise<MissionRuntimeRecord | undefined> {
-        const document = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        const persisted = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        const document = persisted ? await this.normalizePersistedDocument(persisted) : undefined;
         if (!document) {
             this.document = undefined;
             return undefined;
@@ -112,8 +117,12 @@ export class MissionWorkflowController {
         return this.requestExecutor.getRuntimeSession(sessionId);
     }
 
+	public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
+		return this.requestExecutor.attachSession(reference);
+	}
+
     public async startRuntimeSession(input: {
-        runnerId: string;
+        runtimeId: string;
         request: AgentSessionStartRequest;
     }): Promise<AgentSessionSnapshot> {
         return this.requestExecutor.startSession(input);
@@ -230,12 +239,38 @@ export class MissionWorkflowController {
         if (this.document) {
             return this.document;
         }
-        const document = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        const persisted = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        const document = persisted ? await this.normalizePersistedDocument(persisted) : undefined;
         if (!document) {
             throw new Error(`Mission runtime record is missing for mission '${this.descriptor.missionId}'.`);
         }
         this.document = document;
         return document;
+    }
+
+    private async normalizePersistedDocument(document: MissionRuntimeRecord): Promise<MissionRuntimeRecord> {
+        let changed = false;
+        const sessions = document.runtime.sessions.map((session) => {
+            const normalized = this.requestExecutor.normalizePersistedSessionIdentity(session);
+            if (normalized !== session) {
+                changed = true;
+            }
+            return normalized;
+        });
+
+        if (!changed) {
+            return document;
+        }
+
+        const normalizedDocument: MissionRuntimeRecord = {
+            ...document,
+            runtime: {
+                ...document.runtime,
+                sessions
+            }
+        };
+        await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, normalizedDocument);
+        return normalizedDocument;
     }
 
     private resolveWorkflow(): WorkflowGlobalSettings {

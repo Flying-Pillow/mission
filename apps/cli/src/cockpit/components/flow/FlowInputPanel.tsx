@@ -1,8 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { InputRenderable } from '@opentui/core';
-import { cockpitTheme } from './cockpitTheme.js';
-import { Panel } from './Panel.js';
+import { cockpitTheme } from '../cockpitTheme.js';
+import { Panel } from '../Panel.js';
+import type { CockpitKeyEvent } from '../types.js';
 
 type FlowInputPanelProps = {
 	title: string;
@@ -13,11 +14,7 @@ type FlowInputPanelProps = {
 	isRunning: boolean;
 	onInputChange: (value: string) => void;
 	onInputSubmit: (value?: string) => void;
-	onInputKeyDown?: (event: {
-		name?: string;
-		preventDefault: () => void;
-		stopPropagation: () => void;
-	}) => void;
+	onInputKeyDown?: (event: CockpitKeyEvent) => void;
 };
 
 export function FlowInputPanel(props: FlowInputPanelProps) {

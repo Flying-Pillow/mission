@@ -54,6 +54,7 @@ export function TabPanel(props: TabPanelProps) {
 
 	const tabLayouts = createMemo(() => {
 		const layouts: Array<{ tab: TabPanelTab; x: number; width: number; renderedLabel: string }> = [];
+		const selectedId = props.selectedTabId;
 		let cursor = 1;
 		for (const tab of props.tabs) {
 			if (layouts.length > 0) {
@@ -67,6 +68,22 @@ export function TabPanel(props: TabPanelProps) {
 			const width = renderedLabel.length + 4;
 			layouts.push({ tab, x: cursor, width, renderedLabel });
 			cursor += width;
+		}
+
+		if (
+			selectedId
+			&& !layouts.some((layout) => layout.tab.id === selectedId)
+		) {
+			const selectedTab = props.tabs.find((tab) => tab.id === selectedId);
+			if (selectedTab) {
+				const selectedLabel = fitTabLabel(selectedTab.label, Math.max(interiorWidth() - 4, 1));
+				return [{
+					tab: selectedTab,
+					x: 1,
+					width: selectedLabel.length + 4,
+					renderedLabel: selectedLabel
+				}];
+			}
 		}
 		return layouts;
 	});

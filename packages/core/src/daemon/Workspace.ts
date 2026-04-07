@@ -41,6 +41,7 @@ import type {
 	TrackedIssueSummary
 } from '../types.js';
 import {
+	type ControlActionDescribe,
 	type ControlActionExecute,
 	type ControlDocumentRead,
 	type ControlDocumentResponse,
@@ -135,6 +136,8 @@ export class MissionWorkspace {
 				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest);
 			case 'control.issues.list':
 				return this.listOpenGitHubIssues((request.params ?? {}) as ControlIssuesList);
+			case 'control.action.describe':
+				return this.describeControlAction((request.params ?? {}) as ControlActionDescribe);
 			case 'control.action.execute':
 				return this.executeControlAction((request.params ?? {}) as ControlActionExecute);
 			case 'mission.status':
@@ -456,11 +459,12 @@ export class MissionWorkspace {
 	private async launchTaskSession(params: TaskLaunch) {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const request = await this.buildTaskLaunchRequest(loadedMission, params.taskId, params.request);
-		const runtimeId = this.resolveRuntimeId(request.runtimeId);
+		const runtime = this.requireRuntime(this.resolveRuntimeId(request.runtimeId));
 		const session = await loadedMission.mission.launchAgentSession({
 			...request,
 			taskId: params.taskId,
-			runtimeId
+			runtimeId: runtime.id,
+			transportId: runtime.transportId
 		});
 		void this.broadcastMissionStatusSnapshot(loadedMission);
 		return session;
@@ -479,6 +483,7 @@ export class MissionWorkspace {
 		}
 		return {
 			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
+			...(overrides.transportId ? { transportId: overrides.transportId } : {}),
 			workingDirectory: overrides['workingDirectory'] ?? status.missionDir ?? this.workspaceRoot,
 			prompt: overrides['prompt'] ?? task.instruction,
 			title: overrides['title'] ?? task.subject,
@@ -658,8 +663,8 @@ export class MissionWorkspace {
 		if (!settings) {
 			problems.push('Mission settings are missing.');
 		}
-		if (!effectiveSettings.agentRunner) {
-			problems.push('Mission control agent runner is not configured.');
+		if (!effectiveSettings.agentRuntime) {
+			problems.push('Mission control agent runtime is not configured.');
 		}
 		if (!effectiveSettings.defaultAgentMode) {
 			problems.push('Mission control default agent mode is not configured.');
@@ -713,8 +718,10 @@ export class MissionWorkspace {
 	}
 
 	private buildSetupCommandFlow(
-		control: MissionControlPlaneStatus
+		control: MissionControlPlaneStatus,
+		steps: MissionActionExecutionStep[] = []
 	): MissionActionFlowDescriptor {
+		const selectedField = readSingleSelectionStep(steps, 'field') as ControlSettingsUpdate['field'] | undefined;
 		return {
 			targetLabel: 'SETUP',
 			actionLabel: 'SAVE',
@@ -729,16 +736,7 @@ export class MissionWorkspace {
 					selectionMode: 'single',
 					options: this.buildSetupCommandFlowOptions(control)
 				},
-				{
-					kind: 'text',
-					id: 'value',
-					label: 'VALUE',
-					title: 'SETTING VALUE',
-					helperText: 'Enter the new value for the selected setting.',
-					placeholder: 'Enter the updated value',
-					inputMode: 'compact',
-					format: 'plain'
-				}
+				this.buildSetupValueStep(control, selectedField)
 			]
 		};
 	}
@@ -748,9 +746,9 @@ export class MissionWorkspace {
 	): MissionActionFlowOption[] {
 		return [
 			{
-				id: 'agentRunner',
-				label: 'Agent Runner',
-				description: control.settings.agentRunner?.trim() || 'Required'
+				id: 'agentRuntime',
+				label: 'Agent Runtime',
+				description: control.settings.agentRuntime?.trim() || 'Required'
 			},
 			{
 				id: 'defaultAgentMode',
@@ -778,6 +776,123 @@ export class MissionWorkspace {
 				description: control.settings.skillsPath?.trim() || '.agents/skills'
 			}
 		];
+	}
+
+	private buildSetupValueStep(
+		control: MissionControlPlaneStatus,
+		selectedField: ControlSettingsUpdate['field'] | undefined
+	): MissionActionFlowDescriptor['steps'][number] {
+		if (selectedField === 'agentRuntime') {
+			return {
+				kind: 'selection',
+				id: 'value',
+				label: 'VALUE',
+				title: 'RUNTIME',
+				emptyLabel: 'No runtimes are available.',
+				helperText: 'Choose the runtime Mission should use.',
+				selectionMode: 'single',
+				options: this.orderSelectedOptionFirst([
+					{
+						id: 'copilot-cli',
+						label: 'Copilot CLI',
+						description: 'Interactive Copilot CLI session in tmux'
+					},
+					{
+						id: 'copilot-sdk',
+						label: 'Copilot SDK',
+						description: 'Headless Copilot SDK process with no UI'
+					}
+				], control.settings.agentRuntime)
+			};
+		}
+		if (selectedField === 'defaultAgentMode') {
+			const runtimeId = control.settings.agentRuntime?.trim();
+			const usesTmuxTransport = runtimeId === 'copilot-cli';
+			return {
+				kind: 'selection',
+				id: 'value',
+				label: 'VALUE',
+				title: 'DEFAULT MODE',
+				emptyLabel: 'No agent modes are available.',
+				helperText: 'Choose how the configured runtime should run by default.',
+				selectionMode: 'single',
+				options: this.orderSelectedOptionFirst([
+					{
+						id: 'interactive',
+						label: 'Interactive',
+						description: usesTmuxTransport
+							? 'Operator-guided terminal session'
+							: 'Operator-guided runtime session'
+					},
+					{
+						id: 'autonomous',
+						label: 'Autonomous',
+						description: usesTmuxTransport
+							? 'Terminal transport continues until interrupted or complete'
+							: 'Runtime continues with autonomous execution'
+					}
+				], control.settings.defaultAgentMode)
+			};
+		}
+		if (selectedField === 'cockpitTheme') {
+			return {
+				kind: 'selection',
+				id: 'value',
+				label: 'VALUE',
+				title: 'THEME',
+				emptyLabel: 'No cockpit themes are available.',
+				helperText: 'Choose the cockpit theme.',
+				selectionMode: 'single',
+				options: this.orderSelectedOptionFirst([
+					{ id: 'ocean', label: 'OCEAN', description: 'Deep blue cockpit theme' },
+					{ id: 'sand', label: 'SAND', description: 'Warm neutral cockpit theme' }
+				], control.settings.cockpitTheme)
+			};
+		}
+
+		return {
+			kind: 'text',
+			id: 'value',
+			label: 'VALUE',
+			title: selectedField === 'defaultModel' ? 'MODEL' : 'SETTING VALUE',
+			helperText: selectedField === 'defaultModel'
+				? 'Enter the default model id for the selected runtime.'
+				: 'Enter the new value for the selected setting.',
+			placeholder: selectedField === 'defaultModel' ? 'Enter the model id' : 'Enter the updated value',
+			initialValue: this.resolveSetupTextInitialValue(control, selectedField),
+			inputMode: 'compact',
+			format: 'plain'
+		};
+	}
+
+	private resolveSetupTextInitialValue(
+		control: MissionControlPlaneStatus,
+		selectedField: ControlSettingsUpdate['field'] | undefined
+	): string {
+		if (selectedField === 'instructionsPath') {
+			return control.settings.instructionsPath ?? '';
+		}
+		if (selectedField === 'skillsPath') {
+			return control.settings.skillsPath ?? '';
+		}
+		if (selectedField === 'defaultModel') {
+			return control.settings.defaultModel ?? '';
+		}
+		return '';
+	}
+
+	private orderSelectedOptionFirst(
+		options: MissionActionFlowOption[],
+		selectedId: string | undefined
+	): MissionActionFlowOption[] {
+		if (!selectedId) {
+			return options;
+		}
+		const selectedOption = options.find((option) => option.id === selectedId);
+		if (!selectedOption) {
+			return options;
+		}
+		return [selectedOption, ...options.filter((option) => option.id !== selectedId)];
 	}
 
 	private buildMissionStartFlow(): MissionActionFlowDescriptor {
@@ -874,6 +989,22 @@ export class MissionWorkspace {
 		};
 	}
 
+	private async describeControlAction(
+		params: ControlActionDescribe
+	): Promise<MissionActionFlowDescriptor> {
+		const control = await this.buildControlPlaneStatus();
+		if (params.actionId === 'control.setup.edit') {
+			return this.buildSetupCommandFlow(control, params.steps ?? []);
+		}
+		if (params.actionId === 'control.mission.start') {
+			return this.buildMissionStartFlow();
+		}
+		if (params.actionId === 'control.mission.select') {
+			return this.buildMissionSwitchFlow(await this.listMissionSelectionCandidates());
+		}
+		throw new Error(`Unsupported control action '${params.actionId}'.`);
+	}
+
 	private async writeControlSetting(
 		field: ControlSettingsUpdate['field'],
 		rawValue: string
@@ -890,15 +1021,15 @@ export class MissionWorkspace {
 		const value = rawValue.trim();
 
 		switch (field) {
-			case 'agentRunner':
+			case 'agentRuntime':
 				if (value.length === 0) {
-					delete nextSettings.agentRunner;
+					delete nextSettings.agentRuntime;
 					break;
 				}
-				if (value !== 'copilot' && value !== 'tmux') {
-					throw new Error(`Unsupported Mission agent runner '${value}'.`);
+				if (value !== 'copilot-cli' && value !== 'copilot-sdk') {
+					throw new Error(`Unsupported Mission agent runtime '${value}'.`);
 				}
-				nextSettings.agentRunner = value;
+				nextSettings.agentRuntime = value;
 				break;
 			case 'defaultAgentMode':
 				if (value.length === 0) {
@@ -946,8 +1077,7 @@ export class MissionWorkspace {
 	}
 
 	private isAutopilotConfigured(): boolean {
-		const settings = getDefaultMissionDaemonSettingsWithOverrides(readMissionDaemonSettings(this.workspaceRoot) ?? {});
-		return settings.defaultAgentMode === 'autonomous';
+		return false;
 	}
 
 	private describeIssueIntakeUnavailable(control: MissionControlPlaneStatus): string {
@@ -1204,8 +1334,12 @@ export class MissionWorkspace {
 			if (phaseEvent) {
 				this.emitEvent(phaseEvent);
 			}
-			void this.broadcastMissionStatusSnapshot(loadedMission);
-			this.scheduleAutopilot(loadedMission, event);
+			if (shouldBroadcastMissionStatusForAgentEvent(event)) {
+				void this.broadcastMissionStatusSnapshot(loadedMission);
+			}
+			if (shouldScheduleAutopilotForAgentEvent(event)) {
+				this.scheduleAutopilot(loadedMission, event);
+			}
 		});
 
 		this.loadedMissions.set(loadedMission.missionId, loadedMission);
@@ -1489,6 +1623,31 @@ export class MissionWorkspace {
 
 }
 
+function shouldBroadcastMissionStatusForAgentEvent(event: MissionAgentEvent): boolean {
+	switch (event.type) {
+		case 'session-started':
+		case 'session-resumed':
+		case 'session-state-changed':
+		case 'session-completed':
+		case 'session-failed':
+		case 'session-cancelled':
+			return true;
+		default:
+			return false;
+	}
+}
+
+function shouldScheduleAutopilotForAgentEvent(event: MissionAgentEvent): boolean {
+	switch (event.type) {
+		case 'session-completed':
+		case 'session-failed':
+		case 'session-cancelled':
+			return true;
+		default:
+			return false;
+	}
+}
+
 function parseGitHubAuthUser(output: string): string | undefined {
 	const patterns = [
 		/Logged in to\s+[^\s]+\s+as\s+([A-Za-z0-9-]+)/iu,
@@ -1522,6 +1681,21 @@ function normalizeMissionSelector(selector: MissionSelector = {}): MissionSelect
 
 function hasMissionSelector(selector: MissionSelector): boolean {
 	return Boolean(selector.missionId?.trim() || selector.issueId !== undefined || selector.branchRef?.trim());
+}
+
+function readSingleSelectionStep(
+	steps: MissionActionExecutionStep[],
+	stepId: string
+): string | undefined {
+	const step = steps.find(
+		(candidate): candidate is MissionActionExecutionSelectionStep =>
+			candidate.kind === 'selection' && candidate.stepId === stepId
+	);
+	if (step?.optionIds.length !== 1) {
+		return undefined;
+	}
+	const optionId = step.optionIds[0]?.trim();
+	return optionId && optionId.length > 0 ? optionId : undefined;
 }
 
 function requireSingleSelectionActionStep(
@@ -1576,7 +1750,7 @@ function asControlSettingField(
 	value: string | undefined
 ): ControlSettingsUpdate['field'] | undefined {
 	if (
-		value === 'agentRunner'
+		value === 'agentRuntime'
 		|| value === 'defaultAgentMode'
 		|| value === 'defaultModel'
 		|| value === 'cockpitTheme'

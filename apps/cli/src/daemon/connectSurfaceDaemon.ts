@@ -112,7 +112,7 @@ async function restartIncompatibleDaemon(
     await stopMissionDaemon();
 }
 
-function resolveDefaultRuntimeFactoryModulePath(
+export function resolveDefaultRuntimeFactoryModulePath(
     launchMode: MissionDaemonLaunchMode
 ): string | undefined {
     const currentFilePath = fileURLToPath(import.meta.url);

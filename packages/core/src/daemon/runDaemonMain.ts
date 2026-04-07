@@ -10,7 +10,8 @@ type RuntimeFactoryModule = {
 };
 
 function writeDaemonLogLine(line: string): void {
-	process.stdout.write(`[Mission daemon ${new Date().toISOString()}] ${line}\n`);
+	const timestamp = new Date().toISOString().slice(11, 19);
+	process.stdout.write(`${timestamp} ${line}\n`);
 }
 
 function readSocketPathFromArgv(argv: string[]): string | undefined {

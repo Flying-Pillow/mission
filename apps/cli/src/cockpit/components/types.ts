@@ -1,4 +1,13 @@
-export type FocusArea = 'header' | 'flow' | 'tree' | 'console' | 'command';
+export type FocusArea = 'header' | 'flow' | 'tree' | 'command';
+
+export type CockpitKeyEvent = {
+	name?: string;
+	sequence?: string;
+	ctrl?: boolean;
+	shift?: boolean;
+	preventDefault: () => void;
+	stopPropagation: () => void;
+};
 
 export type SelectItem = {
 	id: string;

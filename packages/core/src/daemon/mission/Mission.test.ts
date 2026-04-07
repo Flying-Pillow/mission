@@ -49,6 +49,7 @@ describe('Mission', () => {
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Complete the assigned task.'
                 });
+                expect(await runner.listSessions()).toHaveLength(1);
                 const session = runner.getSession(sessionRecord.sessionId);
                 if (!session) {
                     throw new Error(`Expected fake runner session '${sessionRecord.sessionId}' to exist.`);
@@ -147,6 +148,209 @@ describe('Mission', () => {
                 expect(terminated.lifecycleState).toBe('terminated');
                 expect(runner.getSession(launched.sessionId)?.getSnapshot().phase).toBe('terminated');
                 expect(mission.getAgentSession(launched.sessionId)?.lifecycleState).toBe('terminated');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('exposes and executes a task launch action for ready tasks', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(204, 'Mission task launch action'),
+                branchRef: adapter.deriveMissionBranchName(204, 'Mission task launch action')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId) {
+                    throw new Error('Expected a ready task after workflow start.');
+                }
+
+                const launchAction = startedStatus.availableActions?.find(
+                    (action) => action.id === `task.launch.${taskId}`
+                );
+                expect(launchAction).toMatchObject({
+                    action: '/launch',
+                    enabled: true,
+                    targetId: taskId
+                });
+
+                const nextStatus = await mission.executeAction(`task.launch.${taskId}`);
+                expect(await runner.listSessions()).toHaveLength(1);
+                expect(nextStatus.agentSessions?.length ?? 0).toBe(1);
+                expect(nextStatus.agentSessions?.[0]).toMatchObject({
+                    taskId,
+                    runtimeId: runner.id,
+                    assignmentLabel: expect.stringContaining('flight-deck/')
+                });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('launches an agent session for a running task without violating workflow validation', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(205, 'Mission running task launch action'),
+                branchRef: adapter.deriveMissionBranchName(205, 'Mission running task launch action')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId) {
+                    throw new Error('Expected a ready task after workflow start.');
+                }
+
+                const runningStatus = await mission.executeAction(`task.start.${taskId}`);
+                expect(runningStatus.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('active');
+
+                const launchedStatus = await mission.executeAction(`task.launch.${taskId}`);
+                expect(await runner.listSessions()).toHaveLength(1);
+                expect(launchedStatus.agentSessions?.length ?? 0).toBe(1);
+                expect(launchedStatus.agentSessions?.[0]).toMatchObject({
+                    taskId,
+                    runtimeId: runner.id,
+                    lifecycleState: 'running'
+                });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('migrates legacy tmux runtime session records to runtime plus transport identity', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'tmux');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(206, 'Mission tmux identity migration'),
+                branchRef: adapter.deriveMissionBranchName(206, 'Mission tmux identity migration')
+            }, createWorkflowBindings(runner));
+
+            const missionId = mission.getRecord().id;
+            const missionDir = mission.getMissionDir();
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const launched = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    transportId: 'tmux',
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Migrate me.'
+                });
+                mission.dispose();
+
+                const persisted = await adapter.readMissionRuntimeRecord(missionDir);
+                if (!persisted) {
+                    throw new Error('Expected persisted mission runtime record.');
+                }
+                persisted.runtime.sessions = persisted.runtime.sessions.map((session) =>
+                    session.sessionId === launched.sessionId
+                        ? {
+                            ...session,
+                            runtimeId: 'tmux'
+                        }
+                        : session
+                );
+                for (const session of persisted.runtime.sessions) {
+                    delete (session as { transportId?: string }).transportId;
+                }
+                await adapter.writeMissionRuntimeRecord(missionDir, persisted);
+
+                const reloaded = await Factory.load(adapter, { missionId }, createWorkflowBindings(runner));
+                if (!reloaded) {
+                    throw new Error('Expected mission to reload.');
+                }
+
+                try {
+                    const status = await reloaded.status();
+                    const migratedSession = status.agentSessions?.find((session) => session.sessionId === launched.sessionId);
+                    expect(migratedSession).toMatchObject({
+                        runtimeId: 'copilot-cli',
+                        transportId: 'tmux'
+                    });
+
+                    const migratedDocument = await adapter.readMissionRuntimeRecord(missionDir);
+                    expect(migratedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
+                        runtimeId: 'copilot-cli',
+                        transportId: 'tmux'
+                    });
+                } finally {
+                    reloaded.dispose();
+                }
+            } catch (error) {
+                mission.dispose();
+                throw error;
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('keeps persisted sessions visible when status reconciliation fails', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(207, 'Mission status fallback'),
+                branchRef: adapter.deriveMissionBranchName(207, 'Mission status fallback')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const launched = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Stay visible.'
+                });
+
+                const workflowController = (mission as unknown as {
+                    workflowController: { reconcileSessions(): Promise<unknown> };
+                }).workflowController;
+                workflowController.reconcileSessions = async () => {
+                    throw new Error('synthetic reconcile failure');
+                };
+
+                const status = await mission.status();
+                expect(status.agentSessions?.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
+                    sessionId: launched.sessionId,
+                    runtimeId: runner.id,
+                    lifecycleState: 'running'
+                });
             } finally {
                 mission.dispose();
             }

@@ -129,7 +129,8 @@ describe('CopilotAgentRunner', () => {
         const runner = new CopilotAgentRunner();
 
         await runner.attachSession({
-            runnerId: 'copilot',
+            runtimeId: 'copilot',
+            transportId: 'direct',
             sessionId: 'resumed-session'
         });
 
@@ -148,7 +149,8 @@ describe('CopilotAgentRunner', () => {
         mockResumeSession.mockReset().mockRejectedValue(new Error('missing session'));
         const runner = new CopilotAgentRunner();
         const attached = await runner.attachSession({
-            runnerId: 'copilot',
+            runtimeId: 'copilot',
+            transportId: 'direct',
             sessionId: 'missing-session'
         });
         const events: AgentSessionEvent[] = [];

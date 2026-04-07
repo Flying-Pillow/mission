@@ -29,6 +29,7 @@ import {
 	type MissionRuntimeRecord,
 	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
 } from '../workflow/engine/index.js';
+import { DEFAULT_AGENT_RUNTIME_ID, normalizeLegacyAgentRuntimeId } from './agentRuntimes.js';
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -668,7 +669,9 @@ export class FilesystemAdapter {
 		const sequence = this.parseTaskSequence(fileName, sequenceFallback);
 		const parsedTaskBody = this.parseTaskBody(body, fileName);
 		const taskId = this.createTaskId(stage, fileName);
-		const agent = this.readOptionalStringAttribute(document.attributes, 'agent', filePath) ?? 'copilot';
+		const agent =
+			normalizeLegacyAgentRuntimeId(this.readOptionalStringAttribute(document.attributes, 'agent', filePath))
+			?? DEFAULT_AGENT_RUNTIME_ID;
 
 		return {
 			taskId,

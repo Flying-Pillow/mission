@@ -1,20 +1,19 @@
 import * as path from 'node:path';
 import {
-	MissionAgentEventEmitter
-	} from '../events.js';
+	MissionAgentEventEmitter,
+	type MissionAgentDisposable
+} from '../events.js';
 import {
 	type MissionAgentConsoleEvent,
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
 	type MissionAgentSessionLaunchRequest,
 	type MissionAgentSessionRecord
-	} from '../contracts.js';
+} from '../contracts.js';
 import type {
 	AgentCommand,
 	AgentPrompt
-	} from '../../runtime/AgentRuntimeTypes.js';
-
-
+} from '../../runtime/AgentRuntimeTypes.js';
 
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
 import { MissionSession } from './MissionSession.js';
@@ -23,7 +22,11 @@ import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
+	getMissionStageDefinition,
 	type MissionActionDescriptor,
+	type MissionCockpitProjection,
+	type MissionCockpitStageRailItem,
+	type MissionCockpitTreeNode,
 	type MissionActionExecutionStep,
 	type MissionTaskUpdate,
 	type GateIntent,
@@ -73,6 +76,7 @@ export class Mission {
 	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
 	private readonly workflowController: MissionWorkflowController;
 	private readonly workflowResolver: () => WorkflowGlobalSettings;
+	private readonly runtimeEventSubscription: MissionAgentDisposable;
 
 	public readonly onDidAgentConsoleEvent = this.agentConsoleEventEmitter.event;
 	public readonly onDidAgentEvent = this.agentEventEmitter.event;
@@ -98,7 +102,7 @@ export class Mission {
 			...(workflowBindings.defaultModel ? { defaultModel: workflowBindings.defaultModel } : {}),
 			...(workflowBindings.defaultMode ? { defaultMode: workflowBindings.defaultMode } : {})
 		});
-		this.workflowRequestExecutor.onDidRuntimeEvent((event) => {
+		this.runtimeEventSubscription = this.workflowRequestExecutor.onDidRuntimeEvent((event) => {
 			this.handleRuntimeEvent(event);
 		});
 		this.workflowController = new MissionWorkflowController({
@@ -166,9 +170,14 @@ export class Mission {
 		}
 
 		const refreshedDocument = await this.workflowController.refresh();
-		const document = refreshedDocument
-			? await this.workflowController.reconcileSessions()
-			: undefined;
+		let document = refreshedDocument;
+		if (refreshedDocument) {
+			try {
+				document = await this.workflowController.reconcileSessions();
+			} catch {
+				document = refreshedDocument;
+			}
+		}
 		this.syncAgentSessions(document);
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this.lastKnownStatus;
@@ -245,6 +254,8 @@ export class Mission {
 
 	public dispose(): void {
 		this.consoleStates.clear();
+		this.runtimeEventSubscription.dispose();
+		this.workflowRequestExecutor.dispose();
 		this.agentConsoleEventEmitter.dispose();
 		this.agentEventEmitter.dispose();
 	}
@@ -324,6 +335,10 @@ export class Mission {
 		}
 		if (actionId.startsWith('task.start.')) {
 			await this.startTask(actionId.slice('task.start.'.length));
+			return this.status();
+		}
+		if (actionId.startsWith('task.launch.')) {
+			await this.launchTaskAction(actionId.slice('task.launch.'.length));
 			return this.status();
 		}
 		if (actionId.startsWith('task.done.')) {
@@ -465,6 +480,7 @@ export class Mission {
 		const readyTasks = this.resolveReadyTasks(currentStage);
 		const productFiles = await this.collectProductFiles();
 		const sessions = this.getAgentSessions();
+		const cockpit = this.buildCockpitProjection(persistedDocument.configuration, stages, sessions, productFiles);
 
 		return {
 			found: true,
@@ -482,6 +498,7 @@ export class Mission {
 			...(readyTasks.length > 0 ? { readyTasks } : {}),
 			stages,
 			agentSessions: sessions,
+			cockpit,
 			workflow: {
 				lifecycle: persistedDocument.runtime.lifecycle,
 				pause: { ...persistedDocument.runtime.pause },
@@ -538,6 +555,7 @@ export class Mission {
 		}));
 		const currentStageId = (workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
 		const productFiles = await this.collectProductFiles();
+		const cockpit = this.buildCockpitProjection(configuration, stages, [], productFiles);
 
 		return {
 			found: true,
@@ -553,6 +571,7 @@ export class Mission {
 			productFiles,
 			stages,
 			agentSessions: [],
+			cockpit,
 			workflow: {
 				lifecycle: runtime.lifecycle,
 				pause: { ...runtime.pause },
@@ -603,6 +622,176 @@ export class Mission {
 				tasks
 			};
 		});
+	}
+
+	private buildCockpitProjection(
+		configuration: MissionRuntimeRecord['configuration'],
+		stages: MissionStageStatus[],
+		sessions: MissionAgentSessionRecord[],
+		productFiles: Partial<Record<MissionArtifactKey, string>>
+	): MissionCockpitProjection {
+		return {
+			stageRail: stages.map((stage) => this.toCockpitStageRailItem(stage, configuration)),
+			treeNodes: this.buildCockpitTreeNodes(configuration, stages, sessions, productFiles)
+		};
+	}
+
+	private toCockpitStageRailItem(
+		stage: MissionStageStatus,
+		configuration: MissionRuntimeRecord['configuration']
+	): MissionCockpitStageRailItem {
+		return {
+			id: stage.stage,
+			label: this.resolveCockpitStageLabel(stage.stage, configuration),
+			state: this.toCockpitStageRailState(stage.status),
+			subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
+		};
+	}
+
+	private buildCockpitTreeNodes(
+		configuration: MissionRuntimeRecord['configuration'],
+		stages: MissionStageStatus[],
+		sessions: MissionAgentSessionRecord[],
+		productFiles: Partial<Record<MissionArtifactKey, string>>
+	): MissionCockpitTreeNode[] {
+		const nodes: MissionCockpitTreeNode[] = [];
+		for (const stage of stages) {
+			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
+			nodes.push({
+				id: `tree:stage:${stage.stage}`,
+				label: this.resolveCockpitStageLabel(stage.stage, configuration),
+				kind: 'stage',
+				depth: 0,
+				color: this.progressTone(stage.status),
+				collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
+				stageId: stage.stage
+			});
+
+			if (stageArtifactPath) {
+				nodes.push({
+					id: `tree:stage-artifact:${stage.stage}`,
+					label: path.basename(stageArtifactPath),
+					kind: 'stage-artifact',
+					depth: 1,
+					color: this.progressTone(stage.status),
+					collapsible: false,
+					sourcePath: stageArtifactPath,
+					stageId: stage.stage
+				});
+			}
+
+			for (const task of stage.tasks) {
+				const taskColor = this.progressTone(task.status);
+				nodes.push({
+					id: `tree:task:${task.taskId}`,
+					label: `${String(task.sequence)} ${task.subject}`,
+					kind: 'task',
+					depth: 1,
+					color: taskColor,
+					collapsible: Boolean(task.filePath) || sessions.some((session) => session.taskId === task.taskId),
+					stageId: stage.stage,
+					taskId: task.taskId
+				});
+
+				const taskSessions = sessions
+					.filter((session) => session.taskId === task.taskId)
+					.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+				for (const session of taskSessions) {
+					nodes.push({
+						id: `tree:session:${session.sessionId}`,
+						label: `${session.runtimeId} ${session.sessionId.slice(-4)}`,
+						kind: 'session',
+						depth: 2,
+						color: this.sessionTone(session.lifecycleState, taskColor),
+						collapsible: false,
+						stageId: stage.stage,
+						taskId: task.taskId,
+						sessionId: session.sessionId
+					});
+				}
+
+				if (task.filePath) {
+					nodes.push({
+						id: `tree:task-artifact:${task.taskId}`,
+						label: task.fileName,
+						kind: 'task-artifact',
+						depth: 2,
+						color: taskColor,
+						collapsible: false,
+						sourcePath: task.filePath,
+						stageId: stage.stage,
+						taskId: task.taskId
+					});
+				}
+			}
+		}
+		return nodes;
+	}
+
+	private resolveCockpitStageLabel(
+		stageId: MissionStageId,
+		configuration: MissionRuntimeRecord['configuration']
+	): string {
+		const configuredLabel = configuration.workflow.stages[stageId]?.displayName?.trim();
+		if (configuredLabel) {
+			return configuredLabel.toUpperCase();
+		}
+		return stageId.toUpperCase();
+	}
+
+	private resolveStageArtifactPath(
+		stageId: MissionStageId,
+		productFiles: Partial<Record<MissionArtifactKey, string>>
+	): string | undefined {
+		for (const artifactKey of getMissionStageDefinition(stageId).artifacts) {
+			const filePath = productFiles[artifactKey];
+			if (filePath) {
+				return filePath;
+			}
+		}
+		return undefined;
+	}
+
+	private toCockpitStageRailState(status: MissionStageStatus['status']): MissionCockpitStageRailItem['state'] {
+		if (status === 'done') {
+			return 'done';
+		}
+		if (status === 'active') {
+			return 'active';
+		}
+		if (status === 'blocked') {
+			return 'blocked';
+		}
+		return 'pending';
+	}
+
+	private progressTone(status: MissionStageStatus['status'] | MissionTaskState['status']): string {
+		if (status === 'done') {
+			return '#3fb950';
+		}
+		if (status === 'active') {
+			return '#58a6ff';
+		}
+		if (status === 'blocked') {
+			return '#d29922';
+		}
+		return '#8b949e';
+	}
+
+	private sessionTone(state: string, fallbackColor: string): string {
+		if (state === 'running') {
+			return '#3fb950';
+		}
+		if (state === 'failed') {
+			return '#f85149';
+		}
+		if (state === 'cancelled') {
+			return '#d29922';
+		}
+		if (state === 'completed') {
+			return '#f0f6fc';
+		}
+		return fallbackColor;
 	}
 
 	private toWorkflowProjectedTaskState(
@@ -825,17 +1014,26 @@ export class Mission {
 		return runner;
 	}
 
+	private resolveDefaultRuntimeId(): string {
+		const runtimeId = this.agentRunners.keys().next().value;
+		if (!runtimeId) {
+			throw new Error('No mission agent runners are configured for this mission.');
+		}
+		return runtimeId;
+	}
+
 	private async startTaskRuntimeSession(
 		task: MissionTaskState,
 		runner: AgentRunner,
 		request: MissionAgentSessionLaunchRequest
 	): Promise<AgentSessionSnapshot> {
 		return this.workflowController.startRuntimeSession({
-			runnerId: runner.id,
+			runtimeId: runner.id,
 			request: {
 				missionId: this.descriptor.missionId,
 				taskId: task.taskId,
 				workingDirectory: request.workingDirectory,
+				transportId: request.transportId ?? runner.transportId,
 				initialPrompt: {
 					source: 'operator',
 					text: request.prompt,
@@ -853,7 +1051,8 @@ export class Mission {
 			source: 'daemon',
 			sessionId: snapshot.sessionId,
 			taskId: snapshot.taskId,
-			runtimeId: snapshot.runnerId
+			runtimeId: snapshot.runtimeId,
+			...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
 		});
 		await this.refresh();
 		this.emitSyntheticSessionStart(snapshot);
@@ -870,6 +1069,36 @@ export class Mission {
 			reason: error instanceof Error ? error.message : String(error)
 		});
 		await this.refresh();
+	}
+
+	private async launchTaskAction(taskId: string): Promise<MissionAgentSessionRecord> {
+		const task = await this.requireTask(taskId);
+		const taskState = task.toState();
+		const status = await this.status();
+		const session = await task.launchSession({
+			runtimeId: this.resolveDefaultRuntimeId(),
+			transportId: this.requireAgentRunner(this.resolveDefaultRuntimeId()).transportId,
+			workingDirectory: status.missionDir ?? this.adapter.getMissionWorkspacePath(this.missionDir),
+			prompt: taskState.instruction,
+			title: taskState.subject,
+			assignmentLabel: taskState.relativePath,
+			scope: {
+				kind: 'slice',
+				sliceTitle: taskState.subject,
+				verificationTargets: [],
+				requiredSkills: [],
+				dependsOn: [...taskState.dependsOn],
+				...(status.missionId ? { missionId: status.missionId } : {}),
+				...(status.missionDir ? { missionDir: status.missionDir } : {}),
+				stage: taskState.stage,
+				taskId: taskState.taskId,
+				taskTitle: taskState.subject,
+				taskSummary: taskState.subject,
+				taskInstruction: taskState.instruction
+			},
+			startFreshSession: true
+		});
+		return session.toRecord();
 	}
 
 	private requireAgentSessionRecord(sessionId: string): MissionAgentSessionRecord {
@@ -898,7 +1127,7 @@ export class Mission {
 		sessionId: string,
 		prompt: AgentPrompt
 	): Promise<MissionAgentSessionRecord> {
-		this.requireAgentSessionRecord(sessionId);
+		await this.ensureRuntimeSessionAttached(sessionId);
 		await this.workflowController.promptRuntimeSession(sessionId, prompt);
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
@@ -908,7 +1137,7 @@ export class Mission {
 		sessionId: string,
 		command: AgentCommand
 	): Promise<MissionAgentSessionRecord> {
-		this.requireAgentSessionRecord(sessionId);
+		await this.ensureRuntimeSessionAttached(sessionId);
 		await this.workflowController.commandRuntimeSession(sessionId, command);
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
@@ -958,6 +1187,18 @@ export class Mission {
 			cancelSessionRecord: (sessionId, reason) => this.cancelSessionRecord(sessionId, reason),
 			terminateSessionRecord: (sessionId, reason) => this.terminateSessionRecord(sessionId, reason)
 		}, record);
+	}
+
+	private async ensureRuntimeSessionAttached(sessionId: string): Promise<void> {
+		if (this.workflowController.getRuntimeSession(sessionId)) {
+			return;
+		}
+		const record = this.requireAgentSessionRecord(sessionId);
+		await this.workflowController.attachRuntimeSession({
+			runtimeId: record.runtimeId,
+			...(record.transportId ? { transportId: record.transportId } : {}),
+			sessionId: record.sessionId
+		});
 	}
 
 	private syncAgentSessions(document: MissionRuntimeRecord | undefined): void {
@@ -1014,7 +1255,7 @@ export class Mission {
 			? this.createSession(session).toState(snapshot)
 			: MissionSession.createStateFromSnapshot({
 				snapshot,
-				runtimeLabel: this.agentRunners.get(snapshot.runnerId)?.displayName ?? snapshot.runnerId
+				runtimeLabel: this.agentRunners.get(snapshot.runtimeId)?.displayName ?? snapshot.runtimeId
 			});
 		this.agentEventEmitter.fire({
 			type: 'session-started',
@@ -1029,7 +1270,7 @@ export class Mission {
 			: MissionSession.createStateFromSnapshot({
 				snapshot: event.snapshot,
 				runtimeLabel:
-					this.agentRunners.get(event.snapshot.runnerId)?.displayName ?? event.snapshot.runnerId
+					this.agentRunners.get(event.snapshot.runtimeId)?.displayName ?? event.snapshot.runtimeId
 			});
 		const currentConsole = this.consoleStates.get(event.snapshot.sessionId) ?? createEmptyMissionAgentConsoleState({
 			awaitingInput: state.lifecycleState === 'awaiting-input',
@@ -1040,6 +1281,35 @@ export class Mission {
 		});
 
 		switch (event.type) {
+			case 'prompt.accepted': {
+				const promptText = event.prompt.text;
+				const nextState = cloneMissionAgentConsoleState({
+					...currentConsole,
+					lines: [...currentConsole.lines, `> ${promptText}`],
+					awaitingInput: state.lifecycleState === 'awaiting-input'
+				});
+				this.consoleStates.set(state.sessionId, nextState);
+				this.agentConsoleEventEmitter.fire({
+					type: 'lines',
+					lines: [`> ${promptText}`],
+					state: nextState
+				});
+				this.agentEventEmitter.fire({
+					type: 'prompt-accepted',
+					prompt: promptText,
+					state
+				});
+				return;
+			}
+			case 'prompt.rejected': {
+				this.agentEventEmitter.fire({
+					type: 'prompt-rejected',
+					prompt: event.prompt.text,
+					reason: event.reason,
+					state
+				});
+				return;
+			}
 			case 'session.message': {
 				const nextState = cloneMissionAgentConsoleState({
 					...currentConsole,
@@ -1226,6 +1496,7 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Miss
 
 	for (const task of getOrderedTasks(input)) {
 		actions.push(buildTaskStartAction(input, task));
+		actions.push(buildTaskLaunchAction(input, task));
 		actions.push(buildTaskDoneAction(input, task));
 		actions.push(buildTaskBlockedAction(input, task));
 		actions.push(buildTaskReopenAction(input, task));
@@ -1398,6 +1669,26 @@ function buildTaskStartAction(input: MissionAvailableActionsInput, task: Mission
 		...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
 		ui: { toolbarLabel: 'START TASK', requiresConfirmation: false },
 		flow: { targetLabel: 'TASK', actionLabel: 'START', steps: [] },
+		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
+		metadata: {
+			stageId: task.stageId as MissionStageId,
+			launchMode: task.runtime.launchMode,
+			autostart: task.runtime.autostart
+		}
+	};
+}
+
+function buildTaskLaunchAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+	const enabled = isTaskLaunchEnabled(input, task);
+	return {
+		id: `task.launch.${task.taskId}`,
+		label: 'Launch Agent Session',
+		action: '/launch',
+		scope: 'task',
+		targetId: task.taskId,
+		...buildAvailability(enabled, describeTaskLaunchUnavailable(input, task)),
+		ui: { toolbarLabel: 'LAUNCH', requiresConfirmation: false },
+		flow: { targetLabel: 'TASK', actionLabel: 'LAUNCH', steps: [] },
 		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
 		metadata: {
 			stageId: task.stageId as MissionStageId,
@@ -1640,6 +1931,59 @@ function describeTaskStartUnavailable(input: MissionAvailableActionsInput, task:
 		default:
 			return errors[0] ?? 'Task is not ready to start.';
 	}
+}
+
+function isTaskLaunchEnabled(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): boolean {
+	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
+		return false;
+	}
+	if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
+		return false;
+	}
+	if (task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
+		return false;
+	}
+	return !input.sessions.some(
+		(session) =>
+			session.taskId === task.taskId
+			&& (
+				session.lifecycleState === 'starting'
+				|| session.lifecycleState === 'running'
+				|| session.lifecycleState === 'awaiting-input'
+			)
+	);
+}
+
+function describeTaskLaunchUnavailable(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): string {
+	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
+		return 'Clear panic before launching an agent.';
+	}
+	if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
+		return 'Resume the mission before launching an agent.';
+	}
+	if (input.sessions.some((session) => session.taskId === task.taskId && (
+		session.lifecycleState === 'starting'
+		|| session.lifecycleState === 'running'
+		|| session.lifecycleState === 'awaiting-input'
+	))) {
+		return 'Task already has an active agent session.';
+	}
+	if (task.lifecycle === 'ready' || task.lifecycle === 'queued' || task.lifecycle === 'running') {
+		return 'Task is ready to launch.';
+	}
+	if (task.lifecycle === 'pending') {
+		return task.blockedByTaskIds.length > 0 ? `Waiting on ${task.blockedByTaskIds.join(', ')}.` : 'Waiting for an earlier stage to become eligible.';
+	}
+	if (task.lifecycle === 'blocked') {
+		return 'Task is blocked.';
+	}
+	if (task.lifecycle === 'completed') {
+		return 'Task is already completed.';
+	}
+	if (task.lifecycle === 'failed' || task.lifecycle === 'cancelled') {
+		return 'Reopen the task before launching it again.';
+	}
+	return 'Task is not available for launch.';
 }
 
 function getValidationErrors(

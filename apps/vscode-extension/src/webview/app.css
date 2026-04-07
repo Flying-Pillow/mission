@@ -80,13 +80,14 @@
 	}
 
 	.mc-tab-active {
-		border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 45%, transparent);
-		background: color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent);
-		color: var(--vscode-textLink-foreground);
+		border-color: var(--vscode-focusBorder, var(--vscode-textLink-foreground));
+		background: color-mix(in srgb, var(--vscode-textLink-foreground) 18%, transparent);
+		color: var(--vscode-foreground);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-textLink-foreground) 30%, transparent);
 	}
 
 	.mc-tab-idle {
-		border-color: var(--vscode-panel-border);
+		border-color: color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
 		background: color-mix(in srgb, var(--vscode-editor-background) 82%, white 18%);
 		color: var(--vscode-descriptionForeground);
 	}

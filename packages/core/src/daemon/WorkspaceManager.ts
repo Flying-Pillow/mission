@@ -131,6 +131,7 @@ function isControlMethod(method: Request['method']): boolean {
         || method === 'control.settings.update'
         || method === 'control.document.read'
         || method === 'control.document.write'
+        || method === 'control.action.describe'
         || method === 'control.action.execute'
         || method === 'control.workflow.settings.get'
         || method === 'control.workflow.settings.initialize'

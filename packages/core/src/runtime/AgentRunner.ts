@@ -1,14 +1,16 @@
 import type { AgentSession } from './AgentSession.js';
 import type {
     AgentRunnerCapabilities,
-    AgentRunnerId,
+    AgentRuntimeId,
+    AgentTransportId,
     AgentSessionReference,
     AgentSessionSnapshot,
     AgentSessionStartRequest
 } from './AgentRuntimeTypes.js';
 
 export interface AgentRunner {
-    readonly id: AgentRunnerId;
+    readonly id: AgentRuntimeId;
+    readonly transportId: AgentTransportId;
     readonly displayName: string;
     readonly capabilities: AgentRunnerCapabilities;
 

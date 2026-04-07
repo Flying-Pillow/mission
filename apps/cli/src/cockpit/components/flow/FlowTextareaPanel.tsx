@@ -2,12 +2,12 @@
 
 import { SyntaxStyle, type TextareaRenderable } from '@opentui/core';
 import { Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { cockpitTheme } from './cockpitTheme.js';
-import { Panel, type PanelBadge } from './Panel.js';
+import { cockpitTheme } from '../cockpitTheme.js';
+import { Panel, type PanelBadge } from '../Panel.js';
 
-export type ComposerTab = 'write' | 'preview';
+type EditorTab = 'write' | 'preview';
 
-type ExpandedCommandComposerProps = {
+type FlowTextareaPanelProps = {
 	title: string;
 	stepLabel: string;
 	helperText: string;
@@ -15,10 +15,9 @@ type ExpandedCommandComposerProps = {
 	placeholder: string;
 	focused: boolean;
 	format: 'plain' | 'markdown';
-	activeTab: ComposerTab;
-	onTabChange: (tab: ComposerTab) => void;
 	onValueChange: (value: string) => void;
 	onSubmit: (value: string) => void;
+	onCancel?: () => void;
 };
 
 const composerMarkdownSyntaxStyle = SyntaxStyle.fromTheme([
@@ -56,15 +55,16 @@ const composerMarkdownSyntaxStyle = SyntaxStyle.fromTheme([
 	}
 ]);
 
-export function ExpandedCommandComposer(props: ExpandedCommandComposerProps) {
+export function FlowTextareaPanel(props: FlowTextareaPanelProps) {
 	let textareaRef: TextareaRenderable | undefined;
 	const [draft, setDraft] = createSignal(props.initialValue);
 	const previewEnabled = createMemo(() => props.format === 'markdown');
+	const [activeTab, setActiveTab] = createSignal<EditorTab>('write');
 	const footerBadges = createMemo<PanelBadge[]>(() => [
 		{ text: props.stepLabel },
 		{
-			text: props.activeTab === 'preview' ? 'preview' : 'write',
-			tone: props.activeTab === 'preview' ? ('accent' as const) : ('neutral' as const)
+			text: activeTab() === 'preview' ? 'preview' : 'write',
+			tone: activeTab() === 'preview' ? ('accent' as const) : ('neutral' as const)
 		},
 		...(previewEnabled() ? [{ text: 'Ctrl+P/Tab preview', framed: false as const }] : []),
 		{ text: 'Enter submit', framed: false as const },
@@ -79,6 +79,19 @@ export function ExpandedCommandComposer(props: ExpandedCommandComposerProps) {
 		setDraft(props.initialValue);
 	});
 
+	createEffect(() => {
+		if (!previewEnabled()) {
+			setActiveTab('write');
+		}
+	});
+
+	function togglePreview(): void {
+		if (!previewEnabled()) {
+			return;
+		}
+		setActiveTab((current) => current === 'write' ? 'preview' : 'write');
+	}
+
 	return (
 		<Panel
 			title={props.title}
@@ -91,25 +104,37 @@ export function ExpandedCommandComposer(props: ExpandedCommandComposerProps) {
 
 			<Show when={previewEnabled()}>
 				<box style={{ flexDirection: 'row', gap: 2 }}>
-					<text style={{ fg: props.activeTab === 'write' ? cockpitTheme.accent : cockpitTheme.labelText }}>
-						{props.activeTab === 'write' ? 'WRITE' : 'write'}
+					<text style={{ fg: activeTab() === 'write' ? cockpitTheme.accent : cockpitTheme.labelText }}>
+						{activeTab() === 'write' ? 'WRITE' : 'write'}
 					</text>
 					<text style={{ fg: cockpitTheme.border }}>|</text>
-					<text style={{ fg: props.activeTab === 'preview' ? cockpitTheme.accent : cockpitTheme.labelText }}>
-						{props.activeTab === 'preview' ? 'PREVIEW' : 'preview'}
+					<text style={{ fg: activeTab() === 'preview' ? cockpitTheme.accent : cockpitTheme.labelText }}>
+						{activeTab() === 'preview' ? 'PREVIEW' : 'preview'}
 					</text>
 				</box>
 			</Show>
 
 			<box style={{ flexGrow: 1 }}>
 				<Show
-					when={previewEnabled() && props.activeTab === 'preview'}
+					when={previewEnabled() && activeTab() === 'preview'}
 					fallback={
 						<textarea
 							ref={(value) => {
 								textareaRef = value;
 							}}
 							onKeyDown={(event) => {
+								if (previewEnabled() && (event.name === 'tab' || (event.ctrl && event.name === 'p'))) {
+									event.preventDefault();
+									event.stopPropagation();
+									togglePreview();
+									return;
+								}
+								if (event.name === 'escape') {
+									event.preventDefault();
+									event.stopPropagation();
+									props.onCancel?.();
+									return;
+								}
 								if ((event.name === 'return' || event.name === 'enter') && !event.shift) {
 									event.preventDefault();
 									event.stopPropagation();
@@ -137,7 +162,23 @@ export function ExpandedCommandComposer(props: ExpandedCommandComposerProps) {
 						/>
 					}
 				>
-					<scrollbox focused={props.focused} style={{ flexGrow: 1 }}>
+					<scrollbox
+						focused={props.focused}
+						style={{ flexGrow: 1 }}
+						onKeyDown={(event) => {
+							if (previewEnabled() && (event.name === 'tab' || (event.ctrl && event.name === 'p'))) {
+								event.preventDefault();
+								event.stopPropagation();
+								togglePreview();
+								return;
+							}
+							if (event.name === 'escape') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onCancel?.();
+							}
+						}}
+					>
 						<Show when={draft().trim().length > 0} fallback={<text style={{ fg: cockpitTheme.secondaryText }}>Nothing to preview yet.</text>}>
 							<markdown
 								content={draft()}

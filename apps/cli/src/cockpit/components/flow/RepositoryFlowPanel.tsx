@@ -2,9 +2,9 @@
 
 import type { InputRenderable, SelectOption } from '@opentui/core';
 import { For, Show, createMemo } from 'solid-js';
-import { cockpitTheme } from './cockpitTheme.js';
-import { Panel, type PanelBadge } from './Panel.js';
-import type { SelectItem } from './types.js';
+import { cockpitTheme } from '../cockpitTheme.js';
+import { Panel, type PanelBadge } from '../Panel.js';
+import type { CockpitKeyEvent, SelectItem } from '../types.js';
 
 export type RepositoryFlowSummaryItem = {
 	label: string;
@@ -26,6 +26,7 @@ type RepositoryFlowPanelBody =
 		selectionMode: 'single' | 'multiple';
 		onItemChange: (itemId: string) => void;
 		onItemSelect: (itemId: string) => void;
+		onKeyDown?: (event: CockpitKeyEvent) => void;
 	  }
 	| {
 		kind: 'text';
@@ -33,11 +34,7 @@ type RepositoryFlowPanelBody =
 		placeholder: string;
 		onInputChange: (value: string) => void;
 		onInputSubmit: (value?: string) => void;
-		onInputKeyDown?: (event: {
-			name?: string;
-			preventDefault: () => void;
-			stopPropagation: () => void;
-		}) => void;
+		onInputKeyDown?: (event: CockpitKeyEvent) => void;
 	  };
 
 type RepositoryFlowPanelProps = {
@@ -130,6 +127,9 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 							descriptionColor={cockpitTheme.secondaryText}
 							selectedDescriptionColor={cockpitTheme.primaryText}
 							showDescription={true}
+							onKeyDown={(event) => {
+								body.onKeyDown?.(event);
+							}}
 							onChange={(_index, option) => {
 								body.onItemChange(String(option?.value ?? ''));
 							}}

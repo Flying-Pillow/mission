@@ -3,6 +3,7 @@ import {
 	type WorkflowGlobalSettings,
 	type WorkflowStageDefinition
 } from '../workflow/engine/index.js';
+import { normalizeLegacyAgentRuntimeId } from '../lib/agentRuntimes.js';
 import { WorkflowSettingsError, type WorkflowSettingsValidationError } from './types.js';
 
 export function normalizeWorkflowSettings(input: unknown): WorkflowGlobalSettings {
@@ -58,7 +59,9 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowGlobalSetting
 								dependsOn: Array.isArray(task.dependsOn)
 									? task.dependsOn.filter((dependency): dependency is string => typeof dependency === 'string')
 									: [],
-								...(typeof task.agentRunner === 'string' ? { agentRunner: task.agentRunner } : {})
+								...(typeof task.agentRunner === 'string'
+									? { agentRunner: normalizeLegacyAgentRuntimeId(task.agentRunner) ?? task.agentRunner }
+									: {})
 							}))
 						: []
 				}))

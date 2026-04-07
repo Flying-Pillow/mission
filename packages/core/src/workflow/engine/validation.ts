@@ -181,11 +181,8 @@ export function getMissionWorkflowEventValidationErrors(
         }
         case 'session.started': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (task && task.lifecycle !== 'queued') {
-                errors.push(`session.started requires task '${event.taskId}' to be queued, received '${task.lifecycle}'.`);
-            }
-            if (!runtime.launchQueue.some((request) => request.taskId === event.taskId)) {
-                errors.push(`session.started requires a matching launch request for task '${event.taskId}'.`);
+            if (task && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
+                errors.push(`session.started requires task '${event.taskId}' to be queued or running, received '${task.lifecycle}'.`);
             }
             if (runtime.sessions.some((session) => session.taskId === event.taskId && (session.lifecycle === 'starting' || session.lifecycle === 'running'))) {
                 errors.push(`session.started is not allowed while task '${event.taskId}' already has an active session.`);
@@ -194,11 +191,8 @@ export function getMissionWorkflowEventValidationErrors(
         }
         case 'session.launch-failed': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (task && task.lifecycle !== 'queued') {
-                errors.push(`session.launch-failed requires task '${event.taskId}' to be queued, received '${task.lifecycle}'.`);
-            }
-            if (!runtime.launchQueue.some((request) => request.taskId === event.taskId)) {
-                errors.push(`session.launch-failed requires a matching launch request for task '${event.taskId}'.`);
+            if (task && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
+                errors.push(`session.launch-failed requires task '${event.taskId}' to be queued or running, received '${task.lifecycle}'.`);
             }
             if (runtime.sessions.some((session) => session.taskId === event.taskId)) {
                 errors.push(`session.launch-failed is not allowed after a session record already exists for task '${event.taskId}'.`);

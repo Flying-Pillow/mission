@@ -22,6 +22,7 @@ export type MissionSessionOwner = {
 type MissionRuntimeSessionRecord = {
 	sessionId: string;
 	runtimeId: string;
+	transportId?: string;
 	taskId: string;
 	lifecycle: MissionAgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['phase'];
 	launchedAt: string;
@@ -65,6 +66,7 @@ export class MissionSession {
 		return MissionSession.cloneRecord({
 			sessionId: input.runtime.sessionId,
 			runtimeId: input.runtime.runtimeId,
+			...(input.runtime.transportId ? { transportId: input.runtime.transportId } : {}),
 			runtimeLabel: input.runtimeLabel,
 			lifecycleState: MissionSession.toLifecycleState(
 				input.snapshot?.phase ?? input.runtime.lifecycle
@@ -87,7 +89,8 @@ export class MissionSession {
 	}): MissionAgentSessionState {
 		const { snapshot, runtimeLabel, record } = input;
 		return MissionSession.cloneState({
-			runtimeId: snapshot.runnerId,
+			runtimeId: snapshot.runtimeId,
+			...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
 			runtimeLabel,
 			sessionId: snapshot.sessionId,
 			lifecycleState: MissionSession.toLifecycleState(snapshot.phase),
@@ -112,6 +115,7 @@ export class MissionSession {
 		return {
 			sessionId: record.sessionId,
 			runtimeId: record.runtimeId,
+			...(record.transportId ? { transportId: record.transportId } : {}),
 			runtimeLabel: record.runtimeLabel,
 			lifecycleState: record.lifecycleState,
 			createdAt: record.createdAt,
@@ -130,6 +134,7 @@ export class MissionSession {
 		const telemetry = MissionSession.cloneTelemetry(state.telemetry);
 		return {
 			runtimeId: state.runtimeId,
+			...(state.transportId ? { transportId: state.transportId } : {}),
 			runtimeLabel: state.runtimeLabel,
 			sessionId: state.sessionId,
 			lifecycleState: state.lifecycleState,
@@ -191,6 +196,7 @@ export class MissionSession {
 		if (!snapshot) {
 			return MissionSession.cloneState({
 				runtimeId: this.record.runtimeId,
+				...(this.record.transportId ? { transportId: this.record.transportId } : {}),
 				runtimeLabel: this.record.runtimeLabel,
 				sessionId: this.record.sessionId,
 				lifecycleState: this.record.lifecycleState,

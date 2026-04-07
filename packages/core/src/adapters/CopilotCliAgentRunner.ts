@@ -1,6 +1,3 @@
-import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { promisify } from 'node:util';
 import type { AgentRunner } from '../runtime/AgentRunner.js';
 import type { AgentSession } from '../runtime/AgentSession.js';
 import {
@@ -13,19 +10,15 @@ import {
 	type AgentPrompt
 } from '../runtime/AgentRuntimeTypes.js';
 import { AgentSessionEventEmitter } from '../runtime/AgentSessionEventEmitter.js';
+import { COPILOT_CLI_AGENT_RUNTIME_ID } from '../lib/agentRuntimes.js';
+import {
+	TmuxAgentTransport,
+	type TmuxAgentTransportOptions,
+	type TmuxSessionHandle
+} from './TmuxAgentTransport.js';
 
-const execFileAsync = promisify(execFile);
-
-type TmuxExecutorResult = {
-	stdout: string;
-	stderr: string;
-};
-
-type TmuxExecutor = (args: string[]) => Promise<TmuxExecutorResult>;
-
-type TmuxSessionHandle = {
-	sessionName: string;
-	paneId: string;
+type TmuxRunnerSessionHandle = {
+	transportHandle: TmuxSessionHandle;
 	snapshot: AgentSessionSnapshot;
 	eventEmitter: AgentSessionEventEmitter<AgentSessionEvent>;
 	lastCapture: string;
@@ -37,20 +30,20 @@ type SnapshotOverrides = Omit<Partial<AgentSessionSnapshot>, 'failureMessage'> &
 	failureMessage?: string | undefined;
 };
 
-export type TmuxAgentRunnerOptions = {
+export type CopilotCliAgentRunnerOptions = TmuxAgentTransportOptions & {
+	runtimeId?: string;
+	displayName?: string;
 	command: string;
 	args?: string[];
 	env?: NodeJS.ProcessEnv;
-	logLine?: (line: string) => void;
-	tmuxBinary?: string;
 	sessionPrefix?: string;
 	pollIntervalMs?: number;
-	executor?: TmuxExecutor;
 };
 
-export class TmuxAgentRunner implements AgentRunner {
-	public readonly id = 'tmux';
-	public readonly displayName = 'tmux CLI';
+export class CopilotCliAgentRunner implements AgentRunner {
+	public readonly id: string;
+	public readonly transportId = 'tmux';
+	public readonly displayName: string;
 	public readonly capabilities: AgentRunnerCapabilities = {
 		attachableSessions: true,
 		promptSubmission: true,
@@ -61,55 +54,36 @@ export class TmuxAgentRunner implements AgentRunner {
 		mcpClient: false
 	};
 
+	private readonly transport: TmuxAgentTransport;
 	private readonly command: string;
 	private readonly args: string[];
 	private readonly env: NodeJS.ProcessEnv | undefined;
-	private readonly logLine: ((line: string) => void) | undefined;
-	private readonly tmuxBinary: string;
 	private readonly sessionPrefix: string;
 	private readonly pollIntervalMs: number;
-	private readonly executor: TmuxExecutor;
-	private readonly sessions = new Map<string, TmuxSessionHandle>();
+	private readonly logLine: ((line: string) => void) | undefined;
+	private readonly sessions = new Map<string, TmuxRunnerSessionHandle>();
 
-	public constructor(options: TmuxAgentRunnerOptions) {
+	public constructor(options: CopilotCliAgentRunnerOptions) {
+		this.id = options.runtimeId?.trim() || COPILOT_CLI_AGENT_RUNTIME_ID;
+		this.displayName = options.displayName?.trim() || `${this.id} via tmux`;
 		this.command = options.command.trim();
 		if (!this.command) {
-			throw new Error('TmuxAgentRunner requires a command.');
+			throw new Error('CopilotCliAgentRunner requires a command.');
 		}
 		this.args = options.args ? [...options.args] : [];
 		this.env = options.env;
-		this.logLine = options.logLine;
-		this.tmuxBinary = options.tmuxBinary?.trim() || 'tmux';
 		this.sessionPrefix = options.sessionPrefix?.trim() || 'mission-agent';
 		this.pollIntervalMs = Math.max(100, options.pollIntervalMs ?? 1000);
-		this.executor = options.executor ?? (async (args) => {
-			const result = await execFileAsync(this.tmuxBinary, args, {
-				encoding: 'utf8',
-				env: {
-					...process.env,
-					...this.env
-				}
-			});
-			return {
-				stdout: result.stdout,
-				stderr: result.stderr
-			};
+		this.logLine = options.logLine;
+		this.transport = new TmuxAgentTransport({
+			...(options.tmuxBinary ? { tmuxBinary: options.tmuxBinary } : {}),
+			...(options.executor ? { executor: options.executor } : {}),
+			...(options.logLine ? { logLine: options.logLine } : {})
 		});
 	}
 
 	public async isAvailable(): Promise<{ available: boolean; detail?: string }> {
-		try {
-			const result = await this.runTmux(['-V']);
-			return {
-				available: true,
-				detail: result.stdout.trim() || 'tmux is available.'
-			};
-		} catch (error) {
-			return {
-				available: false,
-				detail: error instanceof Error ? error.message : String(error)
-			};
-		}
+		return this.transport.isAvailable();
 	}
 
 	public async startSession(request: AgentSessionStartRequest): Promise<AgentSession> {
@@ -118,29 +92,18 @@ export class TmuxAgentRunner implements AgentRunner {
 			throw new Error(availability.detail ?? `${this.displayName} is unavailable.`);
 		}
 
-		const sessionName = `${this.sessionPrefix}-${randomUUID()}`;
-		const launchCommand = this.buildLaunchCommand();
-		const startResult = await this.runTmux([
-			'new-session',
-			'-d',
-			'-P',
-			'-F',
-			'#{session_name} #{pane_id}',
-			'-s',
-			sessionName,
-			'-c',
-			request.workingDirectory,
-			launchCommand
-		]);
-		const parsed = parseTmuxStartOutput(startResult.stdout);
-		if (!parsed) {
-			throw new Error(`TmuxAgentRunner could not parse tmux session output: ${startResult.stdout.trim()}`);
-		}
-		await this.runTmux(['set-option', '-t', `${parsed.sessionName}:0`, 'remain-on-exit', 'on']);
+		const transportHandle = await this.transport.openSession({
+			workingDirectory: request.workingDirectory,
+			command: this.command,
+			args: this.args,
+			...(this.env ? { env: this.env } : {}),
+			sessionPrefix: this.sessionPrefix
+		});
 
 		const snapshot: AgentSessionSnapshot = {
-			runnerId: this.id,
-			sessionId: parsed.sessionName,
+			runtimeId: this.id,
+			transportId: this.transportId,
+			sessionId: transportHandle.sessionName,
 			phase: 'running',
 			workingDirectory: request.workingDirectory,
 			taskId: request.taskId,
@@ -150,23 +113,13 @@ export class TmuxAgentRunner implements AgentRunner {
 			awaitingInput: false,
 			updatedAt: new Date().toISOString()
 		};
-		const handle: TmuxSessionHandle = {
-			sessionName: parsed.sessionName,
-			paneId: parsed.paneId,
-			snapshot,
-			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
-			lastCapture: '',
-			pollTimer: undefined,
-			polling: false
-		};
-		this.sessions.set(parsed.sessionName, handle);
-		this.startPolling(parsed.sessionName);
+		this.registerHandle(transportHandle, snapshot);
 
 		if (request.initialPrompt?.text) {
-			await this.submitPromptInternal(parsed.sessionName, request.initialPrompt, false);
+			await this.submitPromptInternal(transportHandle.sessionName, request.initialPrompt, false);
 		}
 
-		return this.createAgentSession(parsed.sessionName);
+		return this.createAgentSession(transportHandle.sessionName);
 	}
 
 	public async attachSession(reference: AgentSessionReference): Promise<AgentSession> {
@@ -175,14 +128,14 @@ export class TmuxAgentRunner implements AgentRunner {
 			return this.createAgentSession(reference.sessionId);
 		}
 
-		const exists = await this.hasSession(reference.sessionId);
-		if (!exists) {
+		const transportHandle = await this.transport.attachSession(reference.sessionId);
+		if (!transportHandle) {
 			return this.createTerminatedAttachedSession(reference);
 		}
 
-		const paneId = await this.resolvePaneId(reference.sessionId);
 		const snapshot: AgentSessionSnapshot = {
-			runnerId: this.id,
+			runtimeId: this.id,
+			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			phase: 'running',
 			missionId: 'unknown',
@@ -192,16 +145,7 @@ export class TmuxAgentRunner implements AgentRunner {
 			awaitingInput: false,
 			updatedAt: new Date().toISOString()
 		};
-		this.sessions.set(reference.sessionId, {
-			sessionName: reference.sessionId,
-			paneId,
-			snapshot,
-			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
-			lastCapture: '',
-			pollTimer: undefined,
-			polling: false
-		});
-		this.startPolling(reference.sessionId);
+		this.registerHandle(transportHandle, snapshot);
 		return this.createAgentSession(reference.sessionId);
 	}
 
@@ -209,9 +153,23 @@ export class TmuxAgentRunner implements AgentRunner {
 		return [...this.sessions.values()].map((handle) => cloneSnapshot(handle.snapshot));
 	}
 
+	private registerHandle(transportHandle: TmuxSessionHandle, snapshot: AgentSessionSnapshot): void {
+		const handle: TmuxRunnerSessionHandle = {
+			transportHandle,
+			snapshot,
+			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
+			lastCapture: '',
+			pollTimer: undefined,
+			polling: false
+		};
+		this.sessions.set(transportHandle.sessionName, handle);
+		this.startPolling(transportHandle.sessionName);
+	}
+
 	private createAgentSession(sessionId: string): AgentSession {
 		return {
-			runnerId: this.id,
+			runtimeId: this.id,
+			transportId: this.transportId,
 			sessionId,
 			getSnapshot: () => cloneSnapshot(this.requireSnapshot(sessionId)),
 			onDidEvent: (listener) => this.requireHandle(sessionId).eventEmitter.event(listener),
@@ -236,7 +194,8 @@ export class TmuxAgentRunner implements AgentRunner {
 		recordEvent: boolean
 	): Promise<AgentSessionSnapshot> {
 		const handle = this.requireActiveHandle(sessionId, 'submit a prompt');
-		await this.sendText(handle.paneId, prompt.text);
+		await this.preparePaneForPrompt(handle);
+		await sendText(this.transport, handle.transportHandle, prompt.text);
 		const snapshot = this.updateSnapshot(sessionId, {
 			phase: 'running',
 			awaitingInput: false
@@ -264,7 +223,7 @@ export class TmuxAgentRunner implements AgentRunner {
 			throw new Error(reason);
 		}
 
-		await this.runTmux(['send-keys', '-t', handle.paneId, 'C-c']);
+		await this.transport.sendKeys(handle.transportHandle, 'C-c');
 		const snapshot = this.updateSnapshot(sessionId, {
 			phase: 'running',
 			awaitingInput: true
@@ -283,7 +242,7 @@ export class TmuxAgentRunner implements AgentRunner {
 
 	private async cancelSession(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
 		const handle = this.requireHandle(sessionId);
-		await this.killSession(handle.sessionName);
+		await this.transport.killSession(handle.transportHandle);
 		this.stopPolling(handle);
 		const snapshot = this.updateSnapshot(sessionId, {
 			phase: 'cancelled',
@@ -301,7 +260,7 @@ export class TmuxAgentRunner implements AgentRunner {
 
 	private async terminateSession(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
 		const handle = this.requireHandle(sessionId);
-		await this.killSession(handle.sessionName);
+		await this.transport.killSession(handle.transportHandle);
 		this.stopPolling(handle);
 		const snapshot = this.updateSnapshot(sessionId, {
 			phase: 'terminated',
@@ -328,7 +287,7 @@ export class TmuxAgentRunner implements AgentRunner {
 		void this.pollSession(sessionId);
 	}
 
-	private stopPolling(handle: TmuxSessionHandle): void {
+	private stopPolling(handle: TmuxRunnerSessionHandle): void {
 		if (!handle.pollTimer) {
 			return;
 		}
@@ -343,7 +302,7 @@ export class TmuxAgentRunner implements AgentRunner {
 		}
 		handle.polling = true;
 		try {
-			const exists = await this.hasSession(handle.sessionName);
+			const exists = await this.transport.hasSession(handle.transportHandle.sessionName);
 			if (!exists) {
 				this.stopPolling(handle);
 				const snapshot = this.updateSnapshot(sessionId, {
@@ -360,7 +319,7 @@ export class TmuxAgentRunner implements AgentRunner {
 				return;
 			}
 
-			const capture = await this.capturePane(handle.paneId);
+			const capture = await this.transport.capturePane(handle.transportHandle);
 			const newLines = diffCapturedOutput(handle.lastCapture, capture);
 			handle.lastCapture = capture;
 			for (const line of newLines) {
@@ -372,7 +331,7 @@ export class TmuxAgentRunner implements AgentRunner {
 				});
 			}
 
-			const paneState = await this.readPaneState(handle.paneId);
+			const paneState = await this.transport.readPaneState(handle.transportHandle);
 			if (paneState.dead) {
 				this.stopPolling(handle);
 				const nextPhase = paneState.exitCode === 0 ? 'completed' : 'failed';
@@ -398,13 +357,13 @@ export class TmuxAgentRunner implements AgentRunner {
 				}
 			}
 		} catch (error) {
-			this.logLine?.(`TmuxAgentRunner poll failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+			this.logLine?.(`CopilotCliAgentRunner poll failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
 			handle.polling = false;
 		}
 	}
 
-	private requireHandle(sessionId: string): TmuxSessionHandle {
+	private requireHandle(sessionId: string): TmuxRunnerSessionHandle {
 		const handle = this.sessions.get(sessionId);
 		if (!handle) {
 			throw new Error(`Agent session '${sessionId}' is not attached.`);
@@ -412,7 +371,7 @@ export class TmuxAgentRunner implements AgentRunner {
 		return handle;
 	}
 
-	private requireActiveHandle(sessionId: string, action: string): TmuxSessionHandle {
+	private requireActiveHandle(sessionId: string, action: string): TmuxRunnerSessionHandle {
 		const handle = this.requireHandle(sessionId);
 		if (isTerminalPhase(handle.snapshot.phase)) {
 			throw new Error(`Cannot ${action} for session '${sessionId}' because it is ${handle.snapshot.phase}.`);
@@ -452,78 +411,50 @@ export class TmuxAgentRunner implements AgentRunner {
 		return handle.snapshot;
 	}
 
-	private async hasSession(sessionName: string): Promise<boolean> {
-		try {
-			await this.runTmux(['has-session', '-t', sessionName]);
-			return true;
-		} catch {
-			return false;
+	private async preparePaneForPrompt(handle: TmuxRunnerSessionHandle): Promise<void> {
+		const paneState = await this.transport.readPaneState(handle.transportHandle);
+		if (paneState.dead) {
+			const nextPhase = paneState.exitCode === 0 ? 'completed' : 'failed';
+			const snapshot = this.updateSnapshot(handle.transportHandle.sessionName, {
+				phase: nextPhase,
+				acceptsPrompts: false,
+				awaitingInput: false,
+				...(nextPhase === 'failed'
+					? { failureMessage: `tmux command exited with status ${String(paneState.exitCode)}.` }
+					: {})
+			});
+			handle.eventEmitter.fire(
+				nextPhase === 'completed'
+					? {
+						type: 'session.completed',
+						snapshot: cloneSnapshot(snapshot)
+					}
+					: {
+						type: 'session.failed',
+						reason: snapshot.failureMessage ?? 'tmux command failed.',
+						snapshot: cloneSnapshot(snapshot)
+					}
+			);
+			throw new Error(
+				nextPhase === 'completed'
+					? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}' because the tmux pane has exited.`
+					: snapshot.failureMessage ?? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}'.`
+			);
 		}
-	}
 
-	private async resolvePaneId(sessionName: string): Promise<string> {
-		const result = await this.runTmux(['display-message', '-p', '-t', sessionName, '#{pane_id}']);
-		const paneId = result.stdout.trim();
-		if (!paneId) {
-			throw new Error(`TmuxAgentRunner could not resolve a pane for session '${sessionName}'.`);
-		}
-		return paneId;
-	}
-
-	private async readPaneState(paneId: string): Promise<{ dead: boolean; exitCode: number }> {
-		const result = await this.runTmux(['display-message', '-p', '-t', paneId, '#{pane_dead} #{pane_dead_status}']);
-		const [deadValue, exitValue] = result.stdout.trim().split(/\s+/, 2);
-		return {
-			dead: deadValue === '1',
-			exitCode: Number.parseInt(exitValue ?? '0', 10) || 0
-		};
-	}
-
-	private async capturePane(paneId: string): Promise<string> {
-		const result = await this.runTmux(['capture-pane', '-p', '-t', paneId, '-S', '-200']);
-		return result.stdout.replace(/\r\n/g, '\n');
-	}
-
-	private async sendText(paneId: string, text: string): Promise<void> {
-		const normalized = text.replace(/\r\n/g, '\n');
-		const lines = normalized.split('\n');
-		for (let index = 0; index < lines.length; index += 1) {
-			const line = lines[index] ?? '';
-			if (line.length > 0) {
-				await this.runTmux(['send-keys', '-t', paneId, '-l', line]);
+		for (let attempt = 0; attempt < 3; attempt += 1) {
+			const capture = await this.transport.capturePane(handle.transportHandle);
+			if (!isFolderTrustPrompt(capture)) {
+				return;
 			}
-			if (index < lines.length - 1 || normalized.length === 0 || line.length > 0) {
-				await this.runTmux(['send-keys', '-t', paneId, 'Enter']);
-			}
+			await this.transport.sendKeys(handle.transportHandle, 'Enter');
 		}
-	}
-
-	private async killSession(sessionName: string): Promise<void> {
-		try {
-			await this.runTmux(['kill-session', '-t', sessionName]);
-		} catch {
-			// Best-effort termination; local lifecycle state still needs to advance.
-		}
-	}
-
-	private buildLaunchCommand(): string {
-		const envAssignments = Object.entries(this.env ?? {})
-			.filter(([, value]) => typeof value === 'string' && value.length > 0)
-			.map(([key, value]) => `${key}=${shellEscape(value as string)}`);
-		const commandParts = [this.command, ...this.args].map(shellEscape);
-		return envAssignments.length > 0
-			? `env ${envAssignments.join(' ')} ${commandParts.join(' ')}`
-			: commandParts.join(' ');
-	}
-
-	private async runTmux(args: string[]): Promise<TmuxExecutorResult> {
-		this.logLine?.(`tmux ${args.join(' ')}`);
-		return this.executor(args);
 	}
 
 	private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
 		const snapshot: AgentSessionSnapshot = {
-			runnerId: this.id,
+			runtimeId: this.id,
+			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			phase: 'terminated',
 			missionId: 'unknown',
@@ -535,17 +466,9 @@ export class TmuxAgentRunner implements AgentRunner {
 			updatedAt: new Date().toISOString()
 		};
 		const eventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
-		this.sessions.set(reference.sessionId, {
-			sessionName: reference.sessionId,
-			paneId: '',
-			snapshot,
-			eventEmitter,
-			lastCapture: '',
-			pollTimer: undefined,
-			polling: false
-		});
 		return {
-			runnerId: this.id,
+			runtimeId: this.id,
+			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			getSnapshot: () => cloneSnapshot(snapshot),
 			onDidEvent: (listener) => {
@@ -570,16 +493,18 @@ export class TmuxAgentRunner implements AgentRunner {
 	}
 }
 
-function parseTmuxStartOutput(output: string): { sessionName: string; paneId: string } | undefined {
-	const [sessionName, paneId] = output.trim().split(/\s+/, 2);
-	if (!sessionName || !paneId) {
-		return undefined;
+async function sendText(transport: TmuxAgentTransport, handle: TmuxSessionHandle, text: string): Promise<void> {
+	const normalized = text.replace(/\r\n/g, '\n');
+	const lines = normalized.split('\n');
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index] ?? '';
+		if (line.length > 0) {
+			await transport.sendKeys(handle, line, { literal: true });
+		}
+		if (index < lines.length - 1 || normalized.length === 0 || line.length > 0) {
+			await transport.sendKeys(handle, 'Enter');
+		}
 	}
-	return { sessionName, paneId };
-}
-
-function shellEscape(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function cloneSnapshot(snapshot: AgentSessionSnapshot): AgentSessionSnapshot {
@@ -622,4 +547,9 @@ function splitLines(text: string): string[] {
 		.split('\n')
 		.map((line) => line.trimEnd())
 		.filter((line) => line.length > 0);
+}
+
+function isFolderTrustPrompt(capture: string): boolean {
+	return capture.includes('Confirm folder trust')
+		&& capture.includes('Do you trust the files in this folder?');
 }

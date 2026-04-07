@@ -1,6 +1,7 @@
 import type {
     AgentCommand,
-    AgentRunnerId,
+    AgentRuntimeId,
+    AgentTransportId,
     AgentSessionEvent,
     AgentSessionId,
     AgentSessionSnapshot,
@@ -8,7 +9,8 @@ import type {
 } from './AgentRuntimeTypes.js';
 
 export interface AgentSession {
-    readonly runnerId: AgentRunnerId;
+    readonly runtimeId: AgentRuntimeId;
+    readonly transportId: AgentTransportId | undefined;
     readonly sessionId: AgentSessionId;
 
     getSnapshot(): AgentSessionSnapshot;

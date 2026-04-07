@@ -14,7 +14,7 @@ type ControlStatusPanelProps = {
 	control: MissionControlPlaneStatus | undefined;
 	controlSession: MissionAgentSessionRecord | undefined;
 	sessionOutputLines: string[];
-	selectedTabId?: 'agentrunner' | 'control';
+	selectedTabId?: 'runtime' | 'control';
 	focused: boolean;
 	tabsFocusable: boolean;
 	bodyRows: number;
@@ -24,19 +24,19 @@ type ControlStatusPanelProps = {
 
 export function ControlStatusPanel(props: ControlStatusPanelProps) {
 	const runnerLabel = createMemo(() => {
-		const runtimeId = props.controlSession?.runtimeId?.trim() || props.control?.settings?.agentRunner?.trim() || 'agentrunner';
+		const runtimeId = props.controlSession?.runtimeId?.trim() || props.control?.settings?.agentRuntime?.trim() || 'runtime';
 		return runtimeId.toUpperCase();
 	});
-	const selectedTabId = createMemo<'agentrunner' | 'control'>(() => {
+	const selectedTabId = createMemo<'runtime' | 'control'>(() => {
 		if (props.selectedTabId) {
 			return props.selectedTabId;
 		}
-		return props.controlSession ? 'agentrunner' : 'control';
+		return props.controlSession ? 'runtime' : 'control';
 	});
 
 	const bodyLines = createMemo<TabPanelLine[]>(() => {
-		if (selectedTabId() === 'agentrunner') {
-			return buildAgentRunnerLines(props);
+		if (selectedTabId() === 'runtime') {
+			return buildRuntimeLines(props);
 		}
 		return buildControlLines(props);
 	});
@@ -45,7 +45,7 @@ export function ControlStatusPanel(props: ControlStatusPanelProps) {
 		<TabPanel
 			focused={props.focused}
 			tabs={[
-				{ id: 'agentrunner', label: runnerLabel() },
+				{ id: 'runtime', label: runnerLabel() },
 				{ id: 'control', label: 'CONTROL' }
 			]}
 			selectedTabId={selectedTabId()}
@@ -56,17 +56,17 @@ export function ControlStatusPanel(props: ControlStatusPanelProps) {
 	);
 }
 
-function buildAgentRunnerLines(props: ControlStatusPanelProps): TabPanelLine[] {
+function buildRuntimeLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	const control = props.control;
 	const session = props.controlSession;
 	const lines: TabPanelLine[] = [
-		{ text: 'Agent runner connection for repository root.', fg: cockpitTheme.brightText },
+		{ text: 'Agent runtime connection for repository root.', fg: cockpitTheme.brightText },
 		{ text: `Opened from ${props.workspaceContextLabel}.`, fg: cockpitTheme.metaText },
 		{ text: '', fg: cockpitTheme.metaText }
 	];
 
 	if (!session) {
-		lines.push({ text: 'No active agentrunner session.', fg: cockpitTheme.warning });
+		lines.push({ text: 'No active runtime session.', fg: cockpitTheme.warning });
 		lines.push({ text: 'Use /launch to start the configured runtime.', fg: cockpitTheme.metaText });
 		if (!control?.settingsComplete) {
 			lines.push({ text: 'Setup incomplete. Use /setup first.', fg: cockpitTheme.warning });
@@ -88,8 +88,8 @@ function buildAgentRunnerLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	if (control?.settings?.defaultModel?.trim()) {
 		lines.push({ text: `Model: ${control.settings.defaultModel}`, fg: cockpitTheme.metaText });
 	}
-	if (control?.settings?.agentRunner?.trim()) {
-		lines.push({ text: `Configured runner: ${control.settings.agentRunner}`, fg: cockpitTheme.metaText });
+	if (control?.settings?.agentRuntime?.trim()) {
+		lines.push({ text: `Configured runtime: ${control.settings.agentRuntime}`, fg: cockpitTheme.metaText });
 	}
 
 	return lines;

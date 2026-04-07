@@ -39,6 +39,7 @@ type WorkflowSessionHandle = {
 
 export class CopilotAgentRunner implements AgentRunner {
     public readonly id = 'copilot';
+    public readonly transportId = 'direct';
     public readonly displayName = 'Copilot SDK';
     public readonly capabilities: AgentRunnerCapabilities = {
         attachableSessions: true,
@@ -98,7 +99,8 @@ export class CopilotAgentRunner implements AgentRunner {
         const launchedAt = new Date().toISOString();
         const sessionId = `${this.id}-${randomUUID()}`;
         const snapshot: AgentSessionSnapshot = {
-            runnerId: this.id,
+            runtimeId: this.id,
+            transportId: this.transportId,
             sessionId,
             taskId: request.taskId,
             missionId: request.missionId,
@@ -174,7 +176,8 @@ export class CopilotAgentRunner implements AgentRunner {
             };
             const sdkSession = await client.resumeSession(reference.sessionId, resumeConfig);
             const snapshot: AgentSessionSnapshot = {
-                runnerId: this.id,
+                runtimeId: this.id,
+                transportId: this.transportId,
                 sessionId: reference.sessionId,
                 taskId: 'unknown',
                 missionId: 'unknown',
@@ -198,7 +201,8 @@ export class CopilotAgentRunner implements AgentRunner {
 
     private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
         const snapshot: AgentSessionSnapshot = {
-            runnerId: this.id,
+            runtimeId: this.id,
+            transportId: this.transportId,
             sessionId: reference.sessionId,
             taskId: 'unknown',
             missionId: 'unknown',
@@ -215,7 +219,8 @@ export class CopilotAgentRunner implements AgentRunner {
             eventEmitter
         });
         return {
-            runnerId: this.id,
+            runtimeId: this.id,
+            transportId: this.transportId,
             sessionId: reference.sessionId,
             getSnapshot: () => cloneAgentSessionSnapshot(snapshot),
             onDidEvent: (listener) => {
@@ -498,7 +503,8 @@ export class CopilotAgentRunner implements AgentRunner {
     private createAgentSession(sessionId: string): AgentSession {
         const handle = this.requireSessionHandle(sessionId);
         return {
-            runnerId: this.id,
+            runtimeId: this.id,
+            transportId: this.transportId,
             sessionId,
             getSnapshot: () => cloneAgentSessionSnapshot(handle.snapshot),
             onDidEvent: (listener) => handle.eventEmitter.event(listener),
@@ -583,7 +589,8 @@ function cloneAgentSessionSnapshot(
     snapshot: AgentSessionSnapshot
 ): AgentSessionSnapshot {
     return {
-        runnerId: snapshot.runnerId,
+        runtimeId: snapshot.runtimeId,
+        ...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
         sessionId: snapshot.sessionId,
         missionId: snapshot.missionId,
         taskId: snapshot.taskId,

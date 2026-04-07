@@ -5,7 +5,7 @@ import type { PersistedAgentSessionStore } from './PersistedAgentSessionStore.js
 import type {
     AgentCommand,
     AgentPrompt,
-    AgentRunnerId,
+    AgentRuntimeId,
     AgentSessionEvent,
     AgentSessionId,
     AgentSessionReference,
@@ -22,7 +22,7 @@ type OrchestratorSessionRecord = {
 };
 
 export class AgentSessionOrchestrator {
-    private readonly runners = new Map<AgentRunnerId, AgentRunner>();
+    private readonly runners = new Map<AgentRuntimeId, AgentRunner>();
     private readonly sessions = new Map<AgentSessionId, OrchestratorSessionRecord>();
     private readonly mcpServerProvider: (() => Promise<McpServerReference[]>) | undefined;
     private readonly store: PersistedAgentSessionStore | undefined;
@@ -55,13 +55,14 @@ export class AgentSessionOrchestrator {
     }
 
     public async startSession(
-        runnerId: AgentRunnerId,
+        runtimeId: AgentRuntimeId,
         request: AgentSessionStartRequest
     ): Promise<AgentSession> {
-        const runner = this.requireRunner(runnerId);
+        const runner = this.requireRunner(runtimeId);
         const mcpServers = await this.resolveMcpServers(runner, request);
         const session = await runner.startSession({
             ...request,
+            transportId: request.transportId ?? runner.transportId,
             ...(mcpServers ? { mcpServers } : {})
         });
         const snapshot = session.getSnapshot();
@@ -72,11 +73,15 @@ export class AgentSessionOrchestrator {
 
     public async attachSession(reference: AgentSessionReference): Promise<AgentSession> {
         const inMemory = this.sessions.get(reference.sessionId);
-        if (inMemory && inMemory.reference.runnerId === reference.runnerId) {
+        if (
+            inMemory
+            && inMemory.reference.runtimeId === reference.runtimeId
+            && inMemory.reference.transportId === reference.transportId
+        ) {
             return inMemory.session;
         }
 
-        const runner = this.requireRunner(reference.runnerId);
+        const runner = this.requireRunner(reference.runtimeId);
         if (!runner.attachSession) {
             return this.createTerminatedAttachedSession(reference);
         }
@@ -94,6 +99,13 @@ export class AgentSessionOrchestrator {
 
     public listSessions(): AgentSessionSnapshot[] {
         return [...this.sessions.values()].map((entry) => ({ ...entry.snapshot }));
+    }
+
+    public dispose(): void {
+        for (const sessionId of [...this.sessions.keys()]) {
+            this.releaseSession(sessionId);
+        }
+        this.eventEmitter.dispose();
     }
 
     public async submitPrompt(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<AgentSessionSnapshot> {
@@ -127,10 +139,10 @@ export class AgentSessionOrchestrator {
         return snapshot;
     }
 
-    private requireRunner(runnerId: AgentRunnerId): AgentRunner {
-        const runner = this.runners.get(runnerId);
+    private requireRunner(runtimeId: AgentRuntimeId): AgentRunner {
+        const runner = this.runners.get(runtimeId);
         if (!runner) {
-            throw new Error(`Agent runner '${runnerId}' is not registered.`);
+            throw new Error(`Agent runtime '${runtimeId}' is not registered.`);
         }
         return runner;
     }
@@ -146,6 +158,7 @@ export class AgentSessionOrchestrator {
     private registerSession(session: AgentSession, snapshot: AgentSessionSnapshot): void {
         const existing = this.sessions.get(session.sessionId);
         existing?.subscription.dispose();
+        existing?.session.dispose();
 
         const normalizedSnapshot = this.normalizeSnapshot(snapshot, snapshot);
         const subscription = session.onDidEvent((event) => {
@@ -154,7 +167,8 @@ export class AgentSessionOrchestrator {
 
         this.sessions.set(session.sessionId, {
             reference: {
-                runnerId: session.runnerId,
+                runtimeId: session.runtimeId,
+                ...(session.transportId ? { transportId: session.transportId } : {}),
                 sessionId: session.sessionId
             },
             session,
@@ -170,7 +184,10 @@ export class AgentSessionOrchestrator {
     }
 
     private async handleSessionEvent(sessionId: AgentSessionId, event: AgentSessionEvent): Promise<void> {
-        const record = this.requireSession(sessionId);
+        const record = this.sessions.get(sessionId);
+        if (!record) {
+            return;
+        }
         const normalized = this.normalizeSnapshot(event.snapshot, record.snapshot);
         record.snapshot = normalized;
         await this.store?.save(normalized);
@@ -178,6 +195,21 @@ export class AgentSessionOrchestrator {
             ...event,
             snapshot: { ...normalized }
         });
+        if (isTerminalPhase(normalized.phase)) {
+            await this.store?.delete(record.reference);
+            this.releaseSession(sessionId);
+        }
+    }
+
+    private releaseSession(sessionId: AgentSessionId): void {
+        const record = this.sessions.get(sessionId);
+        if (!record) {
+            return;
+        }
+
+        record.subscription.dispose();
+        record.session.dispose();
+        this.sessions.delete(sessionId);
     }
 
     private normalizeSnapshot(
@@ -209,7 +241,8 @@ export class AgentSessionOrchestrator {
 
     private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
         const terminatedSnapshot: AgentSessionSnapshot = {
-            runnerId: reference.runnerId,
+            runtimeId: reference.runtimeId,
+            ...(reference.transportId ? { transportId: reference.transportId } : {}),
             sessionId: reference.sessionId,
             phase: 'terminated',
             missionId: 'unknown',
@@ -222,7 +255,8 @@ export class AgentSessionOrchestrator {
         };
 
         const session: AgentSession = {
-            runnerId: reference.runnerId,
+            runtimeId: reference.runtimeId,
+            transportId: reference.transportId,
             sessionId: reference.sessionId,
             getSnapshot: () => ({ ...terminatedSnapshot }),
             onDidEvent: (listener) => {
@@ -248,7 +282,15 @@ export class AgentSessionOrchestrator {
             reason: 'Session no longer exists in provider runtime.',
             snapshot: { ...terminatedSnapshot }
         });
-        void this.store?.save(terminatedSnapshot);
+        void this.store?.save(terminatedSnapshot).then(() => this.store?.delete(reference));
+        this.releaseSession(reference.sessionId);
         return session;
     }
+}
+
+function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
+    return phase === 'completed'
+        || phase === 'failed'
+        || phase === 'cancelled'
+        || phase === 'terminated';
 }

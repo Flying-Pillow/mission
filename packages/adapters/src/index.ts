@@ -1,15 +1,22 @@
 import type { AgentRunner } from '../../core/build/runtime/AgentRunner.js';
-import { CopilotAgentRunner } from '../../core/build/adapters/CopilotAgentRunner.js';
-import { TmuxAgentRunner } from '../../core/build/adapters/TmuxAgentRunner.js';
+import {
+	COPILOT_CLI_AGENT_RUNTIME_ID,
+	DEFAULT_AGENT_RUNTIME_ID,
+	normalizeLegacyAgentRuntimeId
+} from '../../core/build/lib/agentRuntimes.js';
+import { CopilotSdkAgentRunner } from '../../core/build/adapters/CopilotSdkAgentRunner.js';
+import { CopilotCliAgentRunner } from '../../core/build/adapters/CopilotCliAgentRunner.js';
+import { TmuxAgentTransport } from '../../core/build/adapters/TmuxAgentTransport.js';
 import { readMissionDaemonSettings } from '../../core/build/lib/daemonConfig.js';
 import path from 'node:path';
 import os from 'node:os';
 
-export { CopilotAgentRunner };
-export { TmuxAgentRunner };
+export { CopilotSdkAgentRunner };
+export { CopilotCliAgentRunner };
+export { TmuxAgentTransport };
 
 type ConfiguredAgentSettings = {
-	agentRunner?: string;
+	agentRuntime?: string;
 	defaultAgentMode?: 'interactive' | 'autonomous';
 	defaultModel?: string;
 	skillsPath?: string;
@@ -52,14 +59,18 @@ function resolveDefaultCopilotCliPath(): string {
 	);
 }
 
-function getTmuxRunnerOptions(
-	controlRoot: string,
+function getTmuxTransportOptions(
+	_controlRoot: string,
+	runtimeId: string,
+	displayName: string,
 	logLine?: (line: string) => void
 ) {
 	const overriddenCommand = process.env['MISSION_TMUX_AGENT_COMMAND']?.trim();
 	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || undefined;
 	if (overriddenCommand) {
 		return {
+			runtimeId,
+			displayName,
 			command: 'sh',
 			args: ['-lc', overriddenCommand],
 			...(tmuxBinary ? { tmuxBinary } : {}),
@@ -67,8 +78,10 @@ function getTmuxRunnerOptions(
 		};
 	}
 	return {
+		runtimeId,
+		displayName,
 		command: resolveDefaultCopilotCliPath(),
-		args: ['--add-dir', controlRoot],
+		args: ['--experimental'],
 		...(tmuxBinary ? { tmuxBinary } : {}),
 		...(logLine ? { logLine } : {})
 	};
@@ -79,27 +92,28 @@ export async function createConfiguredAgentRunners(options: {
 	logLine?: (line: string) => void;
 }): Promise<AgentRunner[]> {
 	const daemonSettings = readMissionDaemonSettings(options.controlRoot) as ConfiguredAgentSettings | undefined;
-	const agentRunner = daemonSettings?.agentRunner?.trim();
+	const configuredRuntime = normalizeLegacyAgentRuntimeId(daemonSettings?.agentRuntime) ?? DEFAULT_AGENT_RUNTIME_ID;
+	const sdkRunner = new CopilotSdkAgentRunner(
+		getCopilotRunnerOptions(daemonSettings, options.controlRoot, options.logLine)
+	);
+	const cliRunner = new CopilotCliAgentRunner(
+		getTmuxTransportOptions(options.controlRoot, COPILOT_CLI_AGENT_RUNTIME_ID, 'Copilot CLI', options.logLine)
+	);
+	const runnersById = new Map<string, AgentRunner>([
+		[sdkRunner.id, sdkRunner],
+		[cliRunner.id, cliRunner]
+	]);
+	const selectedRunner = runnersById.get(configuredRuntime);
 
-	if (!agentRunner) {
-		return [];
+	if (!selectedRunner) {
+		throw new Error(`Mission adapters do not support agent runtime '${configuredRuntime}'.`);
 	}
 
-	if (agentRunner === 'copilot') {
-		return [
-			new CopilotAgentRunner(
-				getCopilotRunnerOptions(daemonSettings, options.controlRoot, options.logLine)
-			)
-		];
+	const orderedRunners = [selectedRunner];
+	for (const runner of runnersById.values()) {
+		if (runner.id !== selectedRunner.id) {
+			orderedRunners.push(runner);
+		}
 	}
-
-	if (agentRunner === 'tmux') {
-		return [
-			new TmuxAgentRunner(
-				getTmuxRunnerOptions(options.controlRoot, options.logLine)
-			)
-		];
-	}
-
-	throw new Error(`Mission adapters do not support agent runner '${agentRunner}'.`);
+	return orderedRunners;
 }

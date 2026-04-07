@@ -16,6 +16,8 @@ import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
+	getMissionArtifactDefinition,
+	getMissionStageDefinition,
 	evaluateMissionTaskLaunchEligibility,
 	evaluateMissionTaskStatusIntent,
 	getMissionTaskPairingDefinition,
@@ -35,6 +37,8 @@ export {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
+	getMissionArtifactDefinition,
+	getMissionStageDefinition,
 	evaluateMissionTaskLaunchEligibility,
 	evaluateMissionTaskStatusIntent,
 	getMissionTaskPairingDefinition,
@@ -313,6 +317,35 @@ export type MissionControlPlaneStatus = {
 
 export type StageData = MissionStageStatus;
 
+export type MissionCockpitStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+
+export type MissionCockpitStageRailItem = {
+	id: string;
+	label: string;
+	state: MissionCockpitStageRailItemState;
+	subtitle?: string;
+};
+
+export type MissionCockpitTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
+
+export type MissionCockpitTreeNode = {
+	id: string;
+	label: string;
+	kind: MissionCockpitTreeNodeKind;
+	depth: number;
+	color: string;
+	collapsible: boolean;
+	sourcePath?: string;
+	stageId?: MissionStageId;
+	taskId?: string;
+	sessionId?: string;
+};
+
+export type MissionCockpitProjection = {
+	stageRail: MissionCockpitStageRailItem[];
+	treeNodes: MissionCockpitTreeNode[];
+};
+
 export type MissionStatus = {
 	found: boolean;
 	operationalMode?: MissionOperationalMode;
@@ -331,6 +364,7 @@ export type MissionStatus = {
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
 	agentSessions?: MissionAgentSessionRecord[];
+	cockpit?: MissionCockpitProjection;
 	workflow?: {
 		lifecycle: MissionLifecycleState;
 		pause: MissionPauseState;

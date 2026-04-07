@@ -38,7 +38,7 @@ The cockpit shell always uses this vertical structure:
 
 ### Command Panel
 
-- always visible unless the console is in fullscreen overlay mode
+- always visible
 - remains the operational command surface for both repository and mission work
 
 ### Key Hints Row
@@ -163,7 +163,6 @@ type ShellOverlay =
   | { kind: 'none' }
   | { kind: 'command-select' }
   | { kind: 'mission-flow' }
-  | { kind: 'console-fullscreen' }
 ```
 
 Overlays do not redefine the shell layout. They layer on top of it.
@@ -186,7 +185,13 @@ Suggested focus enum:
 
 ```ts
 type FocusArea = 'header' | 'tree' | 'console' | 'flow' | 'command'
+
+Updated CLI implementation:
+
+type FocusArea = 'header' | 'tree' | 'flow' | 'command'
 ```
+
+The external tmux right pane owns artifact and session output. The CLI cockpit no longer mounts or focuses an internal console surface.
 
 ## Panel Ownership
 

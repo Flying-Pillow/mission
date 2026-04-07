@@ -1,4 +1,5 @@
-export type AgentRunnerId = string;
+export type AgentRuntimeId = string;
+export type AgentTransportId = string;
 export type AgentSessionId = string;
 
 export type AgentSessionPhase =
@@ -40,7 +41,8 @@ export interface McpServerReference {
 }
 
 export interface AgentSessionReference {
-    runnerId: AgentRunnerId;
+    runtimeId: AgentRuntimeId;
+    transportId?: AgentTransportId;
     sessionId: AgentSessionId;
 }
 
@@ -48,6 +50,7 @@ export interface AgentSessionStartRequest {
     missionId: string;
     taskId: string;
     workingDirectory: string;
+    transportId?: AgentTransportId;
     initialPrompt?: AgentPrompt;
     mcpServers?: McpServerReference[];
     metadata?: Record<string, AgentRuntimePrimitive>;
@@ -66,7 +69,8 @@ export interface AgentCommand {
 }
 
 export interface AgentSessionSnapshot {
-    runnerId: AgentRunnerId;
+    runtimeId: AgentRuntimeId;
+    transportId?: AgentTransportId;
     sessionId: AgentSessionId;
     phase: AgentSessionPhase;
     workingDirectory?: string;

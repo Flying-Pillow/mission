@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 
 import { For, Show } from 'solid-js';
-import { cockpitTheme } from './cockpitTheme.js';
-import { Panel } from './Panel.js';
+import { cockpitTheme } from '../cockpitTheme.js';
+import { Panel } from '../Panel.js';
 
 export type FlowSummaryItem = {
 	label: string;

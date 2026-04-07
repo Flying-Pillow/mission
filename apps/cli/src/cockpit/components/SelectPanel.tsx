@@ -5,7 +5,7 @@ import { useTerminalDimensions } from '@opentui/solid';
 import { createMemo, Show } from 'solid-js';
 import { cockpitTheme } from './cockpitTheme.js';
 import { Panel } from './Panel.js';
-import type { SelectItem } from './types.js';
+import type { CockpitKeyEvent, SelectItem } from './types.js';
 
 type SelectPanelProps = {
 	title: string;
@@ -14,12 +14,14 @@ type SelectPanelProps = {
 	focused: boolean;
 	emptyLabel: string;
 	helperText?: string;
+	filterValue?: string;
 	style?: Record<string, string | number | undefined>;
 	maxVisibleOptions?: number;
 	showSelectionSummary?: boolean;
 	showFooterBadges?: boolean;
 	onItemChange: (itemId: string) => void;
 	onItemSelect: (itemId: string) => void;
+	onKeyDown?: (event: CockpitKeyEvent) => void;
 };
 
 export function SelectPanel(props: SelectPanelProps) {
@@ -63,6 +65,12 @@ export function SelectPanel(props: SelectPanelProps) {
 				})}
 		>
 			<Show when={props.items.length > 0} fallback={<text style={{ fg: cockpitTheme.secondaryText }}>{props.emptyLabel}</text>}>
+				<Show when={props.filterValue?.trim().length}>
+					<text style={{ fg: cockpitTheme.brightText }}>{`Filter: ${props.filterValue}`}</text>
+				</Show>
+				<Show when={props.helperText}>
+					<text style={{ fg: cockpitTheme.secondaryText }}>{props.helperText}</text>
+				</Show>
 				<Show when={props.showSelectionSummary !== false}>
 					<text style={{ fg: cockpitTheme.brightText }}>{selectedItem()?.label ?? 'No option selected'}</text>
 					<text style={{ fg: cockpitTheme.secondaryText }}>{selectedItem()?.description ?? props.emptyLabel}</text>
@@ -88,6 +96,9 @@ export function SelectPanel(props: SelectPanelProps) {
 						descriptionColor={cockpitTheme.secondaryText}
 						selectedDescriptionColor={cockpitTheme.primaryText}
 						showDescription={false}
+						onKeyDown={(event) => {
+							props.onKeyDown?.(event);
+						}}
 						onChange={(_index, option) => {
 							props.onItemChange(String(option?.value ?? ''));
 						}}

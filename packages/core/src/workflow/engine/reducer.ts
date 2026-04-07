@@ -189,15 +189,6 @@ function applyEventMutation(
                     }
                     : task
             );
-            if (!state.launchQueue.some((request) => request.taskId === event.taskId)) {
-                state.launchQueue.push({
-                    requestId: `${event.eventId}:launch`,
-                    taskId: event.taskId,
-                    requestedAt: event.occurredAt,
-                    requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
-                    causedByEventId: event.eventId
-                });
-            }
             return;
         case 'task.started':
             state.tasks = state.tasks.map((task) =>
@@ -263,6 +254,7 @@ function applyEventMutation(
                 sessionId: event.sessionId,
                 taskId: event.taskId,
                 runtimeId: event.runtimeId,
+                ...(event.transportId ? { transportId: event.transportId } : {}),
                 lifecycle: 'running',
                 launchedAt: event.occurredAt,
                 updatedAt: event.occurredAt
@@ -508,59 +500,10 @@ function queueAutostartTasks(
     configuration: MissionWorkflowConfigurationSnapshot,
     requests: MissionWorkflowRequest[]
 ): void {
-    if (state.lifecycle !== 'running' || state.pause.paused || state.panic.active) {
-        return;
-    }
-
-    const orderedReadyTasks = [...state.tasks]
-        .filter((task) => task.lifecycle === 'ready' && task.runtime.autostart && task.runtime.launchMode === 'automatic')
-        .sort((left, right) => {
-            const stageIndexDiff = configuration.workflow.stageOrder.indexOf(left.stageId) - configuration.workflow.stageOrder.indexOf(right.stageId);
-            if (stageIndexDiff !== 0) {
-                return stageIndexDiff;
-            }
-            return left.taskId.localeCompare(right.taskId);
-        });
-
-    let queuedOrRunningTasks = state.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
-    let startingOrRunningSessions = state.sessions.filter((session) => session.lifecycle === 'starting' || session.lifecycle === 'running').length;
-
-    for (const task of orderedReadyTasks) {
-        if (queuedOrRunningTasks >= configuration.workflow.execution.maxParallelTasks) {
-            break;
-        }
-        if (startingOrRunningSessions >= configuration.workflow.execution.maxParallelSessions) {
-            break;
-        }
-        if (state.launchQueue.some((request) => request.taskId === task.taskId)) {
-            continue;
-        }
-
-        state.tasks = state.tasks.map((candidate) =>
-            candidate.taskId === task.taskId
-                ? {
-                    ...candidate,
-                    lifecycle: 'queued',
-                    updatedAt: event.occurredAt
-                }
-                : candidate
-        );
-        state.launchQueue.push({
-            requestId: `${event.eventId}:auto:${task.taskId}`,
-            taskId: task.taskId,
-            requestedAt: event.occurredAt,
-            requestedBy: 'system',
-            causedByEventId: event.eventId
-        });
-        requests.push(createRequest('session.launch', event.occurredAt, {
-            taskId: task.taskId,
-            stageId: task.stageId,
-            requestId: `${event.eventId}:auto:${task.taskId}`,
-            ...(task.agentRunner ? { runtimeId: task.agentRunner } : {})
-        }));
-        queuedOrRunningTasks += 1;
-        startingOrRunningSessions += 1;
-    }
+    void state;
+    void event;
+    void configuration;
+    void requests;
 }
 
 function buildStageProjections(

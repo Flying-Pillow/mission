@@ -48,7 +48,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
             },
             implementation: {
                 stageId: 'implementation',
-                displayName: 'Implementation',
+                displayName: 'Implement',
                 taskLaunchPolicy: {
                     defaultAutostart: false,
                     launchMode: 'manual'

@@ -1,34 +1,37 @@
 /** @jsxImportSource @opentui/solid */
 
-import { useTerminalDimensions, useTimeline } from '@opentui/solid';
+import { useKeyboard, useTerminalDimensions, useTimeline } from '@opentui/solid';
 import { createMemo, createSignal, onMount } from 'solid-js';
-import { cockpitTheme } from './cockpitTheme.js';
-import type { PanelBadge } from './Panel.js';
-import { TabPanel, type TabPanelLine, type TabPanelTab } from './TabPanel.js';
-import type { ProgressRailItem } from './progressModels.js';
-import { progressConnectorTone, progressStateTone } from './progressStateTone.js';
+import { cockpitTheme } from '../cockpitTheme.js';
+import type { PanelBadge } from '../Panel.js';
+import { TabPanel, type TabPanelLine, type TabPanelTab } from '../TabPanel.js';
+import type { ProgressRailItem } from '../progressModels.js';
+import { progressConnectorTone, progressStateTone } from '../progressStateTone.js';
 
 const HEADER_BORDER_PURPLE = '#a855f7';
 const HEADER_BODY_ROWS = 3;
 
 type PanelStyle = Record<string, string | number | undefined>;
 
-export type CockpitHeaderTab = TabPanelTab;
+export type HeaderPanelTab = TabPanelTab;
 
-type CockpitHeaderProps = {
+type HeaderPanelProps = {
 	panelTitle: string;
 	title: string;
-	tabs: CockpitHeaderTab[];
+	tabs: HeaderPanelTab[];
 	selectedTabId: string | undefined;
 	tabsFocusable: boolean;
 	focused: boolean;
 	stageItems: ProgressRailItem[];
 	statusLines: TabPanelLine[];
 	footerBadges: PanelBadge[];
+	onMoveSelection?: (delta: number) => void;
+	onMoveFocus?: (delta: number) => void;
+	onSelectTab?: () => void;
 	style?: PanelStyle;
 };
 
-export function CockpitHeader(props: CockpitHeaderProps) {
+export function HeaderPanel(props: HeaderPanelProps) {
 	void props.title;
 	const terminal = useTerminalDimensions();
 	const [timelinePhase, setTimelinePhase] = createSignal(0);
@@ -62,6 +65,44 @@ export function CockpitHeader(props: CockpitHeaderProps) {
 		}
 
 		return lines.slice(0, HEADER_BODY_ROWS);
+	});
+
+	useKeyboard((event) => {
+		if (!props.focused) {
+			return;
+		}
+		if (event.name === 'up') {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onMoveFocus?.(-1);
+			return;
+		}
+		if (event.name === 'down') {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onMoveFocus?.(1);
+			return;
+		}
+		if (!props.tabsFocusable) {
+			return;
+		}
+		if (event.name === 'left') {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onMoveSelection?.(-1);
+			return;
+		}
+		if (event.name === 'right') {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onMoveSelection?.(1);
+			return;
+		}
+		if (event.name === 'enter' || event.name === 'return') {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onSelectTab?.();
+		}
 	});
 
 	return (

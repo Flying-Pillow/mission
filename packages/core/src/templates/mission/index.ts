@@ -2,6 +2,7 @@ import { readMissionTemplate } from './templateRepository.js';
 import { renderTemplate } from './templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../lib/frontmatter.js';
+import { DEFAULT_AGENT_RUNTIME_ID, normalizeLegacyAgentRuntimeId } from '../../lib/agentRuntimes.js';
 import type {
 MissionProductTemplate,
 MissionStageTemplateDefinitions,
@@ -56,7 +57,7 @@ const result: MissionTaskTemplate = {
 fileName,
 subject: String(subjectAttr || ''),
 instruction: document.body.trim(),
-agent: String(agentAttr || 'copilot') as MissionTaskAgent,
+agent: String(normalizeLegacyAgentRuntimeId(typeof agentAttr === 'string' ? agentAttr : undefined) ?? DEFAULT_AGENT_RUNTIME_ID) as MissionTaskAgent,
 };
 
 if (Array.isArray(dependsOnAttr)) {

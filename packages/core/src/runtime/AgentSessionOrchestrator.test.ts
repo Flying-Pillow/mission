@@ -15,13 +15,16 @@ import type {
 type Listener = (event: AgentSessionEvent) => void;
 
 class FakeSession implements AgentSession {
-    public readonly runnerId: string;
+    public readonly runtimeId: string;
+    public readonly transportId: string | undefined;
     public readonly sessionId: string;
+    public disposeCalls = 0;
     private snapshot: AgentSessionSnapshot;
     private readonly listeners = new Set<Listener>();
 
     public constructor(snapshot: AgentSessionSnapshot) {
-        this.runnerId = snapshot.runnerId;
+        this.runtimeId = snapshot.runtimeId;
+        this.transportId = snapshot.transportId;
         this.sessionId = snapshot.sessionId;
         this.snapshot = { ...snapshot };
     }
@@ -56,6 +59,7 @@ class FakeSession implements AgentSession {
     }
 
     public dispose(): void {
+        this.disposeCalls += 1;
         this.listeners.clear();
     }
 
@@ -118,6 +122,7 @@ describe('AgentSessionOrchestrator', () => {
 
         const runner: AgentRunner = {
             id: 'fake-runner',
+            transportId: 'direct',
             displayName: 'Fake Runner',
             capabilities: {
                 attachableSessions: false,
@@ -131,7 +136,8 @@ describe('AgentSessionOrchestrator', () => {
             isAvailable: async () => ({ available: true }),
             startSession: async () => {
                 fakeSession = new FakeSession({
-                    runnerId: 'fake-runner',
+                    runtimeId: 'fake-runner',
+                    transportId: 'direct',
                     sessionId: 'session-1',
                     missionId: 'mission-1',
                     taskId: 'task-1',
@@ -158,7 +164,8 @@ describe('AgentSessionOrchestrator', () => {
         fakeSession?.emit({
             type: 'session.state-changed',
             snapshot: {
-                runnerId: 'fake-runner',
+                runtimeId: 'fake-runner',
+                transportId: 'direct',
                 sessionId: 'session-1',
                 missionId: '',
                 taskId: '',
@@ -189,6 +196,7 @@ describe('AgentSessionOrchestrator', () => {
 
         const runner: AgentRunner = {
             id: 'fake-runner',
+            transportId: 'direct',
             displayName: 'Fake Runner',
             capabilities: {
                 attachableSessions: false,
@@ -215,7 +223,8 @@ describe('AgentSessionOrchestrator', () => {
         });
 
         const attached = await orchestrator.attachSession({
-            runnerId: 'fake-runner',
+            runtimeId: 'fake-runner',
+            transportId: 'direct',
             sessionId: 'session-missing'
         });
 
@@ -229,6 +238,115 @@ describe('AgentSessionOrchestrator', () => {
         expect(observed[0]?.snapshot.sessionId).toBe('session-missing');
 
         const persisted = store.snapshots.get('session-missing');
-        expect(persisted?.phase).toBe('terminated');
+        expect(persisted).toBeUndefined();
+        expect(orchestrator.listSessions()).toEqual([]);
+    });
+
+    it('releases terminal sessions after completion events', async () => {
+        const store = new InMemorySessionStore();
+        let fakeSession: FakeSession | undefined;
+
+        const runner: AgentRunner = {
+            id: 'fake-runner',
+            transportId: 'direct',
+            displayName: 'Fake Runner',
+            capabilities: {
+                attachableSessions: false,
+                promptSubmission: true,
+                structuredCommands: true,
+                interruptible: true,
+                interactiveInput: false,
+                telemetry: false,
+                mcpClient: false
+            },
+            isAvailable: async () => ({ available: true }),
+            startSession: async () => {
+                fakeSession = new FakeSession({
+                    runtimeId: 'fake-runner',
+                    transportId: 'direct',
+                    sessionId: 'session-1',
+                    missionId: 'mission-1',
+                    taskId: 'task-1',
+                    phase: 'running',
+                    acceptsPrompts: true,
+                    acceptedCommands: ['interrupt'],
+                    awaitingInput: false,
+                    updatedAt: new Date().toISOString()
+                });
+                return fakeSession;
+            }
+        };
+
+        const orchestrator = new AgentSessionOrchestrator({
+            runners: [runner],
+            store
+        });
+
+        await orchestrator.startSession('fake-runner', createStartRequest());
+        fakeSession?.emit({
+            type: 'session.completed',
+            snapshot: {
+                runtimeId: 'fake-runner',
+                transportId: 'direct',
+                sessionId: 'session-1',
+                missionId: 'mission-1',
+                taskId: 'task-1',
+                phase: 'completed',
+                acceptsPrompts: false,
+                acceptedCommands: [],
+                awaitingInput: false,
+                updatedAt: new Date().toISOString()
+            }
+        });
+        await flushMicrotasks();
+
+        expect(orchestrator.listSessions()).toEqual([]);
+        expect(store.snapshots.get('session-1')).toBeUndefined();
+        expect(fakeSession?.disposeCalls).toBe(1);
+    });
+
+    it('disposes active sessions when the orchestrator is disposed', async () => {
+        let fakeSession: FakeSession | undefined;
+
+        const runner: AgentRunner = {
+            id: 'fake-runner',
+            transportId: 'direct',
+            displayName: 'Fake Runner',
+            capabilities: {
+                attachableSessions: false,
+                promptSubmission: true,
+                structuredCommands: true,
+                interruptible: true,
+                interactiveInput: false,
+                telemetry: false,
+                mcpClient: false
+            },
+            isAvailable: async () => ({ available: true }),
+            startSession: async () => {
+                fakeSession = new FakeSession({
+                    runtimeId: 'fake-runner',
+                    transportId: 'direct',
+                    sessionId: 'session-1',
+                    missionId: 'mission-1',
+                    taskId: 'task-1',
+                    phase: 'running',
+                    acceptsPrompts: true,
+                    acceptedCommands: ['interrupt'],
+                    awaitingInput: false,
+                    updatedAt: new Date().toISOString()
+                });
+                return fakeSession;
+            }
+        };
+
+        const orchestrator = new AgentSessionOrchestrator({
+            runners: [runner]
+        });
+
+        await orchestrator.startSession('fake-runner', createStartRequest());
+        orchestrator.dispose();
+
+        expect(orchestrator.listSessions()).toEqual([]);
+        expect(fakeSession?.disposeCalls).toBe(1);
     });
 });

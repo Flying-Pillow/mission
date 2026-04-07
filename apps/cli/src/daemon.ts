@@ -1,6 +1,7 @@
 import { note, outro } from '@clack/prompts';
 import { getDaemonManifestPath, runMissionDaemon } from '@flying-pillow/mission-core';
 import { getMissionDaemonStatus, startMissionDaemon, stopMissionDaemon } from './commands/daemonControl.js';
+import { resolveDefaultRuntimeFactoryModulePath } from './daemon/connectSurfaceDaemon.js';
 
 function parseDaemonArgs(argv: string[]): {
 	command: 'start' | 'stop' | 'restart' | 'status' | 'run';
@@ -12,14 +13,21 @@ function parseDaemonArgs(argv: string[]): {
 	const filtered = remaining.filter((arg) => arg !== '--json');
 	const commandToken = filtered[0];
 	const command =
-		commandToken === 'start' || commandToken === 'stop' || commandToken === 'restart' || commandToken === 'status' || commandToken === 'run'
-			? commandToken
-			: 'start';
+		commandToken === undefined
+			? 'start'
+			: commandToken === 'start' || commandToken === 'stop' || commandToken === 'restart' || commandToken === 'status' || commandToken === 'run'
+				? commandToken
+				: undefined;
+	if (!command) {
+		throw new Error(`Unknown missiond command '${commandToken}'. Use one of: start, stop, restart, status, run.`);
+	}
 	const socketFlagIndex = filtered.indexOf('--socket');
 	const socketPath = socketFlagIndex >= 0 ? filtered[socketFlagIndex + 1] : undefined;
 	return { command, ...(socketPath ? { socketPath } : {}), json };
 }
 const parsed = parseDaemonArgs(process.argv.slice(2));
+const launchMode = (process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() === 'source' ? 'source' : 'build');
+const runtimeFactoryModulePath = resolveDefaultRuntimeFactoryModulePath(launchMode);
 
 switch (parsed.command) {
 	case 'run':
@@ -27,7 +35,9 @@ switch (parsed.command) {
 		break;
 	case 'start': {
 		const result = await startMissionDaemon({
-			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {})
+			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
+			launchMode,
+			...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
 		});
 		if (parsed.json) {
 			process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -66,7 +76,9 @@ switch (parsed.command) {
 	case 'restart': {
 		await stopMissionDaemon();
 		const result = await startMissionDaemon({
-			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {})
+			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
+			launchMode,
+			...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
 		});
 		if (parsed.json) {
 			process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
