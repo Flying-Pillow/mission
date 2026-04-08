@@ -16,7 +16,7 @@ The purpose of this document is to define the exact runtime boundary that the wo
 
 ## Relationship To Other Specifications
 
-This document must be read alongside the workflow engine specification, the airport control plane specification, and the workflow operator surface specification.
+This document must be read alongside the workflow engine specification, the airport control plane specification, and the workflow control surface specification.
 
 Priority rule:
 

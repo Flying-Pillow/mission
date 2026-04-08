@@ -18,14 +18,14 @@ Once Mission can publish its own stable delivered documentation through its inte
 
 - airport control plane architecture
 - semantic mission model and workflow runtime boundaries
-- cockpit and operator surface contract
+- tower and control surface contract
 - supporting plans, examples, and checklists
 
 ## Contents
 
 - [Airport](airport/index.md)
 - [Mission](mission/index.md)
-- [Cockpit](cockpit/index.md)
+- [Tower](tower/index.md)
 - [Reference](reference/index.md)
 - [Plans](plans/index.md)
 - [Checklists](checklists/index.md)

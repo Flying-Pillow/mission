@@ -27,18 +27,18 @@ import {
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
 import type {
-	MissionActionExecutionStep,
-	MissionActionExecutionSelectionStep,
-	MissionActionExecutionTextStep,
-	MissionActionDescriptor,
-	MissionActionFlowDescriptor,
-	MissionActionFlowOption,
+	OperatorActionExecutionStep,
+	OperatorActionExecutionSelectionStep,
+	OperatorActionExecutionTextStep,
+	OperatorActionDescriptor,
+	OperatorActionFlowDescriptor,
+	OperatorActionFlowOption,
 	MissionControlPlaneStatus,
 	MissionOperationalMode,
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionSelector,
-	MissionStatus,
+	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
 import {
@@ -178,11 +178,11 @@ export class MissionWorkspace {
 
 	public async buildDiscoveryStatus(
 		availableMissions: MissionSelectionCandidate[]
-	): Promise<MissionStatus> {
+	): Promise<OperatorStatus> {
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
 		const issuesReady = control.issuesConfigured && control.githubAuthenticated === true;
 
-		const availableActions: MissionActionDescriptor[] = [
+		const availableActions: OperatorActionDescriptor[] = [
 			{
 				id: 'control.setup.edit',
 				label: 'Configure repository setup',
@@ -252,7 +252,7 @@ export class MissionWorkspace {
 		};
 	}
 
-	private async executeControlAction(params: ControlActionExecute): Promise<MissionStatus> {
+	private async executeControlAction(params: ControlActionExecute): Promise<OperatorStatus> {
 		if (params.actionId === 'control.setup.edit') {
 			const fieldSelection = requireSingleSelectionActionStep(params.steps ?? [], 'field');
 			const field = asControlSettingField(fieldSelection.optionIds[0]);
@@ -290,14 +290,14 @@ export class MissionWorkspace {
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
-	private async executeMissionAction(params: MissionActionExecute): Promise<MissionStatus> {
+	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? []);
 		await this.broadcastMissionStatus(loadedMission.missionId, status);
 		return this.decorateMissionStatus(status, 'mission');
 	}
 
-	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<MissionStatus> {
+	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<OperatorStatus> {
 		const githubRepository = this.requireGitHubRepository();
 		this.requireGitHubAuthentication();
 
@@ -353,7 +353,7 @@ export class MissionWorkspace {
 		};
 	}
 
-	private async updateControlSettings(params: ControlSettingsUpdate): Promise<MissionStatus> {
+	private async updateControlSettings(params: ControlSettingsUpdate): Promise<OperatorStatus> {
 		await this.writeControlSetting(params.field, params.value);
 		return this.buildIdleMissionStatus();
 	}
@@ -412,7 +412,7 @@ export class MissionWorkspace {
 
 	private async createMissionFromIssue(
 		params: MissionFromIssueRequest
-	): Promise<MissionStatus> {
+	): Promise<OperatorStatus> {
 		const githubRepository = this.requireGitHubRepository();
 		this.requireGitHubAuthentication();
 
@@ -436,12 +436,12 @@ export class MissionWorkspace {
 
 	private async getMissionStatus(
 		params: MissionSelect = {}
-	): Promise<MissionStatus> {
+	): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return this.decorateMissionStatus(await loadedMission.mission.status(), 'mission');
 	}
 
-	private async buildIdleMissionStatus(): Promise<MissionStatus> {
+	private async buildIdleMissionStatus(): Promise<OperatorStatus> {
 		return this.buildDiscoveryStatus(await this.listMissionSelectionCandidates());
 	}
 
@@ -551,7 +551,7 @@ export class MissionWorkspace {
 		return adapter.listOpenIssues(params.limit ?? 50);
 	}
 
-	private async broadcastMissionStatus(missionId: string, status: MissionStatus): Promise<void> {
+	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
 		this.emitEvent({
 			type: 'mission.status',
 			missionId,
@@ -565,10 +565,10 @@ export class MissionWorkspace {
 	}
 
 	private async decorateMissionStatus(
-		status: MissionStatus,
+		status: OperatorStatus,
 		operationalMode: Extract<MissionOperationalMode, 'root' | 'mission'>,
 		options: { availableMissionCount?: number } = {}
-	): Promise<MissionStatus> {
+	): Promise<OperatorStatus> {
 		const control = await this.buildControlPlaneStatus(options.availableMissionCount);
 		return {
 			...status,
@@ -724,8 +724,8 @@ export class MissionWorkspace {
 
 	private buildSetupCommandFlow(
 		control: MissionControlPlaneStatus,
-		steps: MissionActionExecutionStep[] = []
-	): MissionActionFlowDescriptor {
+		steps: OperatorActionExecutionStep[] = []
+	): OperatorActionFlowDescriptor {
 		const selectedField = readSingleSelectionStep(steps, 'field') as ControlSettingsUpdate['field'] | undefined;
 		return {
 			targetLabel: 'SETUP',
@@ -748,7 +748,7 @@ export class MissionWorkspace {
 
 	private buildSetupCommandFlowOptions(
 		control: MissionControlPlaneStatus
-	): MissionActionFlowOption[] {
+	): OperatorActionFlowOption[] {
 		return [
 			{
 				id: 'agentRuntime',
@@ -766,9 +766,9 @@ export class MissionWorkspace {
 				description: control.settings.defaultModel?.trim() || 'Required'
 			},
 			{
-				id: 'cockpitTheme',
-				label: 'Cockpit Theme',
-				description: control.settings.cockpitTheme?.trim() || 'ocean'
+				id: 'towerTheme',
+				label: 'Tower Theme',
+				description: control.settings.towerTheme?.trim() || 'ocean'
 			},
 			{
 				id: 'instructionsPath',
@@ -786,7 +786,7 @@ export class MissionWorkspace {
 	private buildSetupValueStep(
 		control: MissionControlPlaneStatus,
 		selectedField: ControlSettingsUpdate['field'] | undefined
-	): MissionActionFlowDescriptor['steps'][number] {
+	): OperatorActionFlowDescriptor['steps'][number] {
 		if (selectedField === 'agentRuntime') {
 			return {
 				kind: 'selection',
@@ -839,19 +839,19 @@ export class MissionWorkspace {
 				], control.settings.defaultAgentMode)
 			};
 		}
-		if (selectedField === 'cockpitTheme') {
+		if (selectedField === 'towerTheme') {
 			return {
 				kind: 'selection',
 				id: 'value',
 				label: 'VALUE',
 				title: 'THEME',
-				emptyLabel: 'No cockpit themes are available.',
-				helperText: 'Choose the cockpit theme.',
+				emptyLabel: 'No tower themes are available.',
+				helperText: 'Choose the tower theme.',
 				selectionMode: 'single',
 				options: this.orderSelectedOptionFirst([
-					{ id: 'ocean', label: 'OCEAN', description: 'Deep blue cockpit theme' },
-					{ id: 'sand', label: 'SAND', description: 'Warm neutral cockpit theme' }
-				], control.settings.cockpitTheme)
+					{ id: 'ocean', label: 'OCEAN', description: 'Deep blue tower theme' },
+					{ id: 'sand', label: 'SAND', description: 'Warm neutral tower theme' }
+				], control.settings.towerTheme)
 			};
 		}
 
@@ -887,9 +887,9 @@ export class MissionWorkspace {
 	}
 
 	private orderSelectedOptionFirst(
-		options: MissionActionFlowOption[],
+		options: OperatorActionFlowOption[],
 		selectedId: string | undefined
-	): MissionActionFlowOption[] {
+	): OperatorActionFlowOption[] {
 		if (!selectedId) {
 			return options;
 		}
@@ -900,7 +900,7 @@ export class MissionWorkspace {
 		return [selectedOption, ...options.filter((option) => option.id !== selectedId)];
 	}
 
-	private buildMissionStartFlow(): MissionActionFlowDescriptor {
+	private buildMissionStartFlow(): OperatorActionFlowDescriptor {
 		return {
 			targetLabel: 'MISSION',
 			actionLabel: 'PREPARE',
@@ -939,7 +939,7 @@ export class MissionWorkspace {
 		};
 	}
 
-	private buildMissionTypeOptions(): MissionActionFlowOption[] {
+	private buildMissionTypeOptions(): OperatorActionFlowOption[] {
 		return [
 			{
 				id: 'feature',
@@ -971,7 +971,7 @@ export class MissionWorkspace {
 
 	private buildMissionSwitchFlow(
 		availableMissions: MissionSelectionCandidate[]
-	): MissionActionFlowDescriptor {
+	): OperatorActionFlowDescriptor {
 		return {
 			targetLabel: 'MISSION',
 			actionLabel: 'SWITCH',
@@ -996,7 +996,7 @@ export class MissionWorkspace {
 
 	private async describeControlAction(
 		params: ControlActionDescribe
-	): Promise<MissionActionFlowDescriptor> {
+	): Promise<OperatorActionFlowDescriptor> {
 		const control = await this.buildControlPlaneStatus();
 		if (params.actionId === 'control.setup.edit') {
 			return this.buildSetupCommandFlow(control, params.steps ?? []);
@@ -1053,12 +1053,12 @@ export class MissionWorkspace {
 				}
 				nextSettings.defaultModel = value;
 				break;
-			case 'cockpitTheme':
+			case 'towerTheme':
 				if (value.length === 0) {
-					delete nextSettings.cockpitTheme;
+					delete nextSettings.towerTheme;
 					break;
 				}
-				nextSettings.cockpitTheme = value;
+				nextSettings.towerTheme = value;
 				break;
 			case 'instructionsPath':
 				if (value.length === 0) {
@@ -1479,7 +1479,7 @@ export class MissionWorkspace {
 
 	private async launchAutopilotTaskSession(
 		loadedMission: LoadedMission,
-		status: MissionStatus,
+		status: OperatorStatus,
 		taskId: string
 	): Promise<void> {
 		const task = this.findTaskState(status, taskId);
@@ -1497,11 +1497,11 @@ export class MissionWorkspace {
 		});
 	}
 
-	private resolveAutopilotWorkingDirectory(status: MissionStatus): string {
+	private resolveAutopilotWorkingDirectory(status: OperatorStatus): string {
 		return status.missionDir ?? this.workspaceRoot;
 	}
 
-	private findTaskState(status: MissionStatus, taskId: string): MissionTaskState | undefined {
+	private findTaskState(status: OperatorStatus, taskId: string): MissionTaskState | undefined {
 		for (const stage of status.stages ?? []) {
 			const task = stage.tasks.find((candidate) => candidate.taskId === taskId);
 			if (task) {
@@ -1689,11 +1689,11 @@ function hasMissionSelector(selector: MissionSelector): boolean {
 }
 
 function readSingleSelectionStep(
-	steps: MissionActionExecutionStep[],
+	steps: OperatorActionExecutionStep[],
 	stepId: string
 ): string | undefined {
 	const step = steps.find(
-		(candidate): candidate is MissionActionExecutionSelectionStep =>
+		(candidate): candidate is OperatorActionExecutionSelectionStep =>
 			candidate.kind === 'selection' && candidate.stepId === stepId
 	);
 	if (step?.optionIds.length !== 1) {
@@ -1704,11 +1704,11 @@ function readSingleSelectionStep(
 }
 
 function requireSingleSelectionActionStep(
-	steps: MissionActionExecutionStep[],
+	steps: OperatorActionExecutionStep[],
 	stepId: string
-): MissionActionExecutionSelectionStep {
+): OperatorActionExecutionSelectionStep {
 	const step = steps.find(
-		(candidate): candidate is MissionActionExecutionSelectionStep =>
+		(candidate): candidate is OperatorActionExecutionSelectionStep =>
 			candidate.kind === 'selection' && candidate.stepId === stepId
 	);
 	if (!step) {
@@ -1721,11 +1721,11 @@ function requireSingleSelectionActionStep(
 }
 
 function requireTextActionStep(
-	steps: MissionActionExecutionStep[],
+	steps: OperatorActionExecutionStep[],
 	stepId: string
-): MissionActionExecutionTextStep {
+	): OperatorActionExecutionTextStep {
 	const step = steps.find(
-		(candidate): candidate is MissionActionExecutionTextStep =>
+		(candidate): candidate is OperatorActionExecutionTextStep =>
 			candidate.kind === 'text' && candidate.stepId === stepId
 	);
 	if (!step) {
@@ -1735,7 +1735,7 @@ function requireTextActionStep(
 }
 
 function requireSingleValueActionStep(
-	steps: MissionActionExecutionStep[],
+	steps: OperatorActionExecutionStep[],
 	stepId: string
 ): string {
 	const step = steps.find((candidate) => candidate.stepId === stepId);
@@ -1758,7 +1758,7 @@ function asControlSettingField(
 		value === 'agentRuntime'
 		|| value === 'defaultAgentMode'
 		|| value === 'defaultModel'
-		|| value === 'cockpitTheme'
+		|| value === 'towerTheme'
 		|| value === 'instructionsPath'
 		|| value === 'skillsPath'
 	) {

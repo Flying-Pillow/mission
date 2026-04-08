@@ -7,7 +7,7 @@
 
 Mission is a governed mission orchestration system, not a collection of convenience scripts or markdown.
 
-This repository exists to enforce repository-backed workflow law, provider-neutral agent runtime orchestration, and cockpit-style operator surfaces through explicit domain boundaries.
+This repository exists to enforce repository-backed workflow law, provider-neutral agent runtime orchestration, and tower-style operator surfaces through explicit domain boundaries.
 
 We reject accidental architecture. We reject vague ownership. We reject procedural sprawl disguised as speed.
 
@@ -40,7 +40,7 @@ The monorepo is intentionally product-shaped and must remain explicit about owne
 
 1. `packages/core` owns mission manifests, artifact law, stage law, gate evaluation, status projection, repository config, and platform-neutral domain contracts.
 2. `packages/core` also owns provider-neutral coding-agent runtime contracts and orchestration.
-3. `apps/mission` owns the Mission terminal surface and sidecar-oriented repository workflow entrypoint.
+3. `apps/tower/terminal` owns the Mission terminal surface and sidecar-oriented repository workflow entrypoint.
 4. `packages/tsconfig` owns shared TypeScript policy.
 
 No workspace may absorb another workspace's responsibility out of convenience.
@@ -130,7 +130,7 @@ The core domain must not speak raw provider protocol shapes.
 
 ## Article IX: Presentation Surfaces Are Projections
 
-1. The VS Code extension, cockpit panels, graphs, and tree views are read-write presentation surfaces over governed state.
+1. The VS Code extension, tower panels, graphs, and tree views are read-write presentation surfaces over governed state.
 2. Presentation layers must consume normalized domain state and adapter outputs.
 3. They must not embed provider-specific execution loops, mission legality rules, or storage authority.
 4. UI may visualize governance. UI may not replace governance.

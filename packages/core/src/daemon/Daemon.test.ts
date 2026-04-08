@@ -322,7 +322,7 @@ describe('Daemon', () => {
 					const initial = await api.airport.getStatus();
 					const connected = await api.airport.connectPanel({
 						gateId: 'dashboard',
-						label: 'test-cockpit'
+						label: 'test-tower'
 					});
 					const observed = await api.airport.observeClient({
 						focusedGateId: 'pilot',
@@ -343,7 +343,7 @@ describe('Daemon', () => {
 					expect(Object.values(connected.state.airport.clients)).toEqual(
 						expect.arrayContaining([
 							expect.objectContaining({
-								label: 'test-cockpit',
+								label: 'test-tower',
 								connected: true,
 								claimedGateId: 'dashboard',
 								surfacePath: workspaceRoot
@@ -537,7 +537,7 @@ describe('Daemon', () => {
 						'agentRuntime',
 						'defaultAgentMode',
 						'defaultModel',
-						'cockpitTheme',
+						'towerTheme',
 						'instructionsPath',
 						'skillsPath'
 					]);
@@ -685,7 +685,7 @@ describe('Daemon', () => {
 		}
 	});
 
-	it('persists cockpit theme settings through the daemon', async () => {
+	it('persists tower theme settings through the daemon', async () => {
 		const workspaceRoot = await createTempRepo();
 
 		try {
@@ -696,18 +696,18 @@ describe('Daemon', () => {
 			try {
 				await client.connect({ surfacePath: workspaceRoot });
 				const api = new DaemonApi(client);
-				const status = await api.control.updateSetting('cockpitTheme', 'mono');
+				const status = await api.control.updateSetting('towerTheme', 'mono');
 				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
 
 				expect(status.found).toBe(false);
 				expect(status.control).toMatchObject({
 					settingsPresent: true,
 					settings: expect.objectContaining({
-						cockpitTheme: 'mono'
+						towerTheme: 'mono'
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
-					cockpitTheme: 'mono'
+					towerTheme: 'mono'
 				});
 			} finally {
 				client.dispose();

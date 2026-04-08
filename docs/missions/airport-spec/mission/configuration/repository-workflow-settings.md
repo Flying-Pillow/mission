@@ -8,7 +8,7 @@ nav_exclude: true
 
 This document defines the missing repository-level workflow settings functionality.
 
-It establishes one authoritative settings boundary in core, with daemon-owned initialization and mutation, and surface-specific interaction contracts for CLI, Cockpit, and future clients.
+It establishes one authoritative settings boundary in core, with daemon-owned initialization and mutation, and surface-specific interaction contracts for CLI, Tower, and future clients.
 
 ## Problem
 
@@ -28,7 +28,7 @@ This creates drift risk between surfaces and weakens clean architectural boundar
 1. Define one repository-level workflow settings contract in core.
 2. Keep daemon as the only authority for initialize and update operations.
 3. Allow multiple surfaces to consume the same contract without duplicating policy logic.
-4. Make control mode the explicit place where CLI and Cockpit can edit settings.
+4. Make control mode the explicit place where CLI and Tower can edit settings.
 5. Preserve deterministic behavior by validating, normalizing, and versioning updates in daemon.
 
 ## Non-Goals
@@ -42,7 +42,7 @@ This creates drift risk between surfaces and weakens clean architectural boundar
 
 - Repository workflow settings: The repository defaults used to seed mission workflow snapshots.
 - Control mode: Operational mode where setup and repository policy operations are available.
-- Surface: A client entry point such as CLI, Cockpit webview, extension view, MCP membrane, or future API client.
+- Surface: A client entry point such as CLI, Tower webview, extension view, MCP membrane, or future API client.
 
 ## Source Of Truth
 
@@ -85,7 +85,7 @@ The daemon must not delegate policy validation to UI clients.
 
 ### Surface Responsibilities (Non-Authoritative)
 
-CLI, Cockpit, and future surfaces are responsible for:
+CLI, Tower, and future surfaces are responsible for:
 
 - presenting daemon-reported settings and validation errors
 - collecting operator input
@@ -106,9 +106,9 @@ Behavior rules:
 
 1. If control plane status indicates setup or root mode, surfaces may present workflow settings operations.
 2. When a mission-focused mode is active, surfaces may still route settings operations through control endpoints, but command affordances should remain grouped under setup or control actions, not mission task actions.
-3. Control mode actions are command-driven in both CLI and Cockpit.
+3. Control mode actions are command-driven in both CLI and Tower.
 
-CLI and Cockpit must use the same daemon command and method contract.
+CLI and Tower must use the same daemon command and method contract.
 
 ## Daemon API Additions
 
@@ -231,7 +231,7 @@ Daemon should publish a control-plane event after successful settings updates:
 - event type: `control.workflow.settings.updated`
 - includes revision, actor metadata, and changed paths
 
-This allows Cockpit and other live surfaces to refresh without polling.
+This allows Tower and other live surfaces to refresh without polling.
 
 ## Surface Integration Requirements
 
@@ -241,11 +241,11 @@ This allows Cockpit and other live surfaces to refresh without polling.
 - In control mode, setup flow can render editable workflow fields or grouped policy sections.
 - CLI submits structured updates, not raw file writes.
 
-### Cockpit
+### Tower
 
 - Control mode shows repository workflow settings panel.
 - Edit actions call daemon update endpoint and render daemon errors inline.
-- On settings update event, Cockpit refreshes displayed revision and values.
+- On settings update event, Tower refreshes displayed revision and values.
 
 ### Future Surfaces
 
@@ -298,13 +298,13 @@ Add coverage at three levels.
 ### Surface Contract
 
 - CLI control mode calls daemon methods and reflects validation errors
-- Cockpit control mode updates through daemon and refreshes on event
+- Tower control mode updates through daemon and refreshes on event
 - no surface writes settings file directly
 
 ## Acceptance Criteria
 
 1. A repository can initialize workflow settings through daemon API even when `.missions/settings.json` is missing.
-2. CLI and Cockpit can both read and update repository workflow settings in control mode.
+2. CLI and Tower can both read and update repository workflow settings in control mode.
 3. All updates are daemon-validated and atomically persisted.
 4. Concurrent updates are protected by revision checks.
 5. Existing mission snapshots remain unchanged after repository setting edits.

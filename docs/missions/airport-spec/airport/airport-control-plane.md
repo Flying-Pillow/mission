@@ -12,7 +12,7 @@ It is normative.
 
 It assumes a clean break.
 
-It does not preserve compatibility with the current CLI cockpit process model, the current sidepane shell loop, the current terminal transport contracts, the current mission daemon socket model, or any existing mission runtime persistence shape.
+It does not preserve compatibility with the current CLI tower process model, the current sidepane shell loop, the current terminal transport contracts, the current mission daemon socket model, or any existing mission runtime persistence shape.
 
 This document defines the authoritative design for:
 
@@ -36,7 +36,7 @@ That is expected.
 
 ## Relationship To Other Specifications
 
-This document must be read alongside the workflow engine specification, the core object model specification, the mission model, the agent runtime specification, and the workflow operator surface specification.
+This document must be read alongside the workflow engine specification, the core object model specification, the mission model, the agent runtime specification, and the workflow control surface specification.
 
 Priority rule:
 
@@ -213,7 +213,7 @@ The architectural code shape is:
 
 - `packages/core`
 - `packages/airport`
-- `apps/mission` and other surfaces as thin runtime clients or bootstraps
+- `apps/tower/terminal` and other surfaces as thin runtime clients or bootstraps
 - `missiond` as the single daemon host process
 
 ### packages/core
@@ -266,7 +266,7 @@ It is a bounded-context application controller, not a competing business-logic r
 
 `missiond` is the only authority process.
 
-### apps/mission and other surfaces
+### apps/tower/terminal and other surfaces
 
 Surfaces own:
 
@@ -620,7 +620,7 @@ Panels are not authorities.
 
 Panels may be:
 
-- CLI cockpit/dashboard
+- CLI tower/dashboard
 - editor wrapper process
 - pilot wrapper process
 - future VS Code or webview surfaces

@@ -1,4 +1,110 @@
 {
 	"version": "2.0.0",
-	"tasks": []
+	"tasks": [
+		{
+			"label": "rename-build-tower",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"install",
+				"--lockfile-only",
+				"&&",
+				"pnpm",
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-install-workspace",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"install"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-build-tower-retry",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-build-tower-final",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-reinstall-tower-node-modules",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"rm -rf apps/tower/terminal/node_modules && pnpm install"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-build-tower-post-reinstall",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rename-test-tower",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"test"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "rename-verify-build",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"@flying-pillow/tower-terminal",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
 }

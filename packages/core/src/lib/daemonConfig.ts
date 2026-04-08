@@ -29,7 +29,7 @@ export type MissionDaemonSettings = {
     agentRuntime?: MissionAgentRuntime;
     defaultAgentMode?: MissionDefaultAgentMode;
     defaultModel?: string;
-    cockpitTheme?: string;
+    towerTheme?: string;
     trackingProvider?: 'github';
     instructionsPath?: string;
     skillsPath?: string;
@@ -68,7 +68,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
     const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNTIME_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
-    const cockpitTheme = normalizeOptionalString(overrides.cockpitTheme);
+    const towerTheme = normalizeOptionalString(overrides.towerTheme);
     const instructionsPath = normalizeOptionalString(overrides.instructionsPath);
     const skillsPath = normalizeOptionalString(overrides.skillsPath);
     const airport = normalizePersistedAirportIntent(overrides.airport);
@@ -80,7 +80,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
 		agentRuntime,
         ...(defaultAgentMode ? { defaultAgentMode } : {}),
         ...(defaultModel ? { defaultModel } : {}),
-        ...(cockpitTheme ? { cockpitTheme } : {}),
+        ...(towerTheme ? { towerTheme } : {}),
         ...(overrides.trackingProvider ? { trackingProvider: overrides.trackingProvider } : {}),
         ...(instructionsPath ? { instructionsPath } : {}),
         ...(skillsPath ? { skillsPath } : {}),

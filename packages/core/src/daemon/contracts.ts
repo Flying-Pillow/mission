@@ -1,11 +1,11 @@
 import type {
 	MissionSystemSnapshot,
 	GateIntent,
-	MissionActionExecutionStep,
+	OperatorActionExecutionStep,
 	MissionBrief,
 	MissionGateResult,
 	MissionSelector,
-	MissionStatus,
+	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
 import type {
@@ -340,7 +340,7 @@ export type MissionFromIssueRequest = {
 };
 
 export type ControlSettingsUpdate = {
-	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'cockpitTheme' | 'instructionsPath' | 'skillsPath';
+	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'instructionsPath' | 'skillsPath';
 	value: string;
 };
 
@@ -364,13 +364,13 @@ export type ControlWorkflowSettingsGet = Record<string, never>;
 export type ControlWorkflowSettingsInitialize = WorkflowSettingsInitializeRequest;
 
 export type ControlWorkflowSettingsInitializeResponse = WorkflowSettingsInitializeResult & {
-	status: MissionStatus;
+	status: OperatorStatus;
 };
 
 export type ControlWorkflowSettingsUpdate = WorkflowSettingsUpdateRequest;
 
 export type ControlWorkflowSettingsUpdateResponse = WorkflowSettingsUpdateResult & {
-	status: MissionStatus;
+	status: OperatorStatus;
 };
 
 export type MissionGateEvaluate = MissionSelect & {
@@ -379,17 +379,17 @@ export type MissionGateEvaluate = MissionSelect & {
 
 export type ControlActionExecute = {
 	actionId: string;
-	steps?: MissionActionExecutionStep[];
+	steps?: OperatorActionExecutionStep[];
 };
 
 export type ControlActionDescribe = {
 	actionId: string;
-	steps?: MissionActionExecutionStep[];
+	steps?: OperatorActionExecutionStep[];
 };
 
 export type MissionActionExecute = MissionSelect & {
 	actionId: string;
-	steps?: MissionActionExecutionStep[];
+	steps?: OperatorActionExecutionStep[];
 };
 
 export type TaskSelect = MissionSelect & {
@@ -457,7 +457,7 @@ export type Notification =
 	| {
 		type: 'mission.status';
 		missionId: string;
-		status: MissionStatus;
+		status: OperatorStatus;
 	}
 	| {
 		type: 'session.console';
@@ -501,7 +501,7 @@ export type SuccessResponse = {
 	result:
 	| Ping
 	| MissionSystemSnapshot
-	| MissionStatus
+	| OperatorStatus
 	| ControlDocumentResponse
 	| MissionGateResult
 	| WorkflowSettingsGetResult

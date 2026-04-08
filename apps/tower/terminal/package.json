@@ -1,0 +1,35 @@
+{
+  "name": "@flying-pillow/tower-terminal",
+  "version": "0.1.0-beta.0",
+  "description": "Tower terminal surface for operating Mission repositories and missions",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "mission": "./build/index.js"
+  },
+  "scripts": {
+    "airport:status": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts airport:status",
+    "build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-static-assets.mjs",
+    "check": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsc --noEmit -p tsconfig.json",
+    "dev": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "vitest run --passWithNoTests",
+    "test:daemon-mission": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/scripts/daemonMissionSmokeTest.ts",
+    "test:workflow-e2e": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/scripts/daemonCurrentWorkflowE2eTest.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.1.0",
+    "@dimforge/rapier2d-simd-compat": "^0.17.3",
+    "@flying-pillow/mission-core": "workspace:*",
+    "@opentui/core": "^0.1.96",
+    "@opentui/solid": "^0.1.96",
+    "planck": "^1.4.3",
+    "solid-js": "^1.9.12"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.1.10",
+    "typescript": "^6.0.2"
+  },
+  "packageManager": "pnpm@10.30.3"
+}

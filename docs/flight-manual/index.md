@@ -16,7 +16,7 @@ Mission is organized around a small set of stable system concepts:
 
 - `Airport`: the top-level control plane and application orchestration layer
 - `Mission`: the semantic core, workflow model, and runtime state
-- `Cockpit`: the operator-facing surface and control contract
+- `Tower`: the operator-facing surface and control contract
 - `Reference`: supporting examples and stable lookup material
 - `Current Mission`: the active in-flight design dossier while the product is still being built
 
@@ -25,7 +25,7 @@ Mission is organized around a small set of stable system concepts:
 1. [Overview](../index.md)
 2. [Airport](../airport/index.md)
 3. [Mission](../mission/index.md)
-4. [Cockpit](../cockpit/index.md)
+4. [Tower](../tower/index.md)
 5. [Current Mission](../missions/index.md)
 
 ## Why There Is A Current Mission Section

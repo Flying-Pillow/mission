@@ -16,14 +16,14 @@ The purpose of this document is to establish the exact engine contract before im
 
 ## Relationship To Other Specifications
 
-This document must be read alongside the airport control plane specification, the core object model specification, the mission model, the agent runtime specification, and the workflow operator surface specification.
+This document must be read alongside the airport control plane specification, the core object model specification, the mission model, the agent runtime specification, and the workflow control surface specification.
 
 Priority rule:
 
 1. this workflow engine specification defines semantic mission runtime truth and valid workflow events
 2. the airport control plane specification defines daemon-wide composite state, layout truth, panel projections, and substrate reconciliation
 3. the agent runtime specification defines the provider-neutral agent execution boundary used by workflow requests
-4. the operator surface specification defines how surfaces project workflow and airport state without becoming authorities
+4. the control surface specification defines how surfaces project workflow and airport state without becoming authorities
 
 If a document assigns layout, focus, panel, client, or substrate ownership to the workflow engine, that document is wrong and must change.
 
@@ -363,7 +363,7 @@ export interface MissionDaemonSettings {
   agentRunner?: string;
   defaultAgentMode?: 'interactive' | 'autonomous';
   defaultModel?: string;
-  cockpitTheme?: string;
+  towerTheme?: string;
   trackingProvider?: 'github';
   instructionsPath?: string;
   skillsPath?: string;

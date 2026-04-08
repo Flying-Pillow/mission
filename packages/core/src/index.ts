@@ -20,6 +20,8 @@ export * from './lib/repoConfig.js';
 export * from './lib/workspacePaths.js';
 export * from './daemon/Daemon.js';
 export * from './daemon/runDaemonMain.js';
+export * from './daemon/processControl.js';
+export * from './daemon/runMissiondCommand.js';
 export * from './daemon/contracts.js';
 export * from './daemon/events.js';
 export * from './daemon/daemonPaths.js';

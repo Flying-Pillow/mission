@@ -44,7 +44,7 @@ By shifting the workflow from prompt-driven to spec-driven, Mission constrains t
 - Spec-driven execution instead of freeform chat-driven coding.
 - Deterministic CI gating so agents cannot self-certify completion.
 - Agent-agnostic orchestration across multiple coding backends.
-- A persistent cockpit and daemon model for long-running supervised work.
+- A persistent tower and daemon model for long-running supervised work.
 
 ## Documentation Map
 
@@ -53,7 +53,7 @@ Mission uses its own semantic language as the documentation structure:
 - [Flight Manual](flight-manual/index.md): how to read the system and navigate the docs.
 - [Airport](airport/index.md): the daemon-wide control plane and top-level application orchestration.
 - [Mission](mission/index.md): the semantic model, workflow engine, runtime, and repository settings model.
-- [Cockpit](cockpit/index.md): the operator-facing surface and control contract.
+- [Tower](tower/index.md): the operator-facing surface and control contract.
 - [Reference](reference/index.md): supporting examples and future stable reference material.
 - [Missions](missions/index.md): temporary in-flight design and delivery dossiers while the system is still being built.
 
@@ -81,7 +81,7 @@ Initialize a repository:
 mission init
 ```
 
-Launch the cockpit:
+Launch the tower:
 
 ```bash
 mission

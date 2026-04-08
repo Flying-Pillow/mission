@@ -45,7 +45,7 @@ At the end of this work, the system should have:
 2. one daemon-owned persistence and revision path for `.missions/settings.json`
 3. one daemon API for get, initialize, and update
 4. one snapshot boundary at `draft` to `ready`
-5. one client contract used by CLI and Cockpit or web surfaces
+5. one client contract used by CLI and Tower or web surfaces
 6. zero direct workflow-settings file writes from any surface
 7. zero reuse of the scalar `control.settings.update` field or value flow for workflow settings mutations
 
@@ -128,7 +128,7 @@ Implementation tasks:
 
 ### Phase 4: CLI Surface Integration
 
-Only after Phases 1 through 3 are stable should the CLI setup and cockpit flows be refactored.
+Only after Phases 1 through 3 are stable should the CLI setup and tower flows be refactored.
 
 Required output:
 
@@ -139,20 +139,20 @@ Required output:
 Implementation tasks:
 
 1. Extend the typed client-side daemon protocol facade with `DaemonControlApi` methods for the new workflow settings endpoints.
-2. Update the CLI cockpit setup path to split scalar daemon settings from repository workflow settings editing.
+2. Update the CLI tower setup path to split scalar daemon settings from repository workflow settings editing.
 3. Replace any workflow-policy editing logic that assumes one selected `field` and one freeform `value`.
 4. Introduce guided patch construction in the CLI for common operations such as toggle, replace, reorder, and delete.
 5. Render daemon-side validation errors and `SETTINGS_CONFLICT` without local fallback logic.
 6. Add CLI-focused tests for emitted daemon requests and conflict recovery behavior.
 
-### Phase 5: Cockpit And Web Surface Integration
+### Phase 5: Tower And Web Surface Integration
 
-After the daemon and CLI contracts are proven, wire the extension and cockpit or web surfaces to the same API.
+After the daemon and CLI contracts are proven, wire the extension and tower or web surfaces to the same API.
 
 Required output:
 
 - Mission operator client support for workflow settings methods
-- Cockpit or web panel that shows effective workflow settings and revision state
+- Tower or web panel that shows effective workflow settings and revision state
 - live refresh behavior on `control.workflow.settings.updated`
 - no surface-local patch semantics
 
@@ -160,7 +160,7 @@ Implementation tasks:
 
 1. Extend the extension-side operator client to call the new daemon methods.
 2. Add view-model state for workflow settings payload, revision token, validation errors, and save conflicts.
-3. Add cockpit or web UI components that edit workflow settings through daemon requests only.
+3. Add tower or web UI components that edit workflow settings through daemon requests only.
 4. Subscribe to the workflow settings update event and refresh the UI state on notification.
 5. Add surface contract tests for refresh-on-event, validation error rendering, and stale revision handling.
 
@@ -370,7 +370,7 @@ Target action:
 - preserve mission aggregate behavior while aligning initialization with the new draft-to-ready snapshot boundary
 - ensure mission status reflects the correct repository-backed workflow settings prior to snapshot capture
 
-#### Refactor `apps/mission/src/cockpit/runCockpitApp.tsx`
+#### Refactor `apps/tower/terminal/src/tower/runTowerApp.tsx`
 
 Reason:
 
@@ -383,7 +383,7 @@ Target action:
 - add workflow-specific flows that emit structured patch requests
 - remove any assumption that `/setup` maps all repository settings to one text box
 
-#### Refactor `apps/mission/src/cockpit/components/ControlStatusPanel.tsx`
+#### Refactor `apps/tower/terminal/src/tower/components/ControlStatusPanel.tsx`
 
 Reason:
 
@@ -404,21 +404,21 @@ Target action:
 - add typed workflow settings API methods
 - surface daemon conflict and validation results without local mutation logic
 
-#### Refactor `apps/vscode-extension/src/MissionCockpitViewModel.ts`
+#### Refactor `apps/vscode-extension/src/MissionTowerViewModel.ts`
 
 Reason:
 
-- will need to hold workflow settings state and update lifecycle for the cockpit surface
+- will need to hold workflow settings state and update lifecycle for the tower surface
 
 Target action:
 
 - add workflow settings model state, revision token handling, and update status tracking
 
-#### Refactor `apps/vscode-extension/src/webview/CockpitApp.svelte`
+#### Refactor `apps/vscode-extension/src/webview/TowerApp.svelte`
 
 Reason:
 
-- cockpit webview needs an operator-facing control mode surface for repository workflow settings
+- tower webview needs an operator-facing control mode surface for repository workflow settings
 
 Target action:
 
@@ -475,7 +475,7 @@ Target action:
 
 - split command definitions so workflow settings use their own flow or command family
 
-#### Delete or isolate workflow settings assumptions in `apps/mission/src/cockpit/runCockpitApp.tsx`
+#### Delete or isolate workflow settings assumptions in `apps/tower/terminal/src/tower/runTowerApp.tsx`
 
 Reason:
 
@@ -577,14 +577,14 @@ Required coverage:
 
 1. CLI setup or control flow emits daemon workflow settings requests and never writes `.missions/settings.json` directly.
 2. CLI renders daemon validation errors and `SETTINGS_CONFLICT` without local merge fallback.
-3. Extension or cockpit client refreshes workflow settings state on `control.workflow.settings.updated`.
-4. Cockpit or web UI never derives its own patch semantics differently from the daemon contract.
+3. Extension or tower client refreshes workflow settings state on `control.workflow.settings.updated`.
+4. Tower or web UI never derives its own patch semantics differently from the daemon contract.
 
 Recommended files:
 
-- CLI cockpit tests adjacent to `apps/mission/src/cockpit/runCockpitApp.tsx`
+- CLI tower tests adjacent to `apps/tower/terminal/src/tower/runTowerApp.tsx`
 - extension tests adjacent to `apps/vscode-extension/src/MissionOperatorClient.ts`
-- webview tests adjacent to `apps/vscode-extension/src/webview/CockpitApp.svelte`
+- webview tests adjacent to `apps/vscode-extension/src/webview/TowerApp.svelte`
 
 ## Delivery Gate
 
@@ -594,6 +594,6 @@ The implementation is not complete until all of the following are true.
 2. The daemon rejects stale revisions caused by out-of-band file edits.
 3. Mission workflow snapshotting occurs at `draft` to `ready`, not earlier.
 4. CLI workflow settings edits use the new daemon API only.
-5. Cockpit or web workflow settings edits use the same daemon API only.
+5. Tower or web workflow settings edits use the same daemon API only.
 6. Scalar setup code is isolated from workflow policy editing.
 7. No direct workflow-settings file writes remain in any surface.

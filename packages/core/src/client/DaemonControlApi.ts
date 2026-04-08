@@ -13,10 +13,10 @@ import type {
 } from '../daemon/contracts.js';
 import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
-	MissionActionDescriptor,
-	MissionActionExecutionStep,
-	MissionActionFlowDescriptor,
-	MissionStatus,
+	OperatorActionDescriptor,
+	OperatorActionExecutionStep,
+	OperatorActionFlowDescriptor,
+	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
@@ -24,41 +24,41 @@ import { DaemonClient } from './DaemonClient.js';
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }
 
-	public async getStatus(): Promise<MissionStatus> {
-		return this.client.request<MissionStatus>('control.status');
+	public async getStatus(): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('control.status');
 	}
 
-	public async listAvailableActions(): Promise<MissionActionDescriptor[]> {
+	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
 		return (await this.getStatus()).availableActions ?? [];
 	}
 
 	public async executeAction(
 		actionId: string,
-		steps: MissionActionExecutionStep[] = []
-	): Promise<MissionStatus> {
+		steps: OperatorActionExecutionStep[] = []
+	): Promise<OperatorStatus> {
 		const params: ControlActionExecute = {
 			actionId,
 			...(steps.length > 0 ? { steps } : {})
 		};
-		return this.client.request<MissionStatus>('control.action.execute', params);
+		return this.client.request<OperatorStatus>('control.action.execute', params);
 	}
 
 	public async describeActionFlow(
 		actionId: string,
-		steps: MissionActionExecutionStep[] = []
-	): Promise<MissionActionFlowDescriptor> {
+		steps: OperatorActionExecutionStep[] = []
+	): Promise<OperatorActionFlowDescriptor> {
 		const params: ControlActionDescribe = {
 			actionId,
 			...(steps.length > 0 ? { steps } : {})
 		};
-		return this.client.request<MissionActionFlowDescriptor>('control.action.describe', params);
+		return this.client.request<OperatorActionFlowDescriptor>('control.action.describe', params);
 	}
 
 	public async updateSetting(
 		field: ControlSettingsUpdate['field'],
 		value: string
-	): Promise<MissionStatus> {
-		return this.client.request<MissionStatus>('control.settings.update', { field, value });
+	): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('control.settings.update', { field, value });
 	}
 
 	public async readDocument(filePath: string): Promise<ControlDocumentResponse> {

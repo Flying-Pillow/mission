@@ -13,11 +13,11 @@ import type {
 } from '../runtime/AgentRuntimeTypes.js';
 import type {
 	GateIntent,
-	MissionActionDescriptor,
-	MissionActionExecutionStep,
+	OperatorActionDescriptor,
+	OperatorActionExecutionStep,
 	MissionGateResult,
 	MissionSelector,
-	MissionStatus
+	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
 
@@ -26,40 +26,40 @@ export class DaemonMissionApi {
 
 	public async fromBrief(
 		params: MissionFromBriefRequest
-	): Promise<MissionStatus> {
-		return this.client.request<MissionStatus>('mission.from-brief', params);
+	): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('mission.from-brief', params);
 	}
 
 	public async fromIssue(
 		issueNumber: number
-	): Promise<MissionStatus> {
-		return this.client.request<MissionStatus>('mission.from-issue', {
+	): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('mission.from-issue', {
 			issueNumber
 		});
 	}
 
-	public async getStatus(selector: MissionSelector): Promise<MissionStatus> {
-		return this.client.request<MissionStatus>('mission.status', {
+	public async getStatus(selector: MissionSelector): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('mission.status', {
 			selector: DaemonMissionApi.requireSelector(selector, 'Mission status')
 		});
 	}
 
-	public async listAvailableActions(selector: MissionSelector): Promise<MissionActionDescriptor[]> {
+	public async listAvailableActions(selector: MissionSelector): Promise<OperatorActionDescriptor[]> {
 		return (await this.getStatus(selector)).availableActions ?? [];
 	}
 
 	public async executeAction(
 		selector: MissionSelector,
 		actionId: string,
-		steps: MissionActionExecutionStep[] = []
-	): Promise<MissionStatus> {
+		steps: OperatorActionExecutionStep[] = []
+	): Promise<OperatorStatus> {
 		const resolvedSelector = DaemonMissionApi.requireSelector(selector, `Mission action '${actionId}'`);
 		const params: MissionActionExecute = {
 			selector: resolvedSelector,
 			actionId,
 			...(steps.length > 0 ? { steps } : {})
 		};
-		return this.client.request<MissionStatus>('mission.action.execute', params);
+		return this.client.request<OperatorStatus>('mission.action.execute', params);
 	}
 
 	public async evaluateGate(
@@ -155,7 +155,7 @@ export class DaemonMissionApi {
 	}
 
 	public static selectorFromStatus(
-		status: MissionStatus,
+		status: OperatorStatus,
 		fallback: MissionSelector = {}
 	): MissionSelector {
 		if (status.missionId) {

@@ -16,7 +16,7 @@ import type {
 	ContextGraph,
 	ContextSelection,
 	MissionContext,
-	MissionStatus,
+	OperatorStatus,
 	MissionSystemSnapshot,
 	MissionSystemState,
 	RepositoryContext,
@@ -70,7 +70,7 @@ export class MissionSystemController {
 		return this.commit();
 	}
 
-	public async applyStatus(status: MissionStatus): Promise<MissionSystemSnapshot> {
+	public async applyStatus(status: OperatorStatus): Promise<MissionSystemSnapshot> {
 		const nextDomain = deriveContextGraph(status);
 		const repositoryId = nextDomain.selection.repositoryId;
 		if (!repositoryId) {
@@ -351,7 +351,7 @@ function createEmptyContextGraph(): ContextGraph {
 	};
 }
 
-function deriveContextGraph(status: MissionStatus): ContextGraph {
+function deriveContextGraph(status: OperatorStatus): ContextGraph {
 	const repositoryId = status.control?.controlRoot?.trim() || 'repository';
 	const missionIds = Array.from(
 		new Set([
@@ -449,7 +449,7 @@ function deriveContextGraph(status: MissionStatus): ContextGraph {
 	};
 }
 
-function dedupeTasks(status: MissionStatus) {
+function dedupeTasks(status: OperatorStatus) {
 	const seen = new Set<string>();
 	const tasks = [
 		...(status.activeTasks ?? []),
@@ -465,21 +465,21 @@ function dedupeTasks(status: MissionStatus) {
 	});
 }
 
-function buildArtifactId(status: MissionStatus, artifactKey: string): string {
+function buildArtifactId(status: OperatorStatus, artifactKey: string): string {
 	const missionScope = status.missionId?.trim() || status.control?.controlRoot?.trim() || 'repository';
 	return `${missionScope}:${artifactKey}`;
 }
 
-function pickSelectedTaskId(status: MissionStatus): string | undefined {
+function pickSelectedTaskId(status: OperatorStatus): string | undefined {
 	return status.activeTasks?.[0]?.taskId || status.readyTasks?.[0]?.taskId || status.stages?.flatMap((stage) => stage.tasks)[0]?.taskId;
 }
 
-function pickSelectedArtifactId(status: MissionStatus): string | undefined {
+function pickSelectedArtifactId(status: OperatorStatus): string | undefined {
 	const artifactKey = Object.keys(status.productFiles ?? {})[0];
 	return artifactKey ? buildArtifactId(status, artifactKey) : undefined;
 }
 
-function pickSelectedSessionId(status: MissionStatus): string | undefined {
+function pickSelectedSessionId(status: OperatorStatus): string | undefined {
 	const preferred = (status.agentSessions ?? []).find((session) =>
 		session.lifecycleState === 'running'
 		|| session.lifecycleState === 'starting'

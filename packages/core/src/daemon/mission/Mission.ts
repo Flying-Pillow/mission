@@ -24,11 +24,11 @@ import {
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
 	getMissionStageDefinition,
-	type MissionActionDescriptor,
-	type MissionCockpitProjection,
-	type MissionCockpitStageRailItem,
-	type MissionCockpitTreeNode,
-	type MissionActionExecutionStep,
+	type OperatorActionDescriptor,
+	type MissionTowerProjection,
+	type MissionTowerStageRailItem,
+	type MissionTowerTreeNode,
+	type OperatorActionExecutionStep,
 	type MissionTaskUpdate,
 	type GateIntent,
 	type MissionDescriptor,
@@ -37,7 +37,7 @@ import {
 	type MissionRecord,
 	type MissionStageId,
 	type MissionStageStatus,
-	type MissionStatus,
+	type OperatorStatus,
 	type MissionTaskState
 } from '../../types.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
@@ -73,7 +73,7 @@ export class Mission {
 	private readonly consoleStates = new Map<string, MissionAgentConsoleState>();
 	private descriptor: MissionDescriptor;
 	private agentSessions: MissionAgentSessionRecord[] = [];
-	private lastKnownStatus: MissionStatus | undefined;
+	private lastKnownStatus: OperatorStatus | undefined;
 	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
 	private readonly workflowController: MissionWorkflowController;
 	private readonly workflowResolver: () => WorkflowGlobalSettings;
@@ -164,7 +164,7 @@ export class Mission {
 		return this;
 	}
 
-	public async status(): Promise<MissionStatus> {
+	public async status(): Promise<OperatorStatus> {
 		const nextDescriptor = await this.adapter.readMissionDescriptor(this.missionDir);
 		if (nextDescriptor) {
 			this.descriptor = nextDescriptor;
@@ -184,7 +184,7 @@ export class Mission {
 		return this.lastKnownStatus;
 	}
 
-	public async startWorkflow(): Promise<MissionStatus> {
+	public async startWorkflow(): Promise<OperatorStatus> {
 		const document = await this.workflowController.startFromDraft({
 			occurredAt: new Date().toISOString(),
 			source: 'human',
@@ -304,8 +304,8 @@ export class Mission {
 
 	public async executeAction(
 		actionId: string,
-		steps: MissionActionExecutionStep[] = []
-	): Promise<MissionStatus> {
+		steps: OperatorActionExecutionStep[] = []
+	): Promise<OperatorStatus> {
 		if (steps.length > 0) {
 			throw new Error(`Mission action '${actionId}' does not accept input steps.`);
 		}
@@ -469,7 +469,7 @@ export class Mission {
 		await this.status();
 	}
 
-	private async buildStatus(document?: MissionRuntimeRecord): Promise<MissionStatus> {
+	private async buildStatus(document?: MissionRuntimeRecord): Promise<OperatorStatus> {
 		const persistedDocument = document ?? await this.workflowController.getPersistedDocument();
 		if (!persistedDocument) {
 			return this.buildDraftStatus();
@@ -481,7 +481,7 @@ export class Mission {
 		const readyTasks = this.resolveReadyTasks(currentStage);
 		const productFiles = await this.collectProductFiles();
 		const sessions = this.getAgentSessions();
-		const cockpit = this.buildCockpitProjection(persistedDocument.configuration, stages, sessions, productFiles);
+		const tower = this.buildTowerProjection(persistedDocument.configuration, stages, sessions, productFiles);
 
 		return {
 			found: true,
@@ -499,7 +499,7 @@ export class Mission {
 			...(readyTasks.length > 0 ? { readyTasks } : {}),
 			stages,
 			agentSessions: sessions,
-			cockpit,
+			tower,
 			workflow: {
 				lifecycle: persistedDocument.runtime.lifecycle,
 				pause: { ...persistedDocument.runtime.pause },
@@ -536,7 +536,7 @@ export class Mission {
 		};
 	}
 
-	private async buildDraftStatus(): Promise<MissionStatus> {
+	private async buildDraftStatus(): Promise<OperatorStatus> {
 		const workflow = this.workflowResolver();
 		const configuration = createMissionWorkflowConfigurationSnapshot({
 			createdAt: this.descriptor.createdAt,
@@ -556,7 +556,7 @@ export class Mission {
 		}));
 		const currentStageId = (workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
 		const productFiles = await this.collectProductFiles();
-		const cockpit = this.buildCockpitProjection(configuration, stages, [], productFiles);
+		const tower = this.buildTowerProjection(configuration, stages, [], productFiles);
 
 		return {
 			found: true,
@@ -572,7 +572,7 @@ export class Mission {
 			productFiles,
 			stages,
 			agentSessions: [],
-			cockpit,
+			tower,
 			workflow: {
 				lifecycle: runtime.lifecycle,
 				pause: { ...runtime.pause },
@@ -625,42 +625,42 @@ export class Mission {
 		});
 	}
 
-	private buildCockpitProjection(
+	private buildTowerProjection(
 		configuration: MissionRuntimeRecord['configuration'],
 		stages: MissionStageStatus[],
 		sessions: MissionAgentSessionRecord[],
 		productFiles: Partial<Record<MissionArtifactKey, string>>
-	): MissionCockpitProjection {
+	): MissionTowerProjection {
 		return {
-			stageRail: stages.map((stage) => this.toCockpitStageRailItem(stage, configuration)),
-			treeNodes: this.buildCockpitTreeNodes(configuration, stages, sessions, productFiles)
+			stageRail: stages.map((stage) => this.toTowerStageRailItem(stage, configuration)),
+			treeNodes: this.buildTowerTreeNodes(configuration, stages, sessions, productFiles)
 		};
 	}
 
-	private toCockpitStageRailItem(
+	private toTowerStageRailItem(
 		stage: MissionStageStatus,
 		configuration: MissionRuntimeRecord['configuration']
-	): MissionCockpitStageRailItem {
+	): MissionTowerStageRailItem {
 		return {
 			id: stage.stage,
-			label: this.resolveCockpitStageLabel(stage.stage, configuration),
-			state: this.toCockpitStageRailState(stage.status),
+			label: this.resolveTowerStageLabel(stage.stage, configuration),
+			state: this.toTowerStageRailState(stage.status),
 			subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
 		};
 	}
 
-	private buildCockpitTreeNodes(
+	private buildTowerTreeNodes(
 		configuration: MissionRuntimeRecord['configuration'],
 		stages: MissionStageStatus[],
 		sessions: MissionAgentSessionRecord[],
 		productFiles: Partial<Record<MissionArtifactKey, string>>
-	): MissionCockpitTreeNode[] {
-		const nodes: MissionCockpitTreeNode[] = [];
+	): MissionTowerTreeNode[] {
+		const nodes: MissionTowerTreeNode[] = [];
 		for (const stage of stages) {
 			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
 			nodes.push({
 				id: `tree:stage:${stage.stage}`,
-				label: this.resolveCockpitStageLabel(stage.stage, configuration),
+				label: this.resolveTowerStageLabel(stage.stage, configuration),
 				kind: 'stage',
 				depth: 0,
 				color: this.progressTone(stage.status),
@@ -729,7 +729,7 @@ export class Mission {
 		return nodes;
 	}
 
-	private resolveCockpitStageLabel(
+	private resolveTowerStageLabel(
 		stageId: MissionStageId,
 		configuration: MissionRuntimeRecord['configuration']
 	): string {
@@ -753,7 +753,7 @@ export class Mission {
 		return undefined;
 	}
 
-	private toCockpitStageRailState(status: MissionStageStatus['status']): MissionCockpitStageRailItem['state'] {
+	private toTowerStageRailState(status: MissionStageStatus['status']): MissionTowerStageRailItem['state'] {
 		if (status === 'done') {
 			return 'done';
 		}
@@ -890,7 +890,7 @@ export class Mission {
 		configuration: MissionRuntimeRecord['configuration'],
 		runtime: MissionRuntimeRecord['runtime'],
 		sessions: MissionAgentSessionRecord[]
-	): MissionActionDescriptor[] {
+	): OperatorActionDescriptor[] {
 		return buildMissionAvailableActions({
 			missionId: this.descriptor.missionId,
 			configuration,
@@ -977,7 +977,7 @@ export class Mission {
 
 	private async requireWorkflowTask(
 		taskId: string
-	): Promise<NonNullable<MissionStatus['workflow']>['tasks'][number]> {
+	): Promise<NonNullable<OperatorStatus['workflow']>['tasks'][number]> {
 		const status = this.lastKnownStatus ?? (await this.status());
 		const task = status.workflow?.tasks.find((candidate) => candidate.taskId === taskId);
 		if (!task) {
@@ -1479,10 +1479,10 @@ const MISSION_ACTION_IDS = {
 	deliver: 'mission.deliver'
 } as const;
 
-function buildMissionAvailableActions(input: MissionAvailableActionsInput): MissionActionDescriptor[] {
+function buildMissionAvailableActions(input: MissionAvailableActionsInput): OperatorActionDescriptor[] {
 	const currentStageId = resolveCurrentStageId(input);
 	const eligibleStageId = resolveEligibleStageId(input);
-	const actions: MissionActionDescriptor[] = [
+	const actions: OperatorActionDescriptor[] = [
 		buildPauseMissionAction(input, currentStageId),
 		buildResumeMissionAction(input, currentStageId),
 		buildPanicStopAction(input, currentStageId),
@@ -1519,7 +1519,7 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Miss
 function buildAvailability(
 	enabled: boolean,
 	reason?: string
-): Pick<MissionActionDescriptor, 'enabled' | 'disabled' | 'disabledReason' | 'reason'> {
+): Pick<OperatorActionDescriptor, 'enabled' | 'disabled' | 'disabledReason' | 'reason'> {
 	if (enabled) {
 		return { enabled: true, disabled: false, disabledReason: '' };
 	}
@@ -1530,7 +1530,7 @@ function buildAvailability(
 function buildPauseMissionAction(
 	input: MissionAvailableActionsInput,
 	currentStageId: MissionStageId | undefined
-): MissionActionDescriptor {
+): OperatorActionDescriptor {
 	const enabled = input.runtime.lifecycle === 'running';
 	return {
 		id: MISSION_ACTION_IDS.pause,
@@ -1547,7 +1547,7 @@ function buildPauseMissionAction(
 function buildResumeMissionAction(
 	input: MissionAvailableActionsInput,
 	currentStageId: MissionStageId | undefined
-): MissionActionDescriptor {
+): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.resumed' });
 	const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
 	return {
@@ -1565,7 +1565,7 @@ function buildResumeMissionAction(
 function buildPanicStopAction(
 	input: MissionAvailableActionsInput,
 	currentStageId: MissionStageId | undefined
-): MissionActionDescriptor {
+): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
 	const enabled =
 		input.runtime.lifecycle !== 'draft'
@@ -1591,7 +1591,7 @@ function buildPanicStopAction(
 function buildClearPanicAction(
 	input: MissionAvailableActionsInput,
 	currentStageId: MissionStageId | undefined
-): MissionActionDescriptor {
+): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
 	const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
 	return {
@@ -1613,7 +1613,7 @@ function buildClearPanicAction(
 function buildDeliverMissionAction(
 	input: MissionAvailableActionsInput,
 	currentStageId: MissionStageId | undefined
-): MissionActionDescriptor {
+): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.delivered' });
 	return {
 		id: MISSION_ACTION_IDS.deliver,
@@ -1634,7 +1634,7 @@ function buildDeliverMissionAction(
 function buildGenerationAction(
 	input: MissionAvailableActionsInput,
 	stageId: MissionStageId
-): MissionActionDescriptor | undefined {
+): OperatorActionDescriptor | undefined {
 	const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
 	if (!generationRule || generationRule.templateSources.length === 0) {
 		return undefined;
@@ -1660,7 +1660,7 @@ function buildGenerationAction(
 	};
 }
 
-function buildTaskStartAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+function buildTaskStartAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.queued', taskId: task.taskId });
 	const enabled = task.lifecycle === 'ready' && errors.length === 0;
 	return {
@@ -1681,7 +1681,7 @@ function buildTaskStartAction(input: MissionAvailableActionsInput, task: Mission
 	};
 }
 
-function buildTaskLaunchAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+function buildTaskLaunchAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const enabled = isTaskLaunchEnabled(input, task);
 	return {
 		id: `task.launch.${task.taskId}`,
@@ -1701,7 +1701,7 @@ function buildTaskLaunchAction(input: MissionAvailableActionsInput, task: Missio
 	};
 }
 
-function buildTaskDoneAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+function buildTaskDoneAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
 	return {
 		id: `task.done.${task.taskId}`,
@@ -1717,7 +1717,7 @@ function buildTaskDoneAction(input: MissionAvailableActionsInput, task: MissionR
 	};
 }
 
-function buildTaskBlockedAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+function buildTaskBlockedAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.blocked', taskId: task.taskId, reason: 'Marked blocked by operator.' });
 	return {
 		id: `task.block.${task.taskId}`,
@@ -1733,7 +1733,7 @@ function buildTaskBlockedAction(input: MissionAvailableActionsInput, task: Missi
 	};
 }
 
-function buildTaskReopenAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor {
+function buildTaskReopenAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
 	return {
 		id: `task.reopen.${task.taskId}`,
@@ -1749,8 +1749,8 @@ function buildTaskReopenAction(input: MissionAvailableActionsInput, task: Missio
 	};
 }
 
-function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): MissionActionDescriptor[] {
-	const actions: MissionActionDescriptor[] = [];
+function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor[] {
+	const actions: OperatorActionDescriptor[] = [];
 	const changeErrors = (autostart: boolean, launchMode = task.runtime.launchMode) => getValidationErrors(input, {
 		type: 'task.launch-policy.changed',
 		taskId: task.taskId,
@@ -1806,7 +1806,7 @@ function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task:
 	return actions;
 }
 
-function buildSessionCancelAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): MissionActionDescriptor {
+function buildSessionCancelAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
 	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running';
 	return {
 		id: `session.cancel.${session.sessionId}`,
@@ -1821,7 +1821,7 @@ function buildSessionCancelAction(session: MissionAgentSessionRecord, stageId: M
 	};
 }
 
-function buildSessionTerminateAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): MissionActionDescriptor {
+function buildSessionTerminateAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
 	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running';
 	return {
 		id: `session.terminate.${session.sessionId}`,

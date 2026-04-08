@@ -80,29 +80,29 @@ export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
 export type MissionTaskStatus = MissionWorkflowTaskStatus;
 export type MissionTaskAgent = string;
 
-export type MissionActionScope = 'mission' | 'task' | 'session' | 'generation';
-export type MissionActionFlowSelectionMode = 'single' | 'multiple';
-export type MissionActionFlowTextMode = 'compact' | 'expanded';
-export type MissionActionFlowTextFormat = 'plain' | 'markdown';
+export type OperatorActionScope = 'mission' | 'task' | 'session' | 'generation';
+export type OperatorActionFlowSelectionMode = 'single' | 'multiple';
+export type OperatorActionFlowTextMode = 'compact' | 'expanded';
+export type OperatorActionFlowTextFormat = 'plain' | 'markdown';
 
-export type MissionActionFlowOption = {
+export type OperatorActionFlowOption = {
 	id: string;
 	label: string;
 	description: string;
 };
 
-export type MissionActionFlowSelectionStep = {
+export type OperatorActionFlowSelectionStep = {
 	kind: 'selection';
 	id: string;
 	label: string;
 	title: string;
 	emptyLabel: string;
 	helperText: string;
-	selectionMode: MissionActionFlowSelectionMode;
-	options: MissionActionFlowOption[];
+	selectionMode: OperatorActionFlowSelectionMode;
+	options: OperatorActionFlowOption[];
 };
 
-export type MissionActionFlowTextStep = {
+export type OperatorActionFlowTextStep = {
 	kind: 'text';
 	id: string;
 	label: string;
@@ -110,69 +110,69 @@ export type MissionActionFlowTextStep = {
 	helperText: string;
 	placeholder: string;
 	initialValue?: string;
-	inputMode: MissionActionFlowTextMode;
-	format: MissionActionFlowTextFormat;
+	inputMode: OperatorActionFlowTextMode;
+	format: OperatorActionFlowTextFormat;
 };
 
-export type MissionActionFlowStep = MissionActionFlowSelectionStep | MissionActionFlowTextStep;
+export type OperatorActionFlowStep = OperatorActionFlowSelectionStep | OperatorActionFlowTextStep;
 
-export type MissionActionFlowDescriptor = {
+export type OperatorActionFlowDescriptor = {
 	targetLabel: string;
 	actionLabel: string;
-	steps: MissionActionFlowStep[];
+	steps: OperatorActionFlowStep[];
 };
 
-export type MissionActionUiMetadata = {
+export type OperatorActionUiMetadata = {
 	toolbarLabel?: string;
 	requiresConfirmation?: boolean;
 	confirmationPrompt?: string;
 };
 
-export type MissionActionPresentationScope = 'mission' | 'stage' | 'task' | 'session';
+export type OperatorActionPresentationScope = 'mission' | 'stage' | 'task' | 'session';
 
-export type MissionActionPresentationTarget = {
-	scope: MissionActionPresentationScope;
+export type OperatorActionPresentationTarget = {
+	scope: OperatorActionPresentationScope;
 	targetId?: string;
 };
 
-export type MissionActionExecutionMetadata = {
+export type OperatorActionExecutionMetadata = {
 	stageId?: MissionStageId;
 	launchMode?: MissionTaskLaunchMode;
 	autostart?: boolean;
 	batchTargetIds?: string[];
 };
 
-export type MissionActionDescriptor = {
+export type OperatorActionDescriptor = {
 	id: string;
 	label: string;
 	action: string;
-	scope: MissionActionScope;
+	scope: OperatorActionScope;
 	targetId?: string;
 	disabled: boolean;
 	disabledReason: string;
 	enabled: boolean;
 	reason?: string;
-	flow?: MissionActionFlowDescriptor;
-	ui?: MissionActionUiMetadata;
-	presentationTargets?: MissionActionPresentationTarget[];
-	metadata?: MissionActionExecutionMetadata;
+	flow?: OperatorActionFlowDescriptor;
+	ui?: OperatorActionUiMetadata;
+	presentationTargets?: OperatorActionPresentationTarget[];
+	metadata?: OperatorActionExecutionMetadata;
 };
 
-export type MissionActionExecutionSelectionStep = {
+export type OperatorActionExecutionSelectionStep = {
 	kind: 'selection';
 	stepId: string;
 	optionIds: string[];
 };
 
-export type MissionActionExecutionTextStep = {
+export type OperatorActionExecutionTextStep = {
 	kind: 'text';
 	stepId: string;
 	value: string;
 };
 
-export type MissionActionExecutionStep =
-	| MissionActionExecutionSelectionStep
-	| MissionActionExecutionTextStep;
+export type OperatorActionExecutionStep =
+	| OperatorActionExecutionSelectionStep
+	| OperatorActionExecutionTextStep;
 
 export type MissionBrief = {
 	issueId?: number;
@@ -409,21 +409,21 @@ export type MissionControlPlaneStatus = {
 
 export type StageData = MissionStageStatus;
 
-export type MissionCockpitStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+export type MissionTowerStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
 
-export type MissionCockpitStageRailItem = {
+export type MissionTowerStageRailItem = {
 	id: string;
 	label: string;
-	state: MissionCockpitStageRailItemState;
+	state: MissionTowerStageRailItemState;
 	subtitle?: string;
 };
 
-export type MissionCockpitTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
+export type MissionTowerTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
 
-export type MissionCockpitTreeNode = {
+export type MissionTowerTreeNode = {
 	id: string;
 	label: string;
-	kind: MissionCockpitTreeNodeKind;
+	kind: MissionTowerTreeNodeKind;
 	depth: number;
 	color: string;
 	collapsible: boolean;
@@ -433,12 +433,12 @@ export type MissionCockpitTreeNode = {
 	sessionId?: string;
 };
 
-export type MissionCockpitProjection = {
-	stageRail: MissionCockpitStageRailItem[];
-	treeNodes: MissionCockpitTreeNode[];
+export type MissionTowerProjection = {
+	stageRail: MissionTowerStageRailItem[];
+	treeNodes: MissionTowerTreeNode[];
 };
 
-export type MissionStatus = {
+export type OperatorStatus = {
 	found: boolean;
 	operationalMode?: MissionOperationalMode;
 	control?: MissionControlPlaneStatus;
@@ -457,7 +457,7 @@ export type MissionStatus = {
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
 	agentSessions?: MissionAgentSessionRecord[];
-	cockpit?: MissionCockpitProjection;
+	tower?: MissionTowerProjection;
 	workflow?: {
 		lifecycle: MissionLifecycleState;
 		pause: MissionPauseState;
@@ -470,12 +470,12 @@ export type MissionStatus = {
 		updatedAt: string;
 	};
 	recommendedAction?: string;
-	availableActions?: MissionActionDescriptor[];
+	availableActions?: OperatorActionDescriptor[];
 	availableMissions?: MissionSelectionCandidate[];
 	preparation?: MissionPreparationStatus;
 };
 
-export type MissionData = MissionStatus;
+export type OperatorData = OperatorStatus;
 
 export function isMissionTaskStatus(value: unknown): value is MissionTaskStatus {
 	return value === 'todo' || value === 'active' || value === 'blocked' || value === 'done';
