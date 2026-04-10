@@ -4,6 +4,7 @@ remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
 logo: "/logo.png"
+favicon_ico: "/logo.png"
 search_enabled: true
 search:
   heading_level: 2
@@ -16,5 +17,11 @@ aux_links:
   "GitHub":
     - "https://github.com/Flying-Pillow/mission"
 aux_links_new_tab: true
+gh_edit_link: true
+gh_edit_link_text: "Open this page on GitHub"
+gh_edit_repository: "https://github.com/Flying-Pillow/mission"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
 mermaid:
   version: "10.7.0"

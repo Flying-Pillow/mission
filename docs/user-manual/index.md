@@ -7,8 +7,26 @@ has_children: true
 
 # User Manual
 
-Use this section to understand what the operator actually sees in Tower, how missions are monitored and steered, and how agent sessions fit into the day-to-day workflow.
+<section class="mission-section-hero">
+	<span class="mission-section-kicker">Operator Console</span>
+	<div class="mission-section-title">Run Mission like a control tower, not a chat window.</div>
+	<p class="mission-section-lead">This section focuses on the live operating experience: what the Tower shows, how to steer a mission as it unfolds, and how runtimes and models fit into the system without owning the workflow.</p>
+</section>
 
-- [Tower Overview](tower-layout.md)
-- [Mission Control Tower](workflow-control.md)
-- [Agents, Runtimes, and Models](agent-sessions.md)
+<div class="mission-section-grid mission-section-grid--three">
+	<a class="mission-section-card" href="{{ '/user-manual/tower-layout/' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Surface</span>
+		<span class="mission-section-card__title">Tower Overview</span>
+		<span class="mission-section-card__text">See how the dashboard, agent pane, and editor gate fit together into one operational surface.</span>
+	</a>
+	<a class="mission-section-card" href="{{ '/user-manual/workflow-control/' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Steering</span>
+		<span class="mission-section-card__title">Mission Control Tower</span>
+		<span class="mission-section-card__text">Understand the actions available to the operator for repositories, missions, tasks, and live sessions.</span>
+	</a>
+	<a class="mission-section-card" href="{{ '/user-manual/agent-sessions/' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Runtime Layer</span>
+		<span class="mission-section-card__title">Agents, Runtimes, and Models</span>
+		<span class="mission-section-card__text">See how Mission keeps workflow control separate from which agent runtime or model is doing the work.</span>
+	</a>
+</div>

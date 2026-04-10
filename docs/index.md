@@ -1,8 +1,9 @@
 ---
-layout: default
+layout: minimal
 title: Mission
 nav_title: Overview
 nav_order: 1
+nav_enabled: false
 ---
 
 # Flying Pillow Mission
