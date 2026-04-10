@@ -55,6 +55,8 @@
 .main-header {
   background: rgba(255, 248, 255, 0.88);
   backdrop-filter: blur(14px);
+  position: relative;
+  z-index: 100;
   border-bottom: 1px solid rgba(138, 18, 160, 0.12);
   gap: 0.85rem;
   display: grid;
