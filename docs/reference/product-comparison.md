@@ -55,21 +55,38 @@ Flying Pillow Mission is the orchestration layer that controls the proper flow o
 
 | Dimension | Spec Kit | BMAD | GSD | Mission |
 | --- | --- | --- | --- | --- |
-| Primary operating model | Spec-driven development toolkit with a core command flow of constitution, specify, plan, tasks, and implement | AI-driven agile framework built around specialized roles, guided workflows, and modules | Lightweight meta-prompting and context-engineering system with discuss, plan, execute, verify loops | Orchestration layer for software delivery, with a daemon-backed mission harness, staged workflow execution, persistent state, and live operator supervision |
-| Main unit of work | Spec artifacts and tasks inside the current agent environment | Workflows driven by domain-specific agents and modules | Milestones, phases, plans, summaries, and verification files under `.planning/` | Missions with stage folders, artifacts, tasks, sessions, and mission-local runtime state |
-| Planning shape | Explicit spec-first flow with strong artifact generation | Adaptive planning depth guided by workflow and agent mix | Roadmap to phase to atomic plan flow optimized for fresh execution windows | PRD to SPEC to implementation to audit to delivery, with explicit gates and artifacts |
-| Human control model | Human drives commands from inside the agent session | Human steers agent specialists and facilitated workflows | Human approves roadmap, verifies work, and can drive phase commands | Human supervises through the Tower and daemon APIs with pause, resume, relaunch, interrupt, and panic controls |
-| Context strategy | Rich specs, plans, tasks, and organizational principles guide the agent | Guided workflows and role specialization shape what context is emphasized | Explicit context engineering: fresh context per plan, persistent planning files, context size discipline | Bounded mission artifacts, task-scoped execution, isolated mission workspaces, and persisted reducer state instead of relying on chat history |
-| Persistent state outside chat | Project artifacts and generated command/templates | Project docs, module assets, and workflow outputs | Strong file-based state in `.planning/` plus summaries, handoffs, threads, and roadmap artifacts | Strong file and runtime state across `.mission/`, stage artifacts, task/session records, and `mission.json` |
-| Execution isolation | Depends on the agent environment and chosen extensions/presets | Depends on the host agent and selected modules | Fresh subagent contexts and optional worktree isolation | Mission-local workspaces and worktrees, separated from the operator's active checkout |
-| Verification model | Core and optional commands plus extensions can add analysis, checklist, review, and verification passes | Guided workflow quality depends on module and agent flow selection | Built-in plan checking, verifier passes, UAT flow, and debugger loops | Explicit verification tasks in implementation plus dedicated `VERIFY.md`, then audit and delivery stages |
-| Recovery after interruption | Resume by returning to the spec artifacts and command flow | Resume by re-entering the guided workflow with project artifacts | Resume from `.planning/` state, summaries, handoffs, and phase records | Resume from persisted mission state and live Tower projections without reconstructing the whole workflow from chat memory |
-| Runtime and agent openness | Very broad agent support plus generic bring-your-own-agent path | Works with assistants that support project context or custom prompts | Supports multiple runtimes and model profiles, but the workflow semantics are strongly shaped by the GSD command environment | Architecture separates workflow policy from runtime selection; the first shipped agent path is Copilot, with `copilot-cli` and `copilot-sdk` in the codebase today, and Claude Code, Gemini CLI, Codex, and others as planned follow-on runtimes |
-| Brownfield posture | Supports existing repositories and has brownfield walkthroughs | Designed to scale from bug fixes to larger systems | Strong brownfield story through codebase mapping before project planning | Repository adoption is first-class, and missions can start from a new brief or an existing GitHub issue |
-| Control surface | Agent commands, templates, extensions, and presets | Agent commands, help skill, modules, and workflow docs | Agent commands, settings, and planning artifacts | CLI, daemon APIs, mission state, and the Mission Control Tower |
-| Best fit | Teams standardizing spec-first AI work inside existing agent tooling | Teams that like guided role specialization and methodology packs | Builders who want faster execution with explicit context-rot defenses inside the agent loop | Teams that need auditable, operator-controlled AI delivery around real repositories |
+| **Model** | Spec-driven toolkit | Agile framework with roles | Context-engineering system | Orchestration layer with daemon |
+| **Work Unit** | Spec artifacts & tasks | Agent workflows & modules | Plans & phases in `.planning` | Missions, stages & bounded state |
+| **Planning** | Spec-first & artifacts | Adaptive depth via modules | Roadmap to atomic plans | PRD → SPEC → Impl. → Audit |
+| **Control** | Commands inside agent | Steers workflows & agents | Approves phases & tasks | Supervises via UI & daemon APIs |
+| **Context** | Specs & org principles | Guided by role & modules | High-churn context defenses | Bounded artifacts & reducer state |
+| **Persistence** | Specs & commands | Docs & workflow outputs | File-based `.planning` state | Strong `.mission/` runtime state |
+| **Isolation** | Relies on host agent | Relies on host agent | Fresh contexts & worktrees | Strict mission-local workspaces |
+| **Verification**| Extensions & commands | Guided by module selection | Built-in checks & verifiers | Explicit gates & `VERIFY.md` |
+| **Recovery** | Read specs & resume | Re-enter guided workflows | Resume from phase handoffs | Hot reload from live projection |
+| **Runtimes** | Broad & bring-your-own | Assistants supporting context | Any model via GSD prompts | Engine-agnostic (Copilot etc) |
+| **Brownfield**| Supported natively | Scales up from bug fixes | Strong codebase mapping | Natively from GitHub issues |
+| **Surface** | Commands & presets | Commands & modules | Commands & settings | CLI, APIs & Control Tower |
+| **Best fit** | Inside existing tools | Guided role specialization | Fast prompt-driven execution | Auditable, repo-backed delivery |
 
 </div>
+
+### Detailed Differences
+
+**Primary Operating Model**
+- **Spec Kit** is a spec-driven development toolkit relying on a core command flow (constitution, specify, plan, tasks, implement).
+- **BMAD** is an AI-driven agile framework structured around specialized roles and guided workflow modules.
+- **GSD** acts as a lightweight meta-prompting and context-engineering system leveraging explicit discuss, plan, execute, and verify loops.
+- **Mission** serves as a continuous orchestration layer. It runs a daemon-backed harness that separates workflow state from active operator supervision.
+
+**Context Strategy & Isolation**
+- **Spec Kit & BMAD** largely shape context by relying on rich artifacts, custom commands, and role instructions embedded directly into the active host agent.
+- **GSD** introduces aggressive context-rot defenses by ensuring fresh sub-agent execution windows and explicit worktree isolation.
+- **Mission** keeps execution tightly constrained within bounded stage artifacts, isolated task workspaces, and persisted daemon states—meaning long-running jobs do not pollute the operator's checkout or rely on chat history.
+
+**Human Control Model & Recovery**
+- **Spec Kit, BMAD, and GSD** heavily rely on chat-based interactions where the human steers or approves progress directly from inside the agent session. Interrupted tasks are recovered by re-entering the prompt flow.
+- **Mission** places the human in the "Control Tower". You supervise the lifecycle via out-of-band daemon APIs with explicit pause, resume, interrupt, and panic controls. An interrupted process hot-reloads instantly from its persisted `.mission` state.
 
 ## Why Mission Exists If These Tools Already Exist
 
