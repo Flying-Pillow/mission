@@ -19,8 +19,18 @@
   padding-bottom: 0.5rem;
   display: flex;
   align-items: center;
+  gap: 0.65rem;
   overflow: hidden;
   box-sizing: border-box;
+
+  &::after {
+    content: "Mission";
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #412548;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
 }
 
 .site-logo {
@@ -42,14 +52,20 @@
 .site-nav .nav-list .nav-list-item > .nav-list-link,
 .site-nav .nav-list .nav-list-item .nav-list-link {
   border-radius: 0.8rem;
+  margin-bottom: 0.15rem;
 }
 
 .site-nav .nav-list .nav-list-item > .nav-list-link:hover,
-.site-nav .nav-list .nav-list-item .nav-list-link:hover,
+.site-nav .nav-list .nav-list-item .nav-list-link:hover {
+  background: rgba(209, 14, 240, 0.06);
+  color: #17081a;
+}
+
 .site-nav .nav-list .nav-list-item > .nav-list-link.active,
 .site-nav .nav-list .nav-list-item .nav-list-link.active {
-  background: rgba(209, 14, 240, 0.12);
+  background: rgba(209, 14, 240, 0.15);
   color: #17081a;
+  font-weight: 600;
 }
 
 .main-header {
@@ -62,9 +78,9 @@
   display: grid;
   grid-template-columns: minmax(16rem, 1fr) auto auto;
   align-items: center;
-  padding-top: 0.65rem;
-  padding-bottom: 0.65rem;
-  height: 4.5rem;
+  padding: 0.65rem 1.5rem;
+  height: 4.5rem !important;
+  box-sizing: border-box;
 }
 
 .search {
@@ -612,8 +628,8 @@
     flex-wrap: nowrap;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.8rem 1rem;
-    height: 4.5rem;
+    padding: 0.8rem 1.5rem;
+    height: 4.5rem !important;
     box-sizing: border-box;
   }
 
@@ -654,8 +670,8 @@
     flex-wrap: nowrap;
     align-items: center;
     gap: 0.75rem;
-    height: 4.5rem;
-    padding: 0.7rem 1rem;
+    height: 4.5rem !important;
+    padding: 0.7rem 1.5rem;
     box-sizing: border-box;
   }
 
