@@ -255,7 +255,7 @@ export class Daemon {
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {}),
 			gateId: params.gateId,
 			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {}),
-			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
+			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {})
 		});
 		this.broadcastAirportState(snapshot);
 		return snapshot;
@@ -271,6 +271,7 @@ export class Daemon {
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
 			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
 			...(params.repositoryId?.trim() ? { repositoryId: params.repositoryId.trim() } : {}),
+			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);

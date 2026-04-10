@@ -510,7 +510,14 @@ describe('Daemon', () => {
 
 					expect(reconnected.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.commandContext).toEqual({});
+					expect(reconnected.airportProjections.dashboard.surfaceMode).toBe('mission');
+					expect(reconnected.airportProjections.dashboard.commandContext.targetKind).toBeDefined();
+					expect(reconnected.airportProjections.dashboard.commandContext.targetLabel).toBeTruthy();
+					expect(reconnected.airportProjections.dashboard.commandContext.targetKind).toBe(
+						reconnected.airportProjections.dashboard.selectedTaskId
+							? 'task'
+							: 'mission'
+					);
 				} finally {
 					firstClient.dispose();
 					secondClient.dispose();
@@ -547,6 +554,9 @@ describe('Daemon', () => {
 					expect(reset.state.domain.selection.missionId).toBeUndefined();
 					expect(reset.airportProjections.dashboard.surfaceMode).toBe('repository');
 					expect(reset.airportProjections.dashboard.centerRoute).toBe('repository-flow');
+					expect(reset.airportProjections.dashboard.commandContext).toMatchObject({
+						targetKind: 'repository'
+					});
 				} finally {
 					client.dispose();
 					await daemon.close();

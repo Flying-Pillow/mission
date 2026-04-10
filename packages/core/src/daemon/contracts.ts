@@ -454,13 +454,14 @@ export type AirportClientConnect = {
 	gateId: 'dashboard' | 'editor' | 'agentSession';
 	label?: string;
 	panelProcessId?: string;
-	terminalSessionName?: string;
+	paneId?: number;
 };
 
 export type AirportClientObserve = {
 	focusedGateId?: 'dashboard' | 'editor' | 'agentSession';
 	intentGateId?: 'dashboard' | 'editor' | 'agentSession';
 	repositoryId?: string;
+	paneId?: number;
 };
 
 export type AirportGateBind = {

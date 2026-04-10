@@ -19,24 +19,37 @@ import {
 import { resolveObservedGateIdFromSubstrate } from './effects.js';
 import { createDefaultTerminalManagerSubstrateState } from './terminal-manager.js';
 
+type RepositoryScopedAirportControlOptions = {
+	airportId: string;
+	repositoryId: string;
+	repositoryRootPath?: string;
+	sessionId?: string;
+	terminalSessionName: string;
+	persistedIntent?: PersistedAirportIntent;
+	initialSubstrateState?: AirportSubstrateState;
+};
+
 export class AirportControl {
 	private state: AirportState;
 
-	public constructor(
-		options: {
-			airportId?: string;
-			repositoryId?: string;
-			repositoryRootPath?: string;
-			sessionId?: string;
-			persistedIntent?: PersistedAirportIntent;
-			initialSubstrateState?: AirportSubstrateState;
-		} = {}
-	) {
+	public constructor(options: RepositoryScopedAirportControlOptions) {
 		const persistedIntent = normalizePersistedAirportIntent(options.persistedIntent);
-		const repositoryId = options.repositoryId?.trim();
+		const airportId = options.airportId.trim();
+		const repositoryId = options.repositoryId.trim();
+		const terminalSessionName = options.terminalSessionName.trim();
+		if (!airportId) {
+			throw new Error('Airport control requires a repository-scoped airport id.');
+		}
+		if (!repositoryId) {
+			throw new Error('Airport control requires a repository id.');
+		}
+		if (!terminalSessionName) {
+			throw new Error('Airport control requires a repository-scoped terminal session name.');
+		}
+
 		this.state = {
-			airportId: options.airportId?.trim() || 'mission-airport:unscoped',
-			...(repositoryId ? { repositoryId } : {}),
+			airportId,
+			repositoryId,
 			...(options.repositoryRootPath?.trim() ? { repositoryRootPath: options.repositoryRootPath.trim() } : {}),
 			...(options.sessionId?.trim() ? { sessionId: options.sessionId.trim() } : {}),
 			gates: {
@@ -47,7 +60,7 @@ export class AirportControl {
 			clients: {},
 			substrate: options.initialSubstrateState
 				? structuredClone(options.initialSubstrateState)
-				: createDefaultTerminalManagerSubstrateState()
+				: createDefaultTerminalManagerSubstrateState({ sessionName: terminalSessionName })
 		};
 	}
 
@@ -102,32 +115,16 @@ export class AirportControl {
 		return derivePersistedAirportIntent(this.state);
 	}
 
-	public setTerminalManagerSessionName(sessionName: string): AirportStatus {
-		const normalizedSessionName = sessionName.trim();
-		if (!normalizedSessionName || normalizedSessionName === this.state.substrate.sessionName) {
-			return this.getStatus();
-		}
-
-		this.state = {
-			...this.state,
-			substrate: {
-				...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
-				layoutIntent: this.state.substrate.layoutIntent
-			}
-		};
-		return this.getStatus();
-	}
-
 	public connectClient(params: ConnectAirportClientParams): AirportStatus {
-		if (params.terminalSessionName?.trim()) {
-			this.setTerminalManagerSessionName(params.terminalSessionName);
-		}
 		const now = new Date().toISOString();
 		const existing = this.state.clients[params.clientId];
 		const clients = releaseClaimedGate(this.state.clients, params.clientId, params.gateId);
+		const substrate = params.paneId !== undefined
+			? assignSubstratePaneToGate(this.state.substrate, params.gateId, params.paneId)
+			: this.state.substrate;
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, this.state.focus.intentGateId, this.state.substrate),
+			focus: deriveFocusState(clients, this.state.focus.intentGateId, substrate),
 			clients: {
 				...clients,
 				[params.clientId]: {
@@ -149,7 +146,8 @@ export class AirportControl {
 							? { panelProcessId: existing.panelProcessId }
 							: {})
 				}
-			}
+			},
+			substrate
 		};
 		return this.getStatus();
 	}
@@ -184,6 +182,9 @@ export class AirportControl {
 		if (!existing) {
 			throw new Error(`Airport client '${params.clientId}' is not registered.`);
 		}
+		const substrate = params.paneId !== undefined && existing.claimedGateId
+			? assignSubstratePaneToGate(this.state.substrate, existing.claimedGateId, params.paneId)
+			: this.state.substrate;
 		const clients = {
 			...this.state.clients,
 			[params.clientId]: {
@@ -196,8 +197,9 @@ export class AirportControl {
 
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId, this.state.substrate),
-			clients
+			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId, substrate),
+			clients,
+			substrate
 		};
 		return this.getStatus();
 	}
@@ -272,5 +274,41 @@ function deriveFocusState(
 		...(intentGateId ? { intentGateId } : {}),
 		...(observedGateId ? { observedGateId } : {}),
 		...(Object.keys(observedGateIdByClientId).length > 0 ? { observedGateIdByClientId } : {})
+	};
+}
+
+function assignSubstratePaneToGate(
+	substrate: AirportSubstrateState,
+	gateId: GateId,
+	paneId: number
+): AirportSubstrateState {
+	if (!Number.isInteger(paneId) || paneId < 0) {
+		return substrate;
+	}
+
+	const nextPanesByGate = Object.fromEntries(
+		(Object.entries(substrate.panesByGate) as Array<[GateId, AirportSubstrateState['panesByGate'][GateId]]>).map(
+			([candidateGateId, pane]) => {
+				if (!pane || pane.paneId !== paneId || candidateGateId === gateId) {
+					return [candidateGateId, pane];
+				}
+
+				return [candidateGateId, { ...pane, exists: false }];
+			}
+		)
+	) as AirportSubstrateState['panesByGate'];
+	const currentPane = nextPanesByGate[gateId];
+
+	return {
+		...substrate,
+		panesByGate: {
+			...nextPanesByGate,
+			[gateId]: {
+				paneId,
+				expected: currentPane?.expected ?? true,
+				exists: substrate.attached,
+				...(currentPane?.title ? { title: currentPane.title } : {})
+			}
+		}
 	};
 }

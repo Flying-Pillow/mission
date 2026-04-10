@@ -5,7 +5,7 @@ import type { AirportPaneState, AirportState, AirportSubstrateState, GateId } fr
 
 const execFileAsync = promisify(execFile);
 
-const GATE_PANE_TITLES: Record<GateId, string> = {
+const GATE_DISPLAY_TITLES: Record<GateId, string> = {
 	dashboard: 'MISSION',
 	editor: 'EDITOR',
 	agentSession: 'AGENT SESSION'
@@ -34,11 +34,17 @@ export interface AirportSubstrateController {
 	applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState>;
 }
 
+export type TerminalManagerSubstrateOptions = {
+	sessionName: string;
+	executor?: TerminalManagerExecutor;
+	terminalBinary?: string;
+};
+
 export class TerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
 	private readonly executor: TerminalManagerExecutor;
 
-	public constructor(options: { sessionName?: string; executor?: TerminalManagerExecutor; terminalBinary?: string } = {}) {
+	public constructor(options: TerminalManagerSubstrateOptions) {
 		this.state = createDefaultTerminalManagerSubstrateState(options);
 		const terminalBinary = options.terminalBinary?.trim() || process.env['MISSION_TERMINAL_BINARY']?.trim() || 'zellij';
 		this.executor = options.executor ?? (async (args) => {
@@ -57,12 +63,12 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return structuredClone(this.state);
 	}
 
-	public async observe(_state: AirportState): Promise<AirportSubstrateState> {
+	public async observe(state: AirportState): Promise<AirportSubstrateState> {
 		const now = new Date().toISOString();
 		const panes = await this.listPanes().catch(() => undefined);
 		this.state = panes
-			? buildObservedState(this.state, panes, now)
-			: buildDetachedState(this.state, now);
+			? buildObservedState(state.substrate, panes, now)
+			: buildDetachedState(state.substrate, now);
 		return this.getState();
 	}
 
@@ -102,7 +108,7 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 export class InMemoryTerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
 
-	public constructor(options: { sessionName?: string } = {}) {
+	public constructor(options: { sessionName: string }) {
 		this.state = createDefaultTerminalManagerSubstrateState(options);
 	}
 
@@ -115,7 +121,6 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 		this.state = {
 			...this.state,
 			attached: true,
-			lastAppliedAt: now,
 			lastObservedAt: now
 		};
 		return Promise.resolve(this.getState());
@@ -132,10 +137,16 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 	}
 }
 
-export function createDefaultTerminalManagerSubstrateState(options: { sessionName?: string } = {}): AirportSubstrateState {
+
+export function createDefaultTerminalManagerSubstrateState(options: { sessionName: string }): AirportSubstrateState {
+	const sessionName = options.sessionName.trim();
+	if (!sessionName) {
+		throw new Error('Airport substrate requires a repository-scoped terminal session name.');
+	}
+
 	return {
 		kind: 'terminal-manager',
-		sessionName: options.sessionName?.trim() || 'mission-control',
+		sessionName,
 		layoutIntent: 'mission-control-v1',
 		attached: false,
 		panesByGate: {}
@@ -149,23 +160,25 @@ function buildObservedState(
 ): AirportSubstrateState {
 	const focusedPaneId = panes.find((pane) => pane.is_focused)?.id;
 	const panesByGate = Object.fromEntries(
-		(Object.keys(GATE_PANE_TITLES) as GateId[]).map((gateId) => {
-			const hostTitle = GATE_PANE_TITLES[gateId];
-			const pane = panes.find((candidate) => candidate.title === hostTitle);
+		(Object.keys(GATE_DISPLAY_TITLES) as GateId[]).map((gateId) => {
+			const currentPane = currentState.panesByGate[gateId];
+			const pane = currentPane?.paneId !== undefined && currentPane.paneId >= 0
+				? panes.find((candidate) => candidate.id === currentPane.paneId)
+				: undefined;
 			return [
 				gateId,
 				pane
 					? {
 						paneId: pane.id,
-						expected: true,
+						expected: currentPane?.expected ?? true,
 						exists: true,
 						title: pane.title
 					}
 					: {
-						paneId: -1,
-						expected: true,
+						paneId: currentPane?.paneId ?? -1,
+						expected: currentPane?.expected ?? true,
 						exists: false,
-						title: hostTitle
+						title: currentPane?.title ?? GATE_DISPLAY_TITLES[gateId]
 					}
 			] as const;
 		})
@@ -175,7 +188,7 @@ function buildObservedState(
 		...currentState,
 		attached: true,
 		panesByGate,
-		lastAppliedAt: now,
+		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now,
 		...(focusedPaneId !== undefined
 			? { observedFocusedPaneId: focusedPaneId }
@@ -190,13 +203,13 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 		layoutIntent: currentState.layoutIntent,
 		attached: false,
 		panesByGate: Object.fromEntries(
-			(Object.keys(GATE_PANE_TITLES) as GateId[]).map((gateId) => [
+			(Object.keys(GATE_DISPLAY_TITLES) as GateId[]).map((gateId) => [
 				gateId,
 				{
-					paneId: -1,
-					expected: true,
+					paneId: currentState.panesByGate[gateId]?.paneId ?? -1,
+					expected: currentState.panesByGate[gateId]?.expected ?? true,
 					exists: false,
-					title: GATE_PANE_TITLES[gateId]
+					title: currentState.panesByGate[gateId]?.title ?? GATE_DISPLAY_TITLES[gateId]
 				}
 			])
 		) as Partial<Record<GateId, AirportPaneState>>,

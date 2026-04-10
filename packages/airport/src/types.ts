@@ -170,7 +170,7 @@ export interface ConnectAirportClientParams {
 	surfacePath?: string;
 	gateId: GateId;
 	panelProcessId?: string;
-	terminalSessionName?: string;
+	paneId?: number;
 }
 
 export interface ObserveAirportClientParams {
@@ -178,6 +178,7 @@ export interface ObserveAirportClientParams {
 	focusedGateId?: GateId;
 	intentGateId?: GateId;
 	surfacePath?: string;
+	paneId?: number;
 }
 
 export interface BindAirportGateParams {
@@ -223,14 +224,10 @@ export function createEmptyGateBinding(): GateBinding {
 	return { targetKind: 'empty' };
 }
 
-export function createDefaultGateBindings(repositoryId?: string): Record<GateId, GateBinding> {
+export function createDefaultGateBindings(repositoryId: string): Record<GateId, GateBinding> {
 	return {
-		dashboard: repositoryId
-			? { targetKind: 'repository', targetId: repositoryId, mode: 'control' }
-			: { targetKind: 'repository', mode: 'control' },
-		editor: repositoryId
-			? { targetKind: 'repository', targetId: repositoryId, mode: 'view' }
-			: createEmptyGateBinding(),
+		dashboard: { targetKind: 'repository', targetId: repositoryId, mode: 'control' },
+		editor: { targetKind: 'repository', targetId: repositoryId, mode: 'view' },
 		agentSession: createEmptyGateBinding()
 	};
 }

@@ -197,6 +197,7 @@ export class RepositoryAirportRegistry {
 			airportId: identity.airportId,
 			repositoryId,
 			repositoryRootPath,
+			terminalSessionName: identity.sessionName,
 			...(persistedIntent ? { persistedIntent } : {}),
 			initialSubstrateState: substrateController.getState()
 		});

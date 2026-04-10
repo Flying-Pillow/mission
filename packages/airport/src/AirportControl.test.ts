@@ -7,12 +7,14 @@ describe('AirportControl', () => {
 		const control = new AirportControl({
 			airportId: 'airport:test',
 			repositoryId: 'repo',
-			repositoryRootPath: '/tmp/repo'
+			repositoryRootPath: '/tmp/repo',
+			terminalSessionName: 'mission-control-repo-test'
 		});
 
 		control.connectClient({
 			clientId: 'dashboard',
-			gateId: 'dashboard'
+			gateId: 'dashboard',
+			paneId: 1
 		});
 
 		control.observeClient({
@@ -27,7 +29,7 @@ describe('AirportControl', () => {
 			attached: true,
 			observedFocusedPaneId: 2,
 			panesByGate: {
-				dashboard: { paneId: 1, expected: true, exists: true, title: 'MISSION' },
+				dashboard: { paneId: 1, expected: true, exists: true, title: 'mission-dashboard' },
 				editor: { paneId: 2, expected: true, exists: true, title: 'EDITOR' },
 				agentSession: { paneId: 3, expected: true, exists: true, title: 'AGENT SESSION' }
 			}

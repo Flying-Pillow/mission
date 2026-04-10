@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { DaemonApi, readMissionUserConfig } from '@flying-pillow/mission-core';
+import { createAirportPanelConnectParams } from '../airport/createAirportPanelConnectParams.js';
 import { connectSurfaceDaemon, resolveSurfaceDaemonLaunchMode } from '../daemon/connectSurfaceDaemon.js';
 import type { CommandContext } from './types.js';
 
@@ -96,14 +97,9 @@ export async function runAirportLayoutAgentSessionPane(_context: CommandContext)
 		launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
 	});
 	const api = new DaemonApi(client);
-	let currentSnapshot = await api.airport.connectPanel({
-		gateId: 'agentSession',
-		label: 'mission-agent-session',
-		panelProcessId: String(process.pid),
-		...(process.env['MISSION_TERMINAL_SESSION']?.trim()
-			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
-			: {})
-	});
+	let currentSnapshot = await api.airport.connectPanel(
+		createAirportPanelConnectParams('agentSession', 'mission-agent-session')
+	);
 	let currentSession: AirportLayoutSessionRecord | undefined;
 	let currentConsoleState: AirportLayoutConsoleState = null;
 	let refreshNonce = 0;
@@ -260,14 +256,9 @@ export async function runAirportLayoutEditorPane(_context: CommandContext): Prom
 		});
 	};
 
-	let snapshotFromCurrentState = await api.airport.connectPanel({
-		gateId: 'editor',
-		label: 'mission-editor',
-		panelProcessId: String(process.pid),
-		...(process.env['MISSION_TERMINAL_SESSION']?.trim()
-			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
-			: {})
-	});
+	let snapshotFromCurrentState = await api.airport.connectPanel(
+		createAirportPanelConnectParams('editor', 'mission-editor')
+	);
 	await launchEditor(snapshotFromCurrentState);
 
 	const subscription = client.onDidEvent((event) => {

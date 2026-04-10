@@ -11,6 +11,7 @@ import {
 	connectSurfaceDaemon,
 	resolveSurfaceDaemonLaunchMode
 } from '../daemon/connectSurfaceDaemon.js';
+import { createAirportPanelConnectParams } from '../airport/createAirportPanelConnectParams.js';
 import { applyTowerTheme, type TowerThemeName } from './components/towerTheme.js';
 import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
 
@@ -64,6 +65,7 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 
 	const workspaceContext = resolveTowerWorkspaceContext(context);
 	const selector = workspaceContext.selector;
+	const gateId = resolveInjectedGateId();
 	const configuredTheme = readMissionDaemonSettings(context.controlRoot)?.towerTheme;
 	const initialTheme: TowerThemeName = configuredTheme === 'sand' || configuredTheme === 'mono' || configuredTheme === 'paper' || configuredTheme === 'ocean'
 		? configuredTheme
@@ -75,14 +77,9 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 			launchMode
 		});
 		const api = new DaemonApi(client);
-		const snapshot = await api.airport.connectPanel({
-			gateId: resolveInjectedGateId(),
-			label: `mission-${resolveInjectedGateId()}`,
-			panelProcessId: String(process.pid),
-			...(process.env['MISSION_TERMINAL_SESSION']?.trim()
-				? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION']?.trim() }
-				: {})
-		});
+		const snapshot = await api.airport.connectPanel(
+			createAirportPanelConnectParams(gateId, `mission-${gateId}`)
+		);
 		const discoveryStatus = await api.control.getStatus();
 		const resolvedSelector = selectorFromConnection(discoveryStatus, snapshot, nextSelector);
 		const status = resolvedSelector.missionId

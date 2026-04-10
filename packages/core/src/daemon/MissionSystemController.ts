@@ -42,6 +42,7 @@ type MissionSystemCommand =
 			intentGateId?: GateId;
 			repositoryId?: string;
 			surfacePath?: string;
+			paneId?: number;
 		};
 	}
 	| {
@@ -94,7 +95,7 @@ export class MissionSystemController {
 		surfacePath?: string;
 		gateId: GateId;
 		panelProcessId?: string;
-		terminalSessionName?: string;
+		paneId?: number;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.connected', params });
 	}
@@ -112,6 +113,7 @@ export class MissionSystemController {
 		intentGateId?: GateId;
 		repositoryId?: string;
 		surfacePath?: string;
+		paneId?: number;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.observed', params });
 	}
@@ -205,6 +207,7 @@ export class MissionSystemController {
 			clientId: params.clientId,
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
 			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
+			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
 		const airportRecord = this.airportRegistry.getActiveAirport();

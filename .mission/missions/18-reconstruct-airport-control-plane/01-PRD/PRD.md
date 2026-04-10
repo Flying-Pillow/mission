@@ -2,7 +2,7 @@
 title: "PRD: #18 - Reconstruct airport control plane"
 artifact: "prd"
 createdAt: "2026-04-10T21:32:50.000Z"
-updatedAt: "2026-04-10T21:33:00.000Z"
+updatedAt: "2026-04-10T21:49:40.000Z"
 stage: "prd"
 ---
 

@@ -747,6 +747,12 @@ Examples:
 
 The panel must present that injected identity during daemon connection handshake.
 
+If the host substrate exposes the current pane id to the panel process, the panel should also report that observed pane id during daemon connection or observation.
+
+For terminal-manager based panels, this may be sourced from a host-injected environment variable such as `$ZELLIJ_PANE_ID`.
+
+That pane id is an observed substrate fact, not a canonical application identity.
+
 This rule eliminates the chicken-and-egg problem where a dumb panel process would otherwise need to guess which gate it represents.
 
 If a panel crashes and restarts, it must be able to reconnect and immediately reconstruct its correct state from projections alone.
