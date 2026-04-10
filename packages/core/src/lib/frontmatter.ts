@@ -1,6 +1,7 @@
 export type FrontmatterScalar = string | number | boolean;
+export type FrontmatterObject = Record<string, FrontmatterScalar>;
 
-export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[];
+export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[] | FrontmatterObject;
 
 export type ParsedFrontmatterDocument = {
 	attributes: Record<string, FrontmatterValue>;
@@ -71,6 +72,10 @@ function parseFrontmatterValue(rawValue: string): FrontmatterValue {
 		return parseFrontmatterArray(rawValue);
 	}
 
+	if (rawValue.startsWith('{') && rawValue.endsWith('}')) {
+		return parseFrontmatterObject(rawValue);
+	}
+
 	if (/^-?\d+$/.test(rawValue)) {
 		return Number(rawValue);
 	}
@@ -94,6 +99,10 @@ function renderFrontmatterValue(value: FrontmatterValue): string {
 		return JSON.stringify(value);
 	}
 
+	if (typeof value === 'object') {
+		return JSON.stringify(value);
+	}
+
 	if (typeof value === 'number' || typeof value === 'boolean') {
 		return String(value);
 	}
@@ -113,5 +122,21 @@ function parseFrontmatterArray(rawValue: string): FrontmatterScalar[] {
 			values.push(entry);
 		}
 	}
+	return values;
+}
+
+function parseFrontmatterObject(rawValue: string): FrontmatterObject {
+	const parsed = JSON.parse(rawValue) as unknown;
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return {};
+	}
+
+	const values: FrontmatterObject = {};
+	for (const [key, entry] of Object.entries(parsed)) {
+		if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
+			values[key] = entry;
+		}
+	}
+
 	return values;
 }

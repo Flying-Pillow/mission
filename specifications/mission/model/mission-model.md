@@ -28,6 +28,10 @@ Mission's semantic model is expressed through first-class domain contexts and wo
 - `AgentSessionContext`: runtime-backed semantic session record
 - `Stage`: structural workflow grouping and derived projection only
 
+Operator-facing mission-control views such as stage rails and mission tree nodes are daemon-owned projections.
+
+They are derived from semantic mission state and workflow runtime, but they are not themselves part of the semantic domain context graph.
+
 The authoritative top-level application state is not a daemon `Mission` aggregate.
 
 The daemon-wide authority is the composite `MissionSystemState` described by the airport control plane specification.
@@ -208,12 +212,12 @@ Fields:
 
 Defined in `packages/core/src/types.ts`.
 
-Represents the derived state of one stage directory.
+Represents the derived state of one stage folder.
 
 Fields:
 
 - `stage`
-- `directoryName`
+- `folderName`
 - `status`
 - `taskCount`
 - `completedTaskCount`

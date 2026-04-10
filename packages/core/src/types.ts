@@ -213,6 +213,7 @@ export type MissionDescriptor = {
 	missionDir: string;
 	branchRef: string;
 	createdAt: string;
+	deliveredAt?: string;
 };
 
 export type MissionRecord = {
@@ -223,6 +224,7 @@ export type MissionRecord = {
 	branchRef: string;
 	createdAt: string;
 	stage: MissionStageId;
+	deliveredAt?: string;
 	agentSessions: MissionAgentSessionRecord[];
 };
 
@@ -337,7 +339,12 @@ export type MissionContext = {
 	taskIds: string[];
 	artifactIds: string[];
 	sessionIds: string[];
-	tower?: MissionTowerProjection;
+};
+
+export type MissionOperatorProjectionContext = {
+	missionId: string;
+	stageRail: MissionTowerStageRailItem[];
+	treeNodes: MissionTowerTreeNode[];
 };
 
 export type TaskContext = {
@@ -385,6 +392,7 @@ export type ContextGraph = {
 export type MissionSystemState = {
 	version: number;
 	domain: ContextGraph;
+	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
 	airport: AirportState;
 	airports: {
 		activeRepositoryId?: string;

@@ -41,10 +41,29 @@ Branch: mission/11-reconstruct-repository-adoption-and-mission-doss
 - The issue-backed intake anchor is part of the product behavior being reconstructed. The retrospective mission should explain not only where files live, but why that repository-bound model exists and what operator flow it enables.
 - The specification should stay aligned with the PRD outcome and success criteria. If detailed session work narrows onto one design concern, the SPEC must still restate the overall mission boundary so downstream planning does not mistake a local correction for the whole product objective.
 
+## Specification Preservation Boundary
+
+- The primary source specification preserved by this mission is `specifications/mission/model/repository-layout-and-adoption.md`.
+- This mission also preserves the repository-adoption plan in `specifications/plans/repository-adoption-and-layout-plan.md` as planning context for the same architectural outcome.
+- Secondary preservation is allowed only for architecture slices that are required to express the repository-adoption outcome coherently in the current system.
+- The allowed secondary preservation slices are:
+	- from `specifications/mission/model/mission-model.md`: the parts that define the mission dossier root, root-level `BRIEF.md`, root-level `mission.json`, root-level stage folders, and the distinction between tracked mission history and machine-local runtime state
+	- from `specifications/mission/configuration/repository-workflow-settings.md`: the parts that explain why `.mission/settings.json` may first be created inside the newly prepared mission worktree during first-mission bootstrap
+- This mission must not absorb the primary preservation responsibility for workflow-engine semantics, the general core object model, provider-neutral runtime contracts, or airport control-plane authority.
+- If those documents are referenced here, they are references only. Their normative preservation belongs to later replay missions according to the retrospective specification coverage map.
+
+## Coverage Verification
+
+- The replayed `SPEC.md` for mission `11` should preserve the repository-adoption architecture completely enough that the source repository no longer depends on scattered pre-workflow notes to explain that decision.
+- The mission should preserve only the secondary material needed to state that architecture cleanly in current-system terms.
+- Cross-references to later replay missions must remain explicit where a source document spans multiple architecture areas.
+- Downstream planning and implementation tasks for this mission must stay inside that preservation boundary.
+
 ## File Matrix
 
 - `specifications/mission/model/repository-layout-and-adoption.md`: define `.mission/` as the tracked repository namespace and define the flat mission dossier layout.
 - `specifications/mission/model/mission-model.md`: align the semantic model so mission root, `BRIEF.md`, `mission.json`, and stage folders are modeled directly at the dossier root.
+- `specifications/mission/configuration/repository-workflow-settings.md`: preserve only the first-mission bootstrap implication that repository workflow settings may first be materialized inside the mission worktree.
 - `specifications/plans/repository-adoption-and-layout-plan.md`: record the hard cutover, the no-compatibility rule, and the first-mission bootstrap constraints.
 - `specifications/plans/retrospective-replay-workflow.md`: record the replay rule that artifacts must stay aligned with the mission intake anchor and not drift into session-local problem solving that obscures the original mission objective.
 - `packages/core/src/lib/FilesystemAdapter.ts`: remove nested dossier path semantics and make artifact, task, and runtime reads and writes resolve from the flat mission root.

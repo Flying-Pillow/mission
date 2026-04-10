@@ -60,6 +60,7 @@ function applyEventMutation(
     switch (event.type) {
         case 'mission.created':
             state.lifecycle = 'ready';
+            state.activeStageId = configuration.workflow.stageOrder[0];
             state.pause = { paused: false };
             state.panic = {
                 active: false,
@@ -74,6 +75,7 @@ function applyEventMutation(
                 state.pause = {
                     paused: true,
                     reason: 'checkpoint',
+                    targetType: 'mission',
                     requestedAt: event.occurredAt
                 };
             } else {
@@ -90,6 +92,8 @@ function applyEventMutation(
             state.pause = {
                 paused: true,
                 reason: event.reason,
+                ...(event.targetType ? { targetType: event.targetType } : {}),
+                ...(event.targetId ? { targetId: event.targetId } : {}),
                 requestedAt: event.occurredAt
             };
             return;
@@ -98,6 +102,7 @@ function applyEventMutation(
             state.pause = {
                 paused: true,
                 reason: 'panic',
+                targetType: 'mission',
                 requestedAt: event.occurredAt
             };
             state.panic = {
@@ -330,6 +335,7 @@ function normalizeState(
     const requests: MissionWorkflowRequest[] = [];
     const tasksById = new Map(nextState.tasks.map((task) => [task.taskId, task]));
     const eligibleStageId = resolveEligibleStageId(nextState, configuration);
+    nextState.activeStageId = eligibleStageId;
 
     nextState.tasks = nextState.tasks.map((task) => {
         const blockedByTaskIds = task.dependsOn.filter((dependencyTaskId) => tasksById.get(dependencyTaskId)?.lifecycle !== 'completed');
@@ -462,6 +468,8 @@ function enforceLifecycleInvariants(
             state.pause = {
                 paused: true,
                 reason: state.pause.reason ?? 'human-requested',
+                ...(state.pause.targetType ? { targetType: state.pause.targetType } : {}),
+                ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
                 requestedAt: state.pause.requestedAt ?? occurredAt
             };
             state.panic = {
@@ -474,6 +482,8 @@ function enforceLifecycleInvariants(
             state.pause = {
                 paused: true,
                 reason: 'panic',
+                targetType: state.pause.targetType ?? 'mission',
+                ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
                 requestedAt: state.pause.requestedAt ?? state.panic.requestedAt ?? occurredAt
             };
             state.panic = {
@@ -518,7 +528,9 @@ function buildStageProjections(
         const runningTaskIds = stageTasks.filter((task) => task.lifecycle === 'running').map((task) => task.taskId);
         const blockedTaskIds = stageTasks.filter((task) => task.lifecycle === 'blocked').map((task) => task.taskId);
         const completedTaskIds = stageTasks.filter((task) => task.lifecycle === 'completed').map((task) => task.taskId);
-        const completed = stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed');
+        const completed =
+            (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
+            isImplicitlyCompletedEmptyFinalStage(state, stageId, stageTasks, configuration);
         const eligible = stageId === eligibleStageId || completed;
         let lifecycle: MissionStageRuntimeProjection['lifecycle'] = 'pending';
 
@@ -581,12 +593,48 @@ function resolveEligibleStageId(
 ): string | undefined {
     for (const stageId of configuration.workflow.stageOrder) {
         const stageTasks = state.tasks.filter((task) => task.stageId === stageId);
-        const completed = stageTasks.length > 0 ? stageTasks.every((task) => task.lifecycle === 'completed') : false;
+        const completed =
+            (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
+            isImplicitlyCompletedEmptyFinalStage(state, stageId, stageTasks, configuration);
         if (!completed) {
             return stageId;
         }
     }
-    return configuration.workflow.stageOrder[configuration.workflow.stageOrder.length - 1];
+    return undefined;
+}
+
+function isImplicitlyCompletedEmptyFinalStage(
+    state: MissionWorkflowRuntimeState,
+    stageId: string,
+    stageTasks: MissionTaskRuntimeState[],
+    configuration: MissionWorkflowConfigurationSnapshot
+): boolean {
+    if (stageTasks.length > 0) {
+        return false;
+    }
+
+    const finalStageId = configuration.workflow.stageOrder[configuration.workflow.stageOrder.length - 1];
+    if (stageId !== finalStageId) {
+        return false;
+    }
+
+    const stageIndex = configuration.workflow.stageOrder.indexOf(stageId);
+    const priorStagesComplete = configuration.workflow.stageOrder
+        .slice(0, stageIndex)
+        .every((priorStageId) => {
+            const priorStageTasks = state.tasks.filter((task) => task.stageId === priorStageId);
+            return priorStageTasks.length > 0 && priorStageTasks.every((task) => task.lifecycle === 'completed');
+        });
+    if (!priorStagesComplete) {
+        return false;
+    }
+
+    const generationRule = configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
+    if (!generationRule) {
+        return true;
+    }
+
+    return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0;
 }
 
 function isMissionCompleted(
@@ -642,6 +690,7 @@ function updateSessionLifecycle(
 function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowRuntimeState {
     return {
         lifecycle: state.lifecycle,
+        ...(state.activeStageId ? { activeStageId: state.activeStageId } : {}),
         pause: { ...state.pause },
         panic: { ...state.panic },
         stages: state.stages.map((stage) => ({

@@ -501,14 +501,14 @@ describe('Daemon', () => {
 						repositoryId: workspaceRoot,
 						missionId: seededMission.getRecord().id
 					});
-					expect(selectedSystem?.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
+					expect(selectedSystem?.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(selectedSystem?.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
 
 					await secondClient.connect({ surfacePath: workspaceRoot });
 					const secondApi = new DaemonApi(secondClient);
 					const reconnected = await secondApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-2' });
 
-					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
+					expect(reconnected.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
 					expect(reconnected.airportProjections.dashboard.commandContext).toEqual({});
 				} finally {

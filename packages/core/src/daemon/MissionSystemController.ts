@@ -267,6 +267,7 @@ export class MissionSystemController {
 	private buildSnapshot(): MissionSystemSnapshot {
 		const activeAirport = this.airportRegistry.getActiveAirport();
 		const domain = this.missionControl.getState();
+		const missionOperatorViews = this.missionControl.getMissionOperatorViews();
 		const airportRegistryState = Object.fromEntries(
 			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
 				repositoryId,
@@ -282,17 +283,18 @@ export class MissionSystemController {
 		const state: MissionSystemState = {
 			version: this.version,
 			domain,
+			missionOperatorViews,
 			airport: activeAirport.control.getState(),
 			airports: {
 				repositories: airportRegistryState,
 				...(activeRepositoryId ? { activeRepositoryId } : {})
 			}
 		};
-		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(domain, activeAirport.control.getState());
+		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(domain, missionOperatorViews, activeAirport.control.getState());
 		const airportRegistryProjections = Object.fromEntries(
 			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
 				repositoryId,
-				deriveSystemAirportProjections(domain, record.control.getState())
+				deriveSystemAirportProjections(domain, missionOperatorViews, record.control.getState())
 			])
 		);
 		return { state, airportProjections, airportRegistryProjections };
@@ -301,6 +303,7 @@ export class MissionSystemController {
 	private serializeSystemState(): string {
 		return JSON.stringify({
 			domain: this.missionControl.getState(),
+			missionOperatorViews: this.missionControl.getMissionOperatorViews(),
 			activeRepositoryId: this.airportRegistry.getActiveRepositoryId(),
 			airports: Object.fromEntries(
 				this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [repositoryId, record.control.getState()])

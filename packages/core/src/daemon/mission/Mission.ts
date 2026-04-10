@@ -146,6 +146,7 @@ export class Mission {
 			branchRef: this.descriptor.branchRef,
 			createdAt: this.descriptor.createdAt,
 			stage: this.lastKnownStatus?.stage ?? 'prd',
+			...(this.descriptor.deliveredAt ? { deliveredAt: this.descriptor.deliveredAt } : {}),
 			agentSessions: this.getAgentSessions()
 		};
 	}
@@ -462,7 +463,7 @@ export class Mission {
 
 	public async pauseMission(): Promise<void> {
 		await this.workflowController.applyEvent(
-			this.createWorkflowEvent('mission.paused', { reason: 'human-requested' })
+			this.createWorkflowEvent('mission.paused', { reason: 'human-requested', targetType: 'mission' })
 		);
 		await this.status();
 	}
@@ -939,6 +940,7 @@ export class Mission {
 
 	private resolveCurrentStageFromWorkflow(document: MissionRuntimeRecord): MissionStageId {
 		return ((
+			(document.runtime.activeStageId as MissionStageId | undefined) ??
 			(document.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined) ??
 			(document.configuration.workflow.stageOrder[
 				document.configuration.workflow.stageOrder.length - 1
@@ -2123,6 +2125,7 @@ function resolveEligibleStageId(input: MissionAvailableActionsInput): MissionSta
 }
 
 function resolveCurrentStageId(input: MissionAvailableActionsInput): MissionStageId | undefined {
-	return (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
+	return (input.runtime.activeStageId as MissionStageId | undefined)
+		?? (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
 		?? (input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined);
 }

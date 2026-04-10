@@ -1,4 +1,5 @@
 {
+  "missionWorkspaceRoot": "missions",
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
@@ -158,5 +159,25 @@
       }
     ]
   },
-  "agentRuntime": "copilot-cli"
+  "agentRuntime": "copilot-cli",
+  "airport": {
+    "gates": {
+      "dashboard": {
+        "targetKind": "repository",
+        "targetId": "/home/ronald/mission",
+        "mode": "control"
+      },
+      "editor": {
+        "targetKind": "repository",
+        "targetId": "/home/ronald/mission",
+        "mode": "view"
+      },
+      "agentSession": {
+        "targetKind": "empty"
+      }
+    },
+    "focus": {
+      "intentGateId": "dashboard"
+    }
+  }
 }

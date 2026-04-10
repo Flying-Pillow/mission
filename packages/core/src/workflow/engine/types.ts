@@ -72,6 +72,8 @@ export interface MissionTaskRuntimeState {
 export interface MissionPauseState {
     paused: boolean;
     reason?: MissionPauseReason;
+    targetType?: 'mission' | 'task' | 'session';
+    targetId?: string;
     requestedAt?: string;
 }
 
@@ -209,6 +211,7 @@ export interface MissionWorkflowConfigurationSnapshot {
 
 export interface MissionWorkflowRuntimeState {
     lifecycle: MissionLifecycleState;
+    activeStageId?: MissionStageId;
     pause: MissionPauseState;
     panic: MissionPanicState;
     stages: MissionStageRuntimeProjection[];
@@ -250,6 +253,8 @@ export interface MissionResumedEvent extends MissionWorkflowEventBase {
 export interface MissionPausedEvent extends MissionWorkflowEventBase {
     type: 'mission.paused';
     reason: MissionPauseReason;
+    targetType?: 'mission' | 'task' | 'session';
+    targetId?: string;
 }
 
 export interface PanicStopRequestedEvent extends MissionWorkflowEventBase {

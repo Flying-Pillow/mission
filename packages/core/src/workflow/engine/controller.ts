@@ -318,14 +318,40 @@ export class MissionWorkflowController {
     private resolveEligibleStageId(document: MissionRuntimeRecord): string | undefined {
         for (const stageId of document.configuration.workflow.stageOrder) {
             const stageTasks = document.runtime.tasks.filter((task) => task.stageId === stageId);
-            const completed = stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed');
+            const completed =
+                (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
+                this.isImplicitlyCompletedEmptyFinalStage(document, stageId, stageTasks);
             if (!completed) {
                 return stageId;
             }
         }
 
-        return document.configuration.workflow.stageOrder[
+        return undefined;
+    }
+
+    private isImplicitlyCompletedEmptyFinalStage(
+        document: MissionRuntimeRecord,
+        stageId: string,
+        stageTasks: MissionRuntimeRecord['runtime']['tasks']
+    ): boolean {
+        if (stageTasks.length > 0) {
+            return false;
+        }
+
+        const finalStageId = document.configuration.workflow.stageOrder[
             document.configuration.workflow.stageOrder.length - 1
         ];
+        if (stageId !== finalStageId) {
+            return false;
+        }
+
+        const generationRule = document.configuration.workflow.taskGeneration.find(
+            (candidate) => candidate.stageId === stageId
+        );
+        if (!generationRule) {
+            return true;
+        }
+
+        return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0;
     }
 }

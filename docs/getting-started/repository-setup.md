@@ -21,6 +21,8 @@ Adopting a repository gives Mission three things:
 
 In practical terms, Mission keeps repository control state under `.mission/`, while actual mission execution happens in isolated workspaces outside the main checkout.
 
+That path model stays the same in both shared tracked mode and local-only contributor mode. A repository may choose to gitignore `.mission/`, but Mission still treats `.mission/` as the repository-bound control namespace rather than moving that state into user-scoped config.
+
 ## What The Operator Does
 
 In the current control surface, repository discovery includes actions for:
@@ -35,7 +37,7 @@ That means the operator journey is roughly:
 1. Open Tower.
 2. Add or switch to the target repository.
 3. Confirm repository setup and workflow defaults.
-4. Start a mission only after the repository is under Mission control.
+4. Start a mission when intake is ready; if this checkout is not initialized yet, Mission can bootstrap repository control in the first mission worktree.
 
 ## What Mission Creates
 
@@ -87,6 +89,8 @@ That separation matters because Mission treats these as different concerns:
 | Mission runtime | Live execution state for that unit of work |
 
 This is why repository setup does not create `mission.json`. That file only appears when a real mission has been prepared.
+
+That separation does not mean the repository must already be initialized on the current checkout before the first mission can begin. In the current repository-adoption model, Mission may create `.mission/settings.json` inside the new mission worktree during first-mission preparation.
 
 ## GitHub And Review-Oriented Teams
 

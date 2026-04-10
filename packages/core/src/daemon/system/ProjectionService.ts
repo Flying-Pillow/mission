@@ -1,19 +1,24 @@
 import path from 'node:path';
 import type { AirportProjectionSet, AirportState, GateBinding, GateId } from '../../../../airport/build/index.js';
-import type { ContextGraph } from '../../types.js';
+import type { ContextGraph, MissionOperatorProjectionContext } from '../../types.js';
 
 export function deriveSystemAirportProjections(
 	domain: ContextGraph,
+	missionOperatorViews: Record<string, MissionOperatorProjectionContext>,
 	airportState: AirportState
 ): AirportProjectionSet {
 	return {
-		dashboard: deriveDashboardProjection(domain, airportState),
+		dashboard: deriveDashboardProjection(domain, missionOperatorViews, airportState),
 		editor: deriveEditorProjection(domain, airportState),
 		agentSession: deriveAgentSessionProjection(domain, airportState)
 	};
 }
 
-function deriveDashboardProjection(domain: ContextGraph, airportState: AirportState): AirportProjectionSet['dashboard'] {
+function deriveDashboardProjection(
+	domain: ContextGraph,
+	missionOperatorViews: Record<string, MissionOperatorProjectionContext>,
+	airportState: AirportState
+): AirportProjectionSet['dashboard'] {
 	const base = createGateProjectionBase(airportState, 'dashboard');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
 	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
@@ -21,8 +26,10 @@ function deriveDashboardProjection(domain: ContextGraph, airportState: AirportSt
 		? base.binding.targetId
 		: undefined;
 	const requestedMissionContext = requestedMissionId ? domain.missions[requestedMissionId] : undefined;
-	const missionId = requestedMissionContext?.tower ? requestedMissionId : undefined;
+	const requestedMissionView = requestedMissionId ? missionOperatorViews[requestedMissionId] : undefined;
+	const missionId = requestedMissionContext && requestedMissionView ? requestedMissionId : undefined;
 	const missionContext = missionId ? requestedMissionContext : undefined;
+	const missionView = missionId ? requestedMissionView : undefined;
 	return {
 		...base,
 		surfaceMode: missionId ? 'mission' : 'repository',
@@ -34,8 +41,8 @@ function deriveDashboardProjection(domain: ContextGraph, airportState: AirportSt
 		...(missionId ? { missionId } : {}),
 		...(missionContext?.briefSummary ? { missionLabel: missionContext.briefSummary } : missionId ? { missionLabel: missionId } : {}),
 		commandContext: {},
-		stageRail: missionContext?.tower?.stageRail.map((item) => ({ ...item })) ?? [],
-		treeNodes: missionContext?.tower?.treeNodes.map((node) => ({ ...node })) ?? [],
+		stageRail: missionView?.stageRail.map((item) => ({ ...item })) ?? [],
+		treeNodes: missionView?.treeNodes.map((node) => ({ ...node })) ?? [],
 		subtitle: missionContext?.briefSummary
 			|| missionId
 			|| repositoryContext?.displayLabel

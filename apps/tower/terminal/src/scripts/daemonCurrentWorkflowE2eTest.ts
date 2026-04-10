@@ -223,7 +223,7 @@ async function main(): Promise<void> {
             const expectedPath = expectedArtifactMap[key];
             assertCondition(
                 expectedPath !== undefined,
-                `Daemon reported artifact '${key}' but no matching file was found in mission-control.`
+                `Daemon reported artifact '${key}' but no matching file was found in the mission dossier.`
             );
             assertCondition(
                 path.resolve(artifactPath) === path.resolve(expectedPath),
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
         assertStringSetEquals(
             Object.keys(actualArtifactMap),
             Object.keys(expectedArtifactMap),
-            'Artifact key mismatch between mission.status and on-disk mission-control artifacts.'
+            'Artifact key mismatch between mission.status and on-disk mission dossier artifacts.'
         );
 
         const gateSummary: CurrentWorkflowE2eReport['gateSummary'] = [];

@@ -25,8 +25,10 @@ export function createDraftMissionWorkflowRuntimeState(
     configuration: MissionWorkflowConfigurationSnapshot,
     createdAt = new Date().toISOString()
 ): MissionWorkflowRuntimeState {
+    const activeStageId = configuration.workflow.stageOrder[0];
     return {
         lifecycle: 'draft',
+        ...(activeStageId ? { activeStageId } : {}),
         pause: {
             paused: false
         },

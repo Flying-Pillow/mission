@@ -418,6 +418,8 @@ export class FilesystemAdapter {
 			?? this.extractBriefTitle(brief.body)
 			?? path.basename(missionDir);
 		const type = this.readMissionTypeAttribute(brief.attributes, 'type', brief.filePath) ?? 'task';
+		const labels = this.readOptionalStringArrayAttribute(brief.attributes, 'labels', brief.filePath);
+		const metadata = this.readOptionalStringRecordAttribute(brief.attributes, 'metadata', brief.filePath);
 		const branchRef =
 			this.readOptionalStringAttribute(brief.attributes, 'branchRef', brief.filePath) ??
 			this.getCurrentBranch(this.getMissionWorkspacePath(missionDir)) ??
@@ -425,6 +427,7 @@ export class FilesystemAdapter {
 		const createdAt =
 			this.readOptionalStringAttribute(brief.attributes, 'createdAt', brief.filePath) ??
 			new Date().toISOString();
+		const deliveredAt = this.readOptionalStringAttribute(brief.attributes, 'deliveredAt', brief.filePath);
 		const url = this.readOptionalStringAttribute(brief.attributes, 'url', brief.filePath);
 
 		return {
@@ -435,10 +438,13 @@ export class FilesystemAdapter {
 				body: this.extractBriefBody(brief.body),
 				type,
 				...(issueId !== undefined ? { issueId } : {}),
+				...(labels ? { labels } : {}),
+				...(metadata ? { metadata } : {}),
 				...(url ? { url } : {})
 			},
 			branchRef,
-			createdAt
+			createdAt,
+			...(deliveredAt ? { deliveredAt } : {})
 		};
 	}
 
@@ -448,9 +454,12 @@ export class FilesystemAdapter {
 				...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {}),
 				title: descriptor.brief.title,
 				type: descriptor.brief.type,
+				...(descriptor.brief.labels && descriptor.brief.labels.length > 0 ? { labels: descriptor.brief.labels } : {}),
+				...(descriptor.brief.metadata ? { metadata: descriptor.brief.metadata } : {}),
 				branchRef: descriptor.branchRef,
 				createdAt: descriptor.createdAt,
 				updatedAt: descriptor.createdAt,
+				...(descriptor.deliveredAt ? { deliveredAt: descriptor.deliveredAt } : {}),
 				...(descriptor.brief.url ? { url: descriptor.brief.url } : {})
 			},
 			body: await renderMissionBriefBody({
@@ -779,6 +788,51 @@ export class FilesystemAdapter {
 			throw new ArtifactTypeError(`Artifact '${filePath}' expected '${key}' to be a string.`);
 		}
 		return value.trim().length > 0 ? value.trim() : undefined;
+	}
+
+	private readOptionalStringArrayAttribute(
+		attributes: Record<string, FrontmatterValue>,
+		key: string,
+		filePath: string
+	): string[] | undefined {
+		const value = attributes[key];
+		if (value === undefined) {
+			return undefined;
+		}
+
+		const entries = Array.isArray(value) ? value : [value];
+		const normalized = entries.map((entry) => {
+			if (typeof entry !== 'string') {
+				throw new ArtifactTypeError(`Artifact '${filePath}' expected '${key}' to contain only strings.`);
+			}
+
+			return entry.trim();
+		}).filter((entry) => entry.length > 0);
+
+		return normalized.length > 0 ? normalized : undefined;
+	}
+
+	private readOptionalStringRecordAttribute(
+		attributes: Record<string, FrontmatterValue>,
+		key: string,
+		filePath: string
+	): Record<string, string> | undefined {
+		const value = attributes[key];
+		if (value === undefined) {
+			return undefined;
+		}
+		if (!value || typeof value !== 'object' || Array.isArray(value)) {
+			throw new ArtifactTypeError(`Artifact '${filePath}' expected '${key}' to be an object of strings.`);
+		}
+
+		const normalizedEntries = Object.entries(value).map(([entryKey, entryValue]) => {
+			if (typeof entryValue !== 'string') {
+				throw new ArtifactTypeError(`Artifact '${filePath}' expected '${key}.${entryKey}' to be a string.`);
+			}
+			return [entryKey, entryValue.trim()] as const;
+		}).filter(([, entryValue]) => entryValue.length > 0);
+
+		return normalizedEntries.length > 0 ? Object.fromEntries(normalizedEntries) : undefined;
 	}
 
 

@@ -57,7 +57,7 @@ When you are in mission mode, the stage rail is the quickest way to understand w
 
 The center panel is the main work surface.
 
-In repository mode, it is where Mission can drive repository and intake flows. In mission mode, it becomes the mission-control view for stages, tasks, artifacts, and sessions.
+In repository mode, it is where Mission can drive repository and intake flows. In mission mode, it becomes the mission view for stages, tasks, artifacts, and sessions.
 
 ### Command Panel
 

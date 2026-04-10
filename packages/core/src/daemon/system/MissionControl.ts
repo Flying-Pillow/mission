@@ -5,6 +5,7 @@ import type {
 	ContextGraph,
 	ContextSelection,
 	MissionContext,
+	MissionOperatorProjectionContext,
 	MissionStageId,
 	RepositoryContext,
 	TaskContext
@@ -16,16 +17,23 @@ import type {
 
 export class MissionControl {
 	private domain: ContextGraph = createEmptyContextGraph();
+	private missionOperatorViews: Record<string, MissionOperatorProjectionContext> = {};
 
 	public getState(): ContextGraph {
 		return structuredClone(this.domain);
+	}
+
+	public getMissionOperatorViews(): Record<string, MissionOperatorProjectionContext> {
+		return structuredClone(this.missionOperatorViews);
 	}
 
 	public synchronize(source: MissionControlSource, selectionHint: MissionControlSourceSelectionHint = {}): ContextGraph {
 		const previousSelection = shouldPreserveSelection(this.domain.selection, source.repositoryId)
 			? this.domain.selection
 			: {};
-		this.domain = deriveContextGraph(source, previousSelection, selectionHint);
+		const nextState = deriveContextGraph(source, previousSelection, selectionHint);
+		this.domain = nextState.domain;
+		this.missionOperatorViews = nextState.missionOperatorViews;
 		return this.getState();
 	}
 
@@ -62,7 +70,10 @@ function deriveContextGraph(
 	source: MissionControlSource,
 	previousSelection: ContextSelection,
 	selectionHint: MissionControlSourceSelectionHint
-): ContextGraph {
+): {
+	domain: ContextGraph;
+	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
+} {
 	const repositoryId = source.repositoryId;
 	const missionStatus = source.missionStatus;
 	const missionCandidatesById = new Map(
@@ -128,6 +139,20 @@ function deriveContextGraph(
 			...(source.control.settingsPath ? { workflowSettingsId: source.control.settingsPath } : {})
 		}
 	};
+	const missionOperatorViews: Record<string, MissionOperatorProjectionContext> = Object.fromEntries(
+		missionIds.flatMap((missionId) => {
+			const isActiveMission = missionStatus?.missionId === missionId;
+			if (!isActiveMission || !missionStatus?.tower) {
+				return [];
+			}
+
+			return [[missionId, {
+				missionId,
+				stageRail: missionStatus.tower.stageRail.map((item) => ({ ...item })),
+				treeNodes: missionStatus.tower.treeNodes.map((node) => ({ ...node }))
+			}] as const];
+		})
+	);
 	const missions: Record<string, MissionContext> = Object.fromEntries(
 		missionIds.map((missionId) => {
 			const candidate = missionCandidatesById.get(missionId);
@@ -154,15 +179,7 @@ function deriveContextGraph(
 				...(isActiveMission && missionStatus?.workflow?.lifecycle ? { lifecycleState: missionStatus.workflow.lifecycle } : {}),
 				taskIds: isActiveMission ? tasks.map((task) => task.taskId) : [],
 				artifactIds: isActiveMission ? Object.keys(artifacts) : [],
-				sessionIds: isActiveMission ? Object.keys(agentSessions) : [],
-				...(isActiveMission && missionStatus?.tower
-					? {
-						tower: {
-							stageRail: missionStatus.tower.stageRail.map((item) => ({ ...item })),
-							treeNodes: missionStatus.tower.treeNodes.map((node) => ({ ...node }))
-						}
-					}
-					: {})
+				sessionIds: isActiveMission ? Object.keys(agentSessions) : []
 			};
 			return [missionId, missionContext] as const;
 		})
@@ -181,12 +198,15 @@ function deriveContextGraph(
 	});
 
 	return {
-		selection,
-		repositories,
-		missions,
-		tasks: taskContexts,
-		artifacts,
-		agentSessions
+		domain: {
+			selection,
+			repositories,
+			missions,
+			tasks: taskContexts,
+			artifacts,
+			agentSessions
+		},
+		missionOperatorViews
 	};
 }
 
@@ -234,7 +254,7 @@ function isMissionSelectionValid(
 	missionId: string,
 	missions: Record<string, MissionContext>
 ): boolean {
-	return Boolean(missions[missionId]?.tower);
+	return Boolean(missions[missionId]);
 }
 
 function resolveSelectedTaskId(
@@ -485,5 +505,8 @@ function isObservedStageValid(stageId: string, missionId: string, input: Context
 	if (!mission) {
 		return false;
 	}
-	return mission.tower?.stageRail.some((item) => item.id === stageId) ?? false;
+	if (mission.currentStage === stageId) {
+		return true;
+	}
+	return Object.values(input.tasks).some((task) => task.missionId === missionId && task.stageId === stageId);
 }

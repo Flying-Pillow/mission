@@ -484,6 +484,10 @@ Minimum required fields:
 
 MissionContext must be sufficient for airport routing without asking terminal-manager anything.
 
+Operator-facing mission-control views such as stage rails or tree nodes are not part of ContextGraph.
+
+Those views belong to daemon-wide system state as projections derived from MissionContext and mission-local workflow runtime.
+
 ### TaskContext
 
 Minimum required fields:

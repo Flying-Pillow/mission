@@ -14,6 +14,22 @@ describe('FilesystemAdapter', () => {
 		);
 	});
 
+	it('resolves the canonical flat mission dossier paths', () => {
+		const adapter = new FilesystemAdapter('/tmp/repo');
+		const missionDir = adapter.getTrackedMissionDir('mission-101', '/tmp/repo');
+
+		expect(missionDir).toBe(path.join('/tmp/repo', '.mission', 'missions', 'mission-101'));
+		expect(adapter.getMissionRuntimeRecordPath(missionDir)).toBe(
+			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', 'mission.json')
+		);
+		expect(adapter.getMissionStagePath(missionDir, 'prd')).toBe(
+			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '01-PRD')
+		);
+		expect(adapter.getMissionStagePath(missionDir, 'spec')).toBe(
+			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '02-SPEC')
+		);
+	});
+
 	it('derives mission branch names without a trailing slug when title is empty', () => {
 		const adapter = new FilesystemAdapter('/tmp/repo');
 		expect(adapter.deriveMissionBranchName(42, '')).toBe('mission/42');
@@ -38,10 +54,16 @@ describe('FilesystemAdapter', () => {
 					issueId: 101,
 					title: 'Filesystem mission model',
 					body: 'Rewrite Mission around structured artifact records.',
-					type: 'refactor'
+					type: 'refactor',
+					labels: ['enhancement', 'semantic-model'],
+					metadata: {
+						owner: 'core',
+						track: 'semantic-model'
+					}
 				},
 				branchRef: 'mission/101-filesystem-model',
-				createdAt: '2026-04-01T00:00:00.000Z'
+				createdAt: '2026-04-01T00:00:00.000Z',
+				deliveredAt: '2026-04-02T00:00:00.000Z'
 			});
 
 			await expect(adapter.readMissionDescriptor(missionDir)).resolves.toEqual({
@@ -51,10 +73,16 @@ describe('FilesystemAdapter', () => {
 					issueId: 101,
 					title: 'Filesystem mission model',
 					body: 'Rewrite Mission around structured artifact records.',
-					type: 'refactor'
+					type: 'refactor',
+					labels: ['enhancement', 'semantic-model'],
+					metadata: {
+						owner: 'core',
+						track: 'semantic-model'
+					}
 				},
 				branchRef: 'mission/101-filesystem-model',
-				createdAt: '2026-04-01T00:00:00.000Z'
+				createdAt: '2026-04-01T00:00:00.000Z',
+				deliveredAt: '2026-04-02T00:00:00.000Z'
 			});
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });

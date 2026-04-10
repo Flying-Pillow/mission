@@ -7,7 +7,9 @@ nav_order: 3
 
 # Start Your First Mission
 
-Once Mission is installed and your repository is adopted, the next step is not “let the agent code.” The next step is to start a mission with bounded intent.
+Once Mission is installed, the next step is not “let the agent code.” The next step is to start a mission with bounded intent.
+
+If the repository is already Mission-enabled, Mission will use that existing control state. If the current checkout is not initialized yet, the first mission can still bootstrap repository control inside the new mission worktree as part of mission preparation.
 
 Mission supports two intake paths in the current codebase:
 
@@ -46,8 +48,10 @@ You should expect these results:
 | --- | --- |
 | A mission id and branch reference | Gives the work a stable operational identity |
 | An isolated mission workspace | Keeps agent activity away from the primary checkout |
-| A mission dossier | Stores `BRIEF.md`, stage artifacts, and generated task files |
+| A mission dossier | Stores `BRIEF.md`, `mission.json`, stage artifacts, and generated task files |
 | `mission.json` | Persists runtime state so the mission survives reconnects and restarts |
+
+The tracked dossier lives at `.mission/missions/<mission-id>/` inside the mission worktree. `BRIEF.md` and `mission.json` live at that mission root, and stage artifacts live under root-level stage folders such as `01-PRD/` and `02-SPEC/`.
 
 At a high level, a prepared mission ends up with:
 

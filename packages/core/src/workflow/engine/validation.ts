@@ -221,12 +221,36 @@ function resolveEligibleStageId(
 ): MissionStageId | undefined {
     for (const stageId of configuration.workflow.stageOrder) {
         const stageTasks = runtime.tasks.filter((task) => task.stageId === stageId);
-        const complete = stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed');
+        const complete =
+            (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
+            isImplicitlyCompletedEmptyFinalStage(stageId, stageTasks, configuration);
         if (!complete) {
             return stageId;
         }
     }
-    return configuration.workflow.stageOrder[configuration.workflow.stageOrder.length - 1];
+    return undefined;
+}
+
+function isImplicitlyCompletedEmptyFinalStage(
+    stageId: MissionStageId,
+    stageTasks: MissionTaskRuntimeState[],
+    configuration: MissionWorkflowConfigurationSnapshot
+): boolean {
+    if (stageTasks.length > 0) {
+        return false;
+    }
+
+    const finalStageId = configuration.workflow.stageOrder[configuration.workflow.stageOrder.length - 1];
+    if (stageId !== finalStageId) {
+        return false;
+    }
+
+    const generationRule = configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
+    if (!generationRule) {
+        return true;
+    }
+
+    return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0;
 }
 
 function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; dependsOn: string[]; agentRunner?: string }): boolean {
