@@ -49,7 +49,7 @@ describe('WorkspaceManager surface resolution', () => {
 
         try {
             runGit(workspaceRoot, ['worktree', 'add', missionWorkspacePath, '-b', 'mission/architecture-refactor']);
-            await fs.mkdir(path.join(missionRoot, 'mission-control'), { recursive: true });
+            await fs.mkdir(missionRoot, { recursive: true });
             await fs.mkdir(nestedMissionPath, { recursive: true });
 
             const discovery = await createWorkspaceManagerTestHarness().discoverSurface(nestedMissionPath);

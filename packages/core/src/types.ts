@@ -16,7 +16,7 @@ import {
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
-	MISSION_TASK_STAGE_DIRECTORIES,
+	MISSION_STAGE_FOLDERS,
 	getMissionArtifactDefinition,
 	getMissionStageDefinition,
 	evaluateMissionTaskLaunchEligibility,
@@ -37,7 +37,7 @@ export {
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
-	MISSION_TASK_STAGE_DIRECTORIES,
+	MISSION_STAGE_FOLDERS,
 	getMissionArtifactDefinition,
 	getMissionStageDefinition,
 	evaluateMissionTaskLaunchEligibility,
@@ -220,7 +220,6 @@ export type MissionRecord = {
 	brief: MissionBrief;
 	missionDir: string;
 	missionRootDir?: string;
-	missionControlDir?: string;
 	branchRef: string;
 	createdAt: string;
 	stage: MissionStageId;
@@ -258,7 +257,7 @@ export type MissionTaskUpdate = Partial<Pick<MissionTaskState, 'status' | 'agent
 
 export type MissionStageStatus = {
 	stage: MissionStageId;
-	directoryName: string;
+	folderName: string;
 	status: MissionStageProgress;
 	taskCount: number;
 	completedTaskCount: number;
@@ -302,7 +301,6 @@ export type MissionPreparationStatus =
 		baseBranch: string;
 		worktreePath: string;
 		missionRootDir: string;
-		missionControlDir: string;
 		issueId?: number;
 		issueUrl?: string;
 	};
@@ -471,7 +469,6 @@ export type OperatorStatus = {
 	branchRef?: string;
 	missionDir?: string;
 	missionRootDir?: string;
-	missionControlDir?: string;
 	productFiles?: Partial<Record<MissionArtifactKey, string>>;
 	activeTasks?: MissionTaskState[];
 	readyTasks?: MissionTaskState[];

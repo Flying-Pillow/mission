@@ -33,7 +33,6 @@ export type MissionControlMissionStatusSource = Pick<
 	| 'branchRef'
 	| 'missionDir'
 	| 'missionRootDir'
-	| 'missionControlDir'
 	| 'productFiles'
 	| 'activeTasks'
 	| 'readyTasks'

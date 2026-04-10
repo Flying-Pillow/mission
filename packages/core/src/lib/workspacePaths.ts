@@ -24,7 +24,6 @@ export type MissionWorkspaceContext =
         missionId: string;
         missionRootDir: string;
         missionDir: string;
-        missionControlDir: string;
         selector: MissionSelector;
     };
 
@@ -47,7 +46,6 @@ export function resolveMissionWorkspaceContext(
                 missionId: missionContext.missionId,
                 missionRootDir: missionContext.missionRootDir,
                 missionDir: checkoutRoot,
-                missionControlDir: path.join(missionContext.missionRootDir, 'mission-control'),
                 selector: { missionId: missionContext.missionId }
             };
         }
@@ -69,7 +67,6 @@ export function resolveMissionWorkspaceContext(
                 missionId,
                 missionRootDir,
                 missionDir,
-                missionControlDir: path.join(missionRootDir, 'mission-control'),
                 selector: { missionId }
             };
         }

@@ -4,7 +4,7 @@ import {
     DaemonApi,
     MISSION_ARTIFACTS,
     MISSION_GATE_INTENTS,
-    MISSION_TASK_STAGE_DIRECTORIES,
+    MISSION_STAGE_FOLDERS,
     isMissionStageId,
     resolveMissionWorkspaceContext,
     type GateIntent,
@@ -63,7 +63,7 @@ type CurrentWorkflowE2eReport = {
     stage: MissionStageId;
     workspaceRoot: string;
     missionDir: string;
-    missionControlDir: string;
+    missionRootDir: string;
     activeTaskIds: string[];
     readyTaskIds: string[];
     gateSummary: Array<{ intent: GateIntent; allowed: boolean; errorCount: number; warningCount: number }>;
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     }
 
     const runtimeDocument = await readMissionRuntimeDocument(
-        path.join(workspaceContext.missionControlDir, 'mission.json')
+        path.join(workspaceContext.missionRootDir, 'mission.json')
     );
 
     const client = await connectSurfaceDaemon({
@@ -115,11 +115,11 @@ async function main(): Promise<void> {
             ].join(' ')
         );
         assertCondition(
-            path.resolve(missionStatus.missionControlDir ?? '') === path.resolve(workspaceContext.missionControlDir),
+            path.resolve(missionStatus.missionRootDir ?? '') === path.resolve(workspaceContext.missionRootDir),
             [
-                'Mission-control directory mismatch between daemon status and workspace context.',
-                `expected='${workspaceContext.missionControlDir}'`,
-                `actual='${missionStatus.missionControlDir ?? 'undefined'}'`
+                'Mission root directory mismatch between daemon status and workspace context.',
+                `expected='${workspaceContext.missionRootDir}'`,
+                `actual='${missionStatus.missionRootDir ?? 'undefined'}'`
             ].join(' ')
         );
 
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
             await ensureFileExists(task.filePath, `Ready task file is missing on disk: ${task.filePath}`);
         }
 
-        const expectedArtifactMap = await resolveExpectedArtifactFiles(workspaceContext.missionControlDir);
+        const expectedArtifactMap = await resolveExpectedArtifactFiles(workspaceContext.missionRootDir);
         const actualArtifactMap = missionStatus.productFiles ?? {};
 
         for (const [artifactKey, artifactPath] of Object.entries(actualArtifactMap)) {
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
             stage: missionStatus.stage ?? expectedActiveStage,
             workspaceRoot: workspaceContext.workspaceRoot,
             missionDir: workspaceContext.missionDir,
-            missionControlDir: workspaceContext.missionControlDir,
+            missionRootDir: workspaceContext.missionRootDir,
             activeTaskIds: actualGlobalActiveTaskIds.slice().sort(),
             readyTaskIds: (missionStatus.readyTasks ?? []).map((task) => task.taskId).sort(),
             gateSummary,
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
                 `stage: ${report.stage}`,
                 `workspaceRoot: ${report.workspaceRoot}`,
                 `missionDir: ${report.missionDir}`,
-                `missionControlDir: ${report.missionControlDir}`,
+                `missionRootDir: ${report.missionRootDir}`,
                 `activeTasks: ${report.activeTaskIds.join(', ') || 'none'}`,
                 `readyTasks: ${report.readyTaskIds.join(', ') || 'none'}`,
                 `artifacts: ${report.artifactKeys.join(', ') || 'none'}`,
@@ -413,7 +413,7 @@ function isRuntimeTaskLifecycle(value: unknown): value is MissionRuntimeTask['li
 }
 
 async function resolveExpectedArtifactFiles(
-    missionControlDir: string
+    missionRootDir: string
 ): Promise<Partial<Record<MissionArtifactKey, string>>> {
     const result: Partial<Record<MissionArtifactKey, string>> = {};
 
@@ -421,11 +421,11 @@ async function resolveExpectedArtifactFiles(
         const stageId = ARTIFACT_STAGE[artifactKey];
         const artifactPath = stageId
             ? path.join(
-                missionControlDir,
-                MISSION_TASK_STAGE_DIRECTORIES[stageId],
+                missionRootDir,
+                MISSION_STAGE_FOLDERS[stageId],
                 MISSION_ARTIFACTS[artifactKey]
             )
-            : path.join(missionControlDir, MISSION_ARTIFACTS[artifactKey]);
+            : path.join(missionRootDir, MISSION_ARTIFACTS[artifactKey]);
 
         if (await fileExists(artifactPath)) {
             result[artifactKey] = artifactPath;

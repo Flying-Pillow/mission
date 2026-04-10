@@ -2800,7 +2800,7 @@ function buildProjectedStageStatuses(
 						: 'pending';
 		return {
 			stage: stageId,
-			directoryName: stageId,
+			folderName: stageId,
 			status,
 			taskCount: tasks.length,
 			completedTaskCount,

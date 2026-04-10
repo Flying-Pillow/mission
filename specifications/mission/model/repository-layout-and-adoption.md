@@ -21,14 +21,15 @@ Mission tracked repository state lives under one repository-bound namespace:
   missions/
     <mission-id>/
       BRIEF.md
-      mission-control/
-        mission.json
-        ...
+      mission.json
+      ...
 ```
 
 The canonical tracked mission dossier path is:
 
 - `.mission/missions/<mission-id>/`
+
+There is no additional required `mission-control/` filesystem layer inside a mission dossier.
 
 The canonical repository settings path is:
 
@@ -215,13 +216,14 @@ The canonical tracked mission dossier layout is:
   missions/
     <mission-id>/
       BRIEF.md
-      mission-control/
-        mission.json
-        01-PRD/
-          PRD.md
-          tasks/
-            01-prd-from-brief.md
+      mission.json
+      01-PRD/
+        PRD.md
+        tasks/
+          01-prd-from-brief.md
 ```
+
+The mission dossier root itself is the canonical boundary for mission-local tracked state.
 
 All additional Mission artifacts materialized during workflow progression remain under `.mission/missions/<mission-id>/`.
 

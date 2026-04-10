@@ -18,7 +18,6 @@ export class MissionPreparationService {
 	}): Promise<MissionPreparationStatus> {
 		const missionId = this.store.createMissionId(input.brief);
 		const canonicalMissionRootDir = this.store.getTrackedMissionDir(missionId);
-		const canonicalMissionControlDir = this.store.getMissionControlPath(canonicalMissionRootDir);
 		const branchRef =
 			input.branchRef ??
 			(input.brief.issueId !== undefined
@@ -49,7 +48,6 @@ export class MissionPreparationService {
 					baseBranch,
 					worktreePath: proposalWorktreePath,
 					missionRootDir,
-					missionControlDir: proposalStore.getMissionControlPath(missionRootDir),
 					...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 					...(input.brief.url ? { issueUrl: input.brief.url } : {})
 				};
@@ -94,7 +92,6 @@ export class MissionPreparationService {
 				baseBranch,
 				worktreePath: proposalWorktreePath,
 				missionRootDir: canonicalMissionRootDir,
-				missionControlDir: canonicalMissionControlDir,
 				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 				...(input.brief.url ? { issueUrl: input.brief.url } : {})
 			};

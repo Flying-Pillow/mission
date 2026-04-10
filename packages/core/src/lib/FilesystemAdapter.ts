@@ -103,20 +103,16 @@ export class FilesystemAdapter {
 		return this.getTrackedMissionDir(missionId, this.getMissionWorktreePath(missionId));
 	}
 
-	public getMissionControlPath(missionDir: string): string {
-		return path.join(missionDir, 'mission-control');
-	}
-
 	public getMissionWorkspacePath(missionDir: string): string {
 		return path.resolve(missionDir, '..', '..', '..');
 	}
 
 	public getMissionStagePath(missionDir: string, stage: MissionStageId): string {
-		return path.join(this.getMissionControlPath(missionDir), getMissionStageDefinition(stage).folder);
+		return path.join(missionDir, getMissionStageDefinition(stage).stageFolder);
 	}
 
 	public getTasksPath(missionDir: string): string {
-		return this.getMissionControlPath(missionDir);
+		return missionDir;
 	}
 
 	public getStageTasksPath(missionDir: string, stage: MissionStageId): string {
@@ -321,10 +317,7 @@ export class FilesystemAdapter {
 	}
 
 	public async initializeMissionEnvironment(missionDir: string): Promise<void> {
-		await Promise.all([
-			fs.mkdir(missionDir, { recursive: true }),
-			fs.mkdir(this.getMissionControlPath(missionDir), { recursive: true })
-		]);
+		await fs.mkdir(missionDir, { recursive: true });
 	}
 
 	public async ensureStageDirectory(missionDir: string, stage: MissionStageId): Promise<string> {
@@ -468,7 +461,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionRuntimeRecordPath(missionDir: string): string {
-		return path.join(this.getMissionControlPath(missionDir), MISSION_RUNTIME_FILE_NAME);
+		return path.join(missionDir, MISSION_RUNTIME_FILE_NAME);
 	}
 
 	public async readMissionRuntimeRecord(
@@ -627,7 +620,7 @@ export class FilesystemAdapter {
 		const definition = getMissionArtifactDefinition(artifact);
 		return definition.stageId
 			? path.join(this.getMissionStagePath(missionDir, definition.stageId), definition.fileName)
-			: path.join(this.getMissionControlPath(missionDir), definition.fileName);
+			: path.join(missionDir, definition.fileName);
 	}
 
 	private getTaskPath(missionDir: string, stage: MissionStageId, fileName: string): string {

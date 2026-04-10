@@ -57,6 +57,10 @@ The important architectural rule is that the mission dossier is repository histo
 
 The normative repository layout and adoption model is defined in [Repository Layout And Adoption](repository-layout-and-adoption.md).
 
+The mission dossier root itself is the tracked mission-state boundary.
+
+When a surface uses the term `mission control`, that is an operator-facing concept, not a normative repository subdirectory.
+
 The mission workspace path is semantic mission data.
 
 It is not airport layout truth, pane routing truth, or focus truth.
@@ -81,12 +85,11 @@ Preparing a mission creates or reuses a mission branch, materializes a linked wo
     missions/
       <mission-id>/
         BRIEF.md
-        mission-control/
-          mission.json
-          01-PRD/
-            PRD.md
-            tasks/
-              01-prd-from-brief.md
+        mission.json
+        01-PRD/
+          PRD.md
+          tasks/
+            01-prd-from-brief.md
 ```
 
 ### Mission Materialization State
@@ -104,9 +107,8 @@ Mission worktrees are machine-local materializations, but the mission dossier in
     missions/
       <mission-id>/
         BRIEF.md
-        mission-control/
-          mission.json
-          ...
+        mission.json
+        ...
 ```
 
 The external worktree root is local materialization state.
@@ -315,9 +317,9 @@ url: "https://..."         # optional
 
 `FilesystemAdapter.readMissionDescriptor(...)` validates and rehydrates this file back into structured descriptor state.
 
-### mission-control/mission.json Runtime State
+### mission.json Runtime State
 
-Mutable semantic workflow state lives in `mission.json` inside each mission folder.
+Mutable semantic workflow state lives in `mission.json` at the root of each mission dossier.
 
 The authoritative document shape is defined by the workflow engine specification as `MissionWorkflowRuntimeDocument`.
 

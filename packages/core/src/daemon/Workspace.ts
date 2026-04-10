@@ -442,7 +442,6 @@ export class MissionWorkspace {
 					: {}),
 				branchRef: existingMission.descriptor.branchRef,
 				missionRootDir: existingMission.missionDir,
-				missionControlDir: this.store.getMissionControlPath(existingMission.missionDir),
 				recommendedAction: reconciledBrief.issueId !== undefined
 					? `Issue #${String(reconciledBrief.issueId)} already has mission '${existingMission.descriptor.missionId}'. Pull the default branch if needed and select the existing mission instead of creating another work-on-issue mission.`
 					: `Mission '${existingMission.descriptor.missionId}' already exists. Select the existing mission instead of creating another one.`
@@ -475,8 +474,7 @@ export class MissionWorkspace {
 			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
 			type: reconciledBrief.type,
 			branchRef: preparation.branchRef,
-			missionRootDir: preparation.missionRootDir,
-			missionControlDir: preparation.missionControlDir
+			missionRootDir: preparation.missionRootDir
 		};
 	}
 

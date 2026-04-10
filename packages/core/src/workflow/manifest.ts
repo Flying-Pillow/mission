@@ -20,7 +20,7 @@ export type MissionTaskPairingDefinition = {
 
 export type MissionStageDefinition = {
     id: MissionStageId;
-    folder: string;
+    stageFolder: string;
     artifacts: MissionArtifactKey[];
     taskPairing?: MissionTaskPairingDefinition;
 };
@@ -35,17 +35,17 @@ export type MissionArtifactDefinition = {
 export const WORKFLOW_STAGE_DEFINITIONS: readonly MissionStageDefinition[] = [
     {
         id: 'prd',
-        folder: '01-PRD',
+        stageFolder: '01-PRD',
         artifacts: ['prd']
     },
     {
         id: 'spec',
-        folder: '02-SPEC',
+        stageFolder: '02-SPEC',
         artifacts: ['spec']
     },
     {
         id: 'implementation',
-        folder: '03-IMPLEMENTATION',
+        stageFolder: '03-IMPLEMENTATION',
         artifacts: ['verify'],
         taskPairing: {
             enabled: true,
@@ -59,12 +59,12 @@ export const WORKFLOW_STAGE_DEFINITIONS: readonly MissionStageDefinition[] = [
     },
     {
         id: 'audit',
-        folder: '04-AUDIT',
+        stageFolder: '04-AUDIT',
         artifacts: ['audit']
     },
     {
         id: 'delivery',
-        folder: '05-DELIVERY',
+        stageFolder: '05-DELIVERY',
         artifacts: ['delivery']
     }
 ] as const;
@@ -121,8 +121,8 @@ export const MISSION_ARTIFACTS: Readonly<Record<MissionArtifactKey, string>> = O
     MISSION_ARTIFACT_KEYS.map((key) => [key, WORKFLOW_ARTIFACT_DEFINITIONS[key].fileName])
 ) as Record<MissionArtifactKey, string>;
 
-export const MISSION_TASK_STAGE_DIRECTORIES: Readonly<Record<MissionStageId, string>> = Object.fromEntries(
-    WORKFLOW_STAGE_DEFINITIONS.map((stage) => [stage.id, stage.folder])
+export const MISSION_STAGE_FOLDERS: Readonly<Record<MissionStageId, string>> = Object.fromEntries(
+    WORKFLOW_STAGE_DEFINITIONS.map((stage) => [stage.id, stage.stageFolder])
 ) as Record<MissionStageId, string>;
 
 export function getMissionStageDefinition(stageId: MissionStageId): MissionStageDefinition {

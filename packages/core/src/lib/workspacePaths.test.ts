@@ -35,7 +35,7 @@ describe('workspacePaths', () => {
 
         try {
             runGit(workspaceRoot, ['worktree', 'add', missionWorktreePath, '-b', 'mission/test-auto-select']);
-            await fs.mkdir(path.join(missionRootPath, 'mission-control'), { recursive: true });
+            await fs.mkdir(missionRootPath, { recursive: true });
             await fs.mkdir(nestedPath, { recursive: true });
 
             expect(resolveMissionWorkspaceContext(missionWorktreePath, workspaceRoot)).toMatchObject({
@@ -44,7 +44,6 @@ describe('workspacePaths', () => {
                 missionId,
                 missionDir: missionWorktreePath,
                 missionRootDir: missionRootPath,
-                missionControlDir: path.join(missionRootPath, 'mission-control'),
                 selector: { missionId }
             });
             expect(resolveMissionWorkspaceContext(nestedPath, workspaceRoot)).toMatchObject({
@@ -53,7 +52,6 @@ describe('workspacePaths', () => {
                 missionId,
                 missionDir: missionWorktreePath,
                 missionRootDir: missionRootPath,
-                missionControlDir: path.join(missionRootPath, 'mission-control'),
                 selector: { missionId }
             });
         } finally {

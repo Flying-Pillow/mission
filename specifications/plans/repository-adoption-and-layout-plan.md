@@ -24,13 +24,16 @@ The rewrite must follow these rules.
 1. Repo control remains repository-bound and stored under `.mission/`.
 2. Mission must not move repo control into user-scoped config.
 3. The canonical tracked mission dossier path is `.mission/missions/<mission-id>/`.
-4. The original local checkout must not need to be dirtied before the first mission can begin.
-5. First-mission bootstrap must be able to initialize `.mission/settings.json` inside the newly created mission worktree.
-6. The first mission branch may contain both repo bootstrap content and first mission dossier content in one commit series.
-7. Mission must support local contributor mode where `.mission/` is gitignored by repository policy.
-8. Mission lifecycle must not be derived from folder placement.
-9. No compatibility shim should preserve the old top-level `missions/` repository layout.
-10. User config may store registered repository checkout paths, but it must not become the authority for repo control.
+4. The mission dossier root itself owns `BRIEF.md`, `mission.json`, and staged workflow artifacts; there is no nested `mission-control/` filesystem layer.
+5. The original local checkout must not need to be dirtied before the first mission can begin.
+6. First-mission bootstrap must be able to initialize `.mission/settings.json` inside the newly created mission worktree.
+7. The first mission branch may contain both repo bootstrap content and first mission dossier content in one commit series.
+8. Mission must support local contributor mode where `.mission/` is gitignored by repository policy.
+9. Mission lifecycle must not be derived from folder placement.
+10. No compatibility shim, fallback, alias, or dual-path support should preserve the old top-level `missions/` layout or the nested `mission-control/` dossier layout.
+11. User config may store registered repository checkout paths, but it must not become the authority for repo control.
+
+This cutover is intentionally destructive to the old dossier layout. Code and tests should be updated directly to the canonical flat mission-root model rather than teaching the system both shapes.
 
 ## Desired End State
 
@@ -53,11 +56,12 @@ Required output:
 
 - path helpers resolve tracked missions under `.mission/missions/`
 - mission-worktree discovery resolves `.mission/missions/<mission-id>/`
+- mission artifact paths resolve directly under `.mission/missions/<mission-id>/`
 - tests and docs stop assuming a top-level `missions/` directory
 
 Implementation tasks:
 
-1. Refactor repository path helpers to return `.mission/missions` as the tracked catalog root.
+1. Refactor repository path helpers and artifact resolvers to treat `.mission/missions/<mission-id>/` as the mission dossier root.
 2. Update mission descriptor discovery and mission-worktree detection code.
 3. Update tests that construct mission directories manually.
 4. Rewrite docs that still describe top-level `missions/` storage.
@@ -138,6 +142,7 @@ The main risks are:
 
 - duplicate mission detection before default-branch bootstrap is merged or pulled
 - UI confusion between local checkout state and repo branch state
+- stale implementation assumptions that `mission-control/` is a required mission subdirectory
 - stale assumptions that `.mission/settings.json` must already exist in the original checkout
 - accidental leakage of local-only `.mission/` state into shared workflows without explicit intent
 - ambiguous repo labels when multiple registered repos share the same short name
@@ -147,6 +152,7 @@ The main risks are:
 This work is complete when:
 
 - docs consistently describe `.mission/missions/<mission-id>/` as the tracked mission root
+- docs and code agree that `mission.json` and staged artifacts live directly under that mission root
 - first mission start works from a repo whose original checkout does not yet contain `.mission/settings.json`
 - the first mission branch can bootstrap Mission and create the mission dossier in the same flow
 - Mission can still operate in a repo where `.mission/` is gitignored for local-only use

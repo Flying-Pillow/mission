@@ -23,7 +23,7 @@ import { buildMissionTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
-	MISSION_TASK_STAGE_DIRECTORIES,
+	MISSION_STAGE_FOLDERS,
 	getMissionStageDefinition,
 	type OperatorActionDescriptor,
 	type MissionTowerProjection,
@@ -138,13 +138,11 @@ export class Mission {
 
 	public getRecord(): MissionRecord {
 		const workspaceDir = this.adapter.getMissionWorkspacePath(this.missionDir);
-		const missionControlDir = this.adapter.getMissionControlPath(this.missionDir);
 		return {
 			id: this.descriptor.missionId,
 			brief: { ...this.descriptor.brief },
 			missionDir: workspaceDir,
 			missionRootDir: this.missionDir,
-			missionControlDir,
 			branchRef: this.descriptor.branchRef,
 			createdAt: this.descriptor.createdAt,
 			stage: this.lastKnownStatus?.stage ?? 'prd',
@@ -559,7 +557,6 @@ export class Mission {
 			branchRef: this.descriptor.branchRef,
 			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
 			missionRootDir: this.missionDir,
-			missionControlDir: this.adapter.getMissionControlPath(this.missionDir),
 			productFiles,
 			...(activeTasks.length > 0 ? { activeTasks } : {}),
 			...(readyTasks.length > 0 ? { readyTasks } : {}),
@@ -607,7 +604,7 @@ export class Mission {
 		const runtime = createDraftMissionWorkflowRuntimeState(configuration, this.descriptor.createdAt);
 		const stages: MissionStageStatus[] = MISSION_STAGES.map((stageId) => ({
 			stage: stageId,
-			directoryName: MISSION_TASK_STAGE_DIRECTORIES[stageId],
+			folderName: MISSION_STAGE_FOLDERS[stageId],
 			status: 'pending',
 			taskCount: 0,
 			completedTaskCount: 0,
@@ -629,7 +626,6 @@ export class Mission {
 			branchRef: this.descriptor.branchRef,
 			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
 			missionRootDir: this.missionDir,
-			missionControlDir: this.adapter.getMissionControlPath(this.missionDir),
 			productFiles,
 			stages,
 			agentSessions: [],
@@ -688,7 +684,7 @@ export class Mission {
 			const tasks = runtimeTasks.map((task, index) => this.toWorkflowProjectedTaskState(task, index));
 			return {
 				stage: stageId,
-				directoryName: MISSION_TASK_STAGE_DIRECTORIES[stageId],
+				folderName: MISSION_STAGE_FOLDERS[stageId],
 				status:
 					document.runtime.lifecycle === 'delivered' && stageId === 'delivery'
 						? 'done'
@@ -881,8 +877,7 @@ export class Mission {
 		const fileName = `${task.taskId.split('/').pop() ?? task.taskId}.md`;
 		const relativePath =
 			[
-				'mission-control',
-				MISSION_TASK_STAGE_DIRECTORIES[task.stageId as MissionStageId],
+				MISSION_STAGE_FOLDERS[task.stageId as MissionStageId],
 				'tasks',
 				fileName
 			].join('/');
@@ -1026,7 +1021,7 @@ export class Mission {
 			return 'Complete DELIVERY.md and deliver the mission.';
 		}
 
-		return `Review tasks/${MISSION_TASK_STAGE_DIRECTORIES[stage]} and add the next task file.`;
+		return `Review tasks/${MISSION_STAGE_FOLDERS[stage]} and add the next task file.`;
 	}
 
 	private async collectProductFiles(): Promise<Partial<Record<MissionArtifactKey, string>>> {

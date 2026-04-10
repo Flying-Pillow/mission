@@ -2,7 +2,7 @@ import type { FrontmatterValue } from '../../lib/frontmatter.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_ARTIFACTS,
-	MISSION_TASK_STAGE_DIRECTORIES,
+	MISSION_STAGE_FOLDERS,
 	type MissionArtifactKey,
 	type MissionStageId,
 	type MissionTaskAgent,
@@ -44,12 +44,13 @@ export class Artifact {
 	public getRelativePath(): string {
 		if (this.definition.kind === 'product') {
 			const definition = getMissionArtifactDefinition(this.definition.key);
-			return definition.stageId
-				? `mission-control/${MISSION_TASK_STAGE_DIRECTORIES[definition.stageId]}/${MISSION_ARTIFACTS[this.definition.key]}`
-				: `mission-control/${MISSION_ARTIFACTS[this.definition.key]}`;
+			const stageFolder = definition.stageId ? MISSION_STAGE_FOLDERS[definition.stageId] : undefined;
+			return stageFolder
+				? `${stageFolder}/${MISSION_ARTIFACTS[this.definition.key]}`
+				: MISSION_ARTIFACTS[this.definition.key];
 		}
 
-		return `mission-control/${MISSION_TASK_STAGE_DIRECTORIES[this.definition.stageId]}/tasks/${this.definition.fileName}`;
+		return `${MISSION_STAGE_FOLDERS[this.definition.stageId]}/tasks/${this.definition.fileName}`;
 	}
 
 	public async exists(adapter: FilesystemAdapter): Promise<boolean> {

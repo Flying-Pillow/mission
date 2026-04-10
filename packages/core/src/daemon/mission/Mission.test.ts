@@ -63,7 +63,7 @@ describe('Mission', () => {
                 expect(sessionRecord).toMatchObject({
                     taskId,
                     runtimeId: runner.id,
-                    assignmentLabel: expect.stringContaining('mission-control/01-PRD/tasks/')
+                    assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
                 expect(events).toEqual(
                     expect.arrayContaining(['session-started', 'agent-message', 'session-state-changed'])
@@ -285,7 +285,7 @@ describe('Mission', () => {
                 expect(nextStatus.agentSessions?.[0]).toMatchObject({
                     taskId,
                     runtimeId: runner.id,
-                    assignmentLabel: expect.stringContaining('mission-control/')
+                    assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
             } finally {
                 mission.dispose();

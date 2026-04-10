@@ -65,9 +65,8 @@ describe('FilesystemAdapter', () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
-			await fs.mkdir(path.join(missionDir, 'mission-control'), { recursive: true });
 			await fs.writeFile(
-				path.join(missionDir, 'mission-control', 'BRIEF.md'),
+				path.join(missionDir, 'BRIEF.md'),
 				[
 					'# BRIEF: Filesystem metadata recovery',
 					'',
