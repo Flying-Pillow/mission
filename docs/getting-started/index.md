@@ -14,17 +14,17 @@ has_children: true
 </section>
 
 <div class="mission-section-grid mission-section-grid--three">
-	<a class="mission-section-card" href="{{ '/getting-started/installation/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/getting-started/installation.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 1</span>
 		<span class="mission-section-card__title">Installation</span>
 		<span class="mission-section-card__text">Prepare your machine, terminal substrate, editor integration, and Tower runtime.</span>
 	</a>
-	<a class="mission-section-card" href="{{ '/getting-started/repository-setup/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/getting-started/repository-setup.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 2</span>
 		<span class="mission-section-card__title">Repository Setup</span>
 		<span class="mission-section-card__text">Adopt a codebase without confusing repository policy with live mission execution.</span>
 	</a>
-	<a class="mission-section-card" href="{{ '/getting-started/start-your-first-mission/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 3</span>
 		<span class="mission-section-card__title">Start Your First Mission</span>
 		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Tower control.</span>

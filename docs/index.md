@@ -1,21 +1,18 @@
 ---
-layout: minimal
+layout: default
 title: Mission
 nav_title: Overview
 nav_order: 1
-nav_enabled: false
 ---
-
-# Flying Pillow Mission
 
 <section class="mission-home-hero">
 	<span class="mission-home-kicker">Operator-first AI Delivery</span>
 	<div class="mission-home-title">Flying Pillow Mission</div>
 	<p class="mission-home-tagline">Mission is an orchestration layer for software delivery: it controls the workflow, stages the evidence, and dispatches well-defined tasks to coding agents instead of pretending to be the agent itself.</p>
 	<div class="mission-home-actions">
-		<a class="btn btn-primary" href="{{ '/getting-started/installation/' | relative_url }}">Start Here</a>
-		<a class="btn" href="{{ '/getting-started/start-your-first-mission/' | relative_url }}">Prepare a Mission</a>
-		<a class="btn" href="{{ '/user-manual/workflow-control/' | relative_url }}">Open the Tower Guide</a>
+		<a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
+		<a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
+		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Open the Tower Guide</a>
 	</div>
 	<div class="mission-home-grid">
 		<div class="mission-home-card">

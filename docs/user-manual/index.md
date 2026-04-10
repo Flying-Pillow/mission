@@ -14,17 +14,17 @@ has_children: true
 </section>
 
 <div class="mission-section-grid mission-section-grid--three">
-	<a class="mission-section-card" href="{{ '/user-manual/tower-layout/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/user-manual/tower-layout.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Surface</span>
 		<span class="mission-section-card__title">Tower Overview</span>
 		<span class="mission-section-card__text">See how the dashboard, agent pane, and editor gate fit together into one operational surface.</span>
 	</a>
-	<a class="mission-section-card" href="{{ '/user-manual/workflow-control/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/user-manual/workflow-control.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Steering</span>
 		<span class="mission-section-card__title">Mission Control Tower</span>
 		<span class="mission-section-card__text">Understand the actions available to the operator for repositories, missions, tasks, and live sessions.</span>
 	</a>
-	<a class="mission-section-card" href="{{ '/user-manual/agent-sessions/' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/user-manual/agent-sessions.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Runtime Layer</span>
 		<span class="mission-section-card__title">Agents, Runtimes, and Models</span>
 		<span class="mission-section-card__text">See how Mission keeps workflow control separate from which agent runtime or model is doing the work.</span>
