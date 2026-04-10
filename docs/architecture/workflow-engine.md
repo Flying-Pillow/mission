@@ -1,3 +1,10 @@
+---
+layout: default
+title: Workflow Engine
+parent: Architecture
+nav_order: 2
+---
+
 # Workflow Engine
 
 Mission's workflow engine is a reducer-driven mission runtime that persists execution state as `mission.json` inside a mission workspace. It is mission-local, configuration-backed, and designed to survive restarts without depending on an in-memory shell loop.

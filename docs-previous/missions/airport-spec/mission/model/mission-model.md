@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Mission Model
-nav_exclude: true
+parent: Model
+nav_order: 2
 ---
 
 # Mission Model

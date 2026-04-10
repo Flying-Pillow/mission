@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Repository Layout And Adoption
-nav_exclude: true
+parent: Model
+nav_order: 3
 ---
 
 # Repository Layout And Adoption

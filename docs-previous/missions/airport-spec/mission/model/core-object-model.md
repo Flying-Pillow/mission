@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Core Object Model
-nav_exclude: true
+parent: Model
+nav_order: 1
 ---
 
 # Core Object Model

@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Example Mission Cycle
-nav_exclude: true
+parent: Examples
+nav_order: 1
 ---
 
 # Example Mission Cycle

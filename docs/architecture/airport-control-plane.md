@@ -1,3 +1,10 @@
+---
+layout: default
+title: Airport Control Plane
+parent: Architecture
+nav_order: 1
+---
+
 # Airport Control Plane
 
 Mission's airport control plane is the daemon-owned layout authority for the terminal application. After the initial bootstrap handoff, Tower is a client of that control plane rather than the authority that decides where panels belong or which gate is focused.

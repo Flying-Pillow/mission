@@ -1,3 +1,10 @@
+---
+layout: default
+title: Workflow Control
+parent: User Manual
+nav_order: 2
+---
+
 # Workflow Control
 
 Mission's workflow control surface is task-centric even when the UI speaks in stage language.

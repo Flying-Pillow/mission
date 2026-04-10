@@ -1,3 +1,10 @@
+---
+layout: default
+title: Agent Sessions
+parent: User Manual
+nav_order: 3
+---
+
 # Agent Sessions
 
 An agent session in Mission is the live runtime attached to a workflow task.

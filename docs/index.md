@@ -1,3 +1,10 @@
+---
+layout: default
+title: Mission
+nav_title: Overview
+nav_order: 1
+---
+
 # Mission
 
 Mission is a local state machine, daemon-owned control plane, and terminal surface for AI-driven software development. It exists to solve a narrow operational problem: most AI coding workflows still rely on long-lived chat context, ad hoc shell scripts, and work on the active branch. That combination produces context rot, branch corruption, and brittle orchestration that becomes hard to trust once a session crashes or drifts.

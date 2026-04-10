@@ -1,3 +1,10 @@
+---
+layout: default
+title: Handling Emergencies
+parent: Core Workflows
+nav_order: 3
+---
+
 # Handling Emergencies
 
 > As an operator, I want a hard emergency stop when an agent goes rogue, so I can sever transport, stop new launches, and recover the mission safely.

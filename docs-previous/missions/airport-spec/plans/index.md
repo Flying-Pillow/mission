@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Plans
-nav_exclude: true
+parent: Airport Spec Mission
+nav_order: 5
+has_children: true
 ---
 
 # Plans

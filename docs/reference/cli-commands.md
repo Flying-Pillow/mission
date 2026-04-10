@@ -1,3 +1,10 @@
+---
+layout: default
+title: CLI Commands
+parent: Reference
+nav_order: 1
+---
+
 # CLI Commands
 
 This page documents the public Mission CLI surface as it is actually routed today. The source of truth is `apps/tower/terminal/src/routeTowerEntry.ts` and the help text emitted by that router.

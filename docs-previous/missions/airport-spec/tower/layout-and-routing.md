@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Tower Layout And Routing
-nav_exclude: true
+parent: Tower Workstream
+nav_order: 1
 ---
 
 # Tower Layout And Routing

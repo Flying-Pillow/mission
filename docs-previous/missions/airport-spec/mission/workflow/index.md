@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Workflow
-nav_exclude: true
+parent: Mission Workstream
+nav_order: 2
+has_children: true
 ---
 
 # Workflow

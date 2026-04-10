@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Agent Runtime Plan
-nav_exclude: true
+parent: Plans
+nav_order: 1
 ---
 
 # Agent Runtime Plan

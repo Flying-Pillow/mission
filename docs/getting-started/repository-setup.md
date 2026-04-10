@@ -1,3 +1,10 @@
+---
+layout: default
+title: Repository Setup
+parent: Getting Started
+nav_order: 2
+---
+
 # Repository Setup
 
 Repository setup in Mission creates repository-scoped control state. It does not create or start a mission workflow by itself.

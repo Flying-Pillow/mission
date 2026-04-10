@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Repository Workflow Settings Plan
-nav_exclude: true
+parent: Plans
+nav_order: 2
 ---
 
 # Repository Workflow Settings Plan

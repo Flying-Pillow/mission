@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Reference
-nav_exclude: true
+parent: Airport Spec Mission
+nav_order: 4
+has_children: true
 ---
 
 # Reference

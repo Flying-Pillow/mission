@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Configuration
-nav_exclude: true
+parent: Mission Workstream
+nav_order: 4
+has_children: true
 ---
 
 # Configuration

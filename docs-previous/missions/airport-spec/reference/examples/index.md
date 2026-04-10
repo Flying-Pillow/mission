@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Examples
-nav_exclude: true
+parent: Reference
+nav_order: 1
+has_children: true
 ---
 
 # Examples

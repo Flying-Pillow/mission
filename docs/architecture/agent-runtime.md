@@ -1,3 +1,10 @@
+---
+layout: default
+title: Agent Runtime
+parent: Architecture
+nav_order: 3
+---
+
 # Agent Runtime
 
 Mission's agent runtime is a provider-neutral execution boundary. It allows the workflow engine to launch, attach, prompt, command, cancel, and terminate sessions without hard-coding orchestration semantics to one provider or one transport.

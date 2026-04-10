@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Checklists
-nav_exclude: true
+parent: Airport Spec Mission
+nav_order: 6
+has_children: true
 ---
 
 # Checklists

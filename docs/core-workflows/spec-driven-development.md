@@ -1,3 +1,10 @@
+---
+layout: default
+title: Spec-Driven Development
+parent: Core Workflows
+nav_order: 1
+---
+
 # Spec-Driven Development
 
 > As a Principal Architect, I want to convert a `BRIEF.md` into a `PRD.md` and a `PRD.md` into a `SPEC.md` before implementation begins, so the AI is constrained by explicit architecture rather than improvising code.

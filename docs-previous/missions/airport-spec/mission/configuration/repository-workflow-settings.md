@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Repository Workflow Settings
-nav_exclude: true
+parent: Configuration
+nav_order: 1
 ---
 
 # Repository Workflow Settings

@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Tower Workstream
-nav_exclude: true
+parent: Airport Spec Mission
+nav_order: 3
+has_children: true
 ---
 
 # Tower Workstream

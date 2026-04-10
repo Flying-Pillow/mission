@@ -2,6 +2,7 @@
 layout: default
 title: Current Mission
 nav_order: 7
+has_children: true
 ---
 
 # Current Mission

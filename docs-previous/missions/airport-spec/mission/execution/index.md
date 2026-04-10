@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Execution
-nav_exclude: true
+parent: Mission Workstream
+nav_order: 3
+has_children: true
 ---
 
 # Execution

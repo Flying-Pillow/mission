@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Workflow Engine
-nav_exclude: true
+parent: Workflow
+nav_order: 1
 ---
 
 # Workflow Engine

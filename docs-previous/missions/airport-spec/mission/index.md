@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Mission Workstream
-nav_exclude: true
+parent: Airport Spec Mission
+nav_order: 2
+has_children: true
 ---
 
 # Mission Workstream

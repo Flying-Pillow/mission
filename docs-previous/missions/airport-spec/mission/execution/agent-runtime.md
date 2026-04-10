@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Agent Runtime
-nav_exclude: true
+parent: Execution
+nav_order: 1
 ---
 
 # Agent Runtime

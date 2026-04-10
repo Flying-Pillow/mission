@@ -1,3 +1,10 @@
+---
+layout: default
+title: Tower Layout
+parent: User Manual
+nav_order: 1
+---
+
 # Tower Layout
 
 The Tower is Mission's terminal surface, not Mission's layout authority.

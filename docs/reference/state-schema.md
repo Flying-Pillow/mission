@@ -1,3 +1,10 @@
+---
+layout: default
+title: State Schema
+parent: Reference
+nav_order: 2
+---
+
 # State Schema
 
 Mission uses multiple state scopes on purpose. The daemon-wide snapshot, the airport registry, and the mission-local runtime record solve different problems and should not be collapsed into a single mental model.

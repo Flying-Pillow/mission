@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Workflow Engine Checklist
-nav_exclude: true
+parent: Checklists
+nav_order: 1
 ---
 
 # Workflow Engine Checklist

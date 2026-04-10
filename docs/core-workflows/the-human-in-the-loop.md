@@ -1,3 +1,10 @@
+---
+layout: default
+title: The Human In The Loop
+parent: Core Workflows
+nav_order: 2
+---
+
 # The Human In The Loop
 
 > As the operator, I want the AI to remain subordinate to explicit workflow policy and human approval, so automation never outruns governance.

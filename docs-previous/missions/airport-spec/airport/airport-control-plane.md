@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Airport Control Plane
-nav_exclude: true
+parent: Airport Workstream
+nav_order: 1
 ---
 
 # Airport Control Plane

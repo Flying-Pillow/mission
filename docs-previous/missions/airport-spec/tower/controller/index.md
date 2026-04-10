@@ -1,7 +1,9 @@
 ---
 layout: default
 title: Controller
-nav_exclude: true
+parent: Tower Workstream
+nav_order: 2
+has_children: true
 ---
 
 # Controller

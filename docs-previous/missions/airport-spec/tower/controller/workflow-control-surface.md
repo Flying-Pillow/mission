@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Workflow Control Surface
-nav_exclude: true
+parent: Controller
+nav_order: 1
 ---
 
 # Workflow Control Surface
