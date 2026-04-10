@@ -7,7 +7,8 @@ has_children: true
 
 # Getting Started
 
-Use this section to install Mission, understand the first-run operator experience, and separate user-level setup from repository-scoped control-state bootstrap.
+Use this section to get Mission running, adopt a repository safely, and start the first real mission without guessing how the product is supposed to be used.
 
 - [Installation](installation.md)
 - [Repository Setup](repository-setup.md)
+- [Start Your First Mission](start-your-first-mission.md)

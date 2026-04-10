@@ -7,8 +7,8 @@ has_children: true
 
 # User Manual
 
-Use this section to understand the current Tower surface, the daemon-backed workflow control model, and the runtime session semantics operators interact with day to day.
+Use this section to understand what the operator actually sees in Tower, how missions are monitored and steered, and how agent sessions fit into the day-to-day workflow.
 
-- [Tower Layout](tower-layout.md)
-- [Workflow Control](workflow-control.md)
-- [Agent Sessions](agent-sessions.md)
+- [Tower Overview](tower-layout.md)
+- [Mission Control Tower](workflow-control.md)
+- [Agents, Runtimes, and Models](agent-sessions.md)

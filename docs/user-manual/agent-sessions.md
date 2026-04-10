@@ -1,108 +1,90 @@
 ---
 layout: default
-title: Agent Sessions
+title: Agents, Runtimes, and Models
 parent: User Manual
 nav_order: 3
 ---
 
-# Agent Sessions
+# Agents, Runtimes, and Models
 
-An agent session in Mission is the live runtime attached to a workflow task.
+Mission is designed so your workflow is not trapped inside one vendor's chat model.
 
-That runtime is deliberately separated from workflow state. A task belongs to the workflow engine and is persisted in the mission runtime record. A session belongs to the agent runtime layer and represents the active provider connection doing work for that task.
+The core idea is simple: a mission, a task, and a delivery flow should outlive any one agent runtime. That is why Mission treats the live agent as a replaceable execution layer rather than as the definition of the product.
 
-## Session Versus Task
+## Task Versus Session
 
-The distinction is simple but important:
+The most important distinction is:
 
-| Concept | Role |
+| Concept | What it means |
 | --- | --- |
-| Workflow task | The bounded unit of planned work with dependencies, lifecycle, and launch policy |
-| Agent session | The live provider-backed execution context attached to a task |
+| Task | The bounded unit of planned work in the mission |
+| Session | The live agent runtime currently working on that task |
 
-This separation lets Mission keep workflow semantics stable even if the underlying agent provider changes.
+That separation is what allows Mission to stay stable even as runtimes evolve.
 
-## Provider-Neutral Runtime Contract
+## What Mission Supports Today
 
-Mission's runtime layer standardizes sessions through a small contract:
+In the current codebase, the built-in runtimes are:
 
-- start a session
-- attach to an existing session
-- inspect a session snapshot
-- submit a prompt
-- submit a structured command
-- cancel a session
-- terminate a session
+- `copilot-cli`
+- `copilot-sdk`
 
-The session snapshot carries the runtime id, transport identity, session id, mission id, task id, current phase, prompt capability, accepted commands, and update timestamp. That gives the rest of the system a provider-neutral way to reason about a running agent.
+Those are the concrete adapters Mission ships today. They are not the long-term ceiling of the product. They are the currently implemented runtime set.
 
-## Session Phases
+## Why This Still Matters For Agent Freedom
 
-The common runtime model tracks these phases:
+Even in alpha, Mission already separates:
 
-- `starting`
-- `running`
-- `awaiting-input`
-- `completed`
-- `failed`
-- `cancelled`
-- `terminated`
+- workflow policy
+- runtime selection
+- transport behavior
+- default execution mode
+- default model
+- task-level runner assignment
 
-Mission's workflow runtime then projects its own session lifecycle vocabulary into the mission runtime record. The point is not that every provider behaves identically. The point is that Mission can normalize providers into a shared orchestration model.
+That means the workflow is not welded to one provider's assumptions. Mission can keep the same mission lifecycle, the same Tower, and the same artifact model even as the runtime layer broadens.
 
-## Prompt Submission And Structured Commands
+This is the architectural reason Mission can realistically grow toward runners for tools such as Claude Code, Gemini CLI, Codex, Pi, and others without turning the rest of the product upside down.
 
-The runtime contract supports two distinct interaction paths:
+## Models And Modes
 
-- freeform prompts
-- structured commands such as `interrupt`, `continue`, `checkpoint`, and `finish`
+Mission already carries repository-level defaults for:
 
-Whether a given runner truly supports those operations is capability-driven. For example:
+- `agentRuntime`
+- `defaultAgentMode`
+- `defaultModel`
 
-- the Copilot CLI terminal runner supports prompt submission, structured commands, interruption, and attachment, but not MCP client attachment
-- the Copilot SDK runner supports prompt submission, structured commands, attachment, telemetry, and MCP client attachment
+Those defaults live in repository settings and are fed into session launch behavior. That means Mission already understands that “which runtime should do the work” and “which model or mode should be preferred” are separate concerns.
 
-Mission does not assume that every provider exposes the same transport or interaction semantics. That is why capabilities are part of the runner contract.
+The workflow settings and task templates can also assign an `agentRunner` per task. That is the mechanism that keeps the product open to using different runtimes for different kinds of work.
 
-## Bounded Task Launch Prompt
+## Verification Versus Coding
 
-When Mission launches a task session, it builds a bounded launch prompt that names:
+Mission's workflow already distinguishes implementation tasks from verification tasks. That is important because it opens the door to using different execution strategies for writing code and validating it.
 
-- the task sequence and subject
-- the mission workspace boundary
-- the authoritative task file path
-- the task summary
+Current alpha reality:
 
-The prompt explicitly tells the agent to stay strictly inside the mission workspace and to treat the task file as authoritative. That is the runtime boundary between workflow planning and agent execution.
+- task-level runner choice exists in the workflow model
+- repository-level model defaults exist
+- per-task model selection is not yet exposed as a first-class workflow setting
 
-## Reattachment, Failure, And Cleanup
+That is still a strong foundation. It means Mission is already structured for “different brain for different job” thinking instead of assuming one model must do everything.
 
-Mission is designed to survive reconnects and stale provider state:
+## What The Operator Can Do With A Live Session
 
-- the orchestrator can attach to existing sessions when a runner supports it
-- session snapshots can be persisted and normalized
-- terminal sessions are released when a session reaches a terminal phase
-- if a previously known provider session no longer exists, Mission normalizes that attachment to a terminated session rather than pretending it is still alive
+Once a session exists, Mission can normalize it behind one common contract:
 
-That last behavior is important for crash recovery. Reattachment failure becomes explicit terminated state with a reason, not silent ambiguity.
+- start it
+- attach to it
+- prompt it
+- issue structured commands
+- cancel it
+- terminate it
 
-## MCP Attachment
+This is why Tower can remain coherent even when runtimes differ. The operator sees one supervisory model, not a separate control philosophy for every provider.
 
-Mission can attach MCP server references to a session start request when the selected runner supports MCP client behavior. The orchestrator merges explicitly requested MCP servers with any injected servers and rejects the request if the chosen runner does not support MCP attachment.
+## Why This Is Productively Different
 
-Today that means MCP is architecture-supported but runner-specific:
+Mission does not want to be “the Copilot workflow” or “the Claude workflow.” It wants to be the workflow layer that can supervise AI delivery regardless of which runtime is best suited for a given repository, team, or task type.
 
-- supported by the Copilot SDK runner
-- not supported by the terminal-backed Copilot CLI runner
-
-## What Operators Should Understand
-
-For operators, the most important facts are:
-
-1. A task is the workflow object; a session is the live runtime attached to it.
-2. Session capabilities vary by runner, but Mission normalizes them behind one contract.
-3. Cancellation and termination are first-class lifecycle operations.
-4. Reattachment is supported where the provider permits it.
-5. Missing or stale provider sessions are surfaced as terminated state rather than hidden.
-
-That contract is what lets Mission remain runtime-neutral while still giving the human a concrete, governable session model.
+That freedom is one of the most compelling reasons to use Mission. The workflow, evidence model, and Tower remain stable while the agent layer can evolve underneath them.

@@ -7,70 +7,93 @@ nav_order: 2
 
 # Repository Setup
 
-Repository setup in Mission creates repository-scoped control state. It does not create or start a mission workflow by itself.
+Repository setup is where Mission stops being a generic tool on your machine and becomes an operating system for a specific codebase.
 
-That distinction matters because Mission uses different storage layers for different concerns:
+The goal is simple: teach Mission enough about the repository that it can create missions safely, track them durably, and keep delivery work away from the primary checkout.
 
-- Repository control state lives under `.mission/` in the repository checkout.
-- Mission worktrees live under the operator's mission workspace root.
-- Per-mission runtime state is persisted later as `mission.json` inside an individual mission workspace.
+## What Repository Setup Means
 
-## What Repository Bootstrap Creates
+Adopting a repository gives Mission three things:
 
-The low-level repository initializer creates the Mission control directory and initializes repository workflow settings. In the current codebase, the relevant paths are:
+- a place to store repository-level policy
+- a way to find and manage missions for that repository
+- a clean separation between control state and delivery work
 
-| Path | Scope | Responsibility |
-| --- | --- | --- |
-| `.mission/` | Repository-scoped | Root control directory for Mission metadata |
-| `.mission/settings.json` | Repository-scoped | Daemon and workflow defaults for this repository |
-| `.mission/missions` | Repository-scoped catalog path | Repository-side catalog location referenced by the control layer |
-| `<missionWorkspaceRoot>/<repo-name>` | User-scoped worktree root | Root under which Mission creates isolated worktrees for this repository |
+In practical terms, Mission keeps repository control state under `.mission/`, while actual mission execution happens in isolated workspaces outside the main checkout.
 
-The default repository settings file is created through `WorkflowSettingsStore.initialize()`, which writes the repository workflow configuration into `.mission/settings.json`. The default settings include repository workflow defaults, tracking provider defaults, instructions and skills paths, and airport intent data when configured.
+## What The Operator Does
 
-## What Repository Bootstrap Does Not Create
+In the current control surface, repository discovery includes actions for:
 
-Repository bootstrap does not create `mission.json`.
+- registering a repository
+- switching between registered repositories
+- editing repository setup
+- browsing open GitHub issues once issue intake is configured
 
-That file is the per-mission workflow runtime record. It belongs to a specific mission execution workspace and is created later by the workflow engine when a mission runtime is materialized. This separation is intentional:
+That means the operator journey is roughly:
 
-- `.mission/settings.json` describes repository policy and defaults.
-- `mission.json` captures runtime execution state for one mission.
+1. Open Tower.
+2. Add or switch to the target repository.
+3. Confirm repository setup and workflow defaults.
+4. Start a mission only after the repository is under Mission control.
 
-The runtime record is described in [Workflow Engine](../architecture/workflow-engine.md) and [State Schema](../reference/state-schema.md).
+## What Mission Creates
 
-## Mission Workspace Root And Worktree Behavior
+Repository setup creates repository-scoped control state, not a live mission runtime.
 
-Mission resolves the workspace root from user or repository configuration using `missionWorkspaceRoot`. By default that value is `missions`, which resolves relative to the operator home directory, not the repository checkout.
+| Path | Purpose |
+| --- | --- |
+| `.mission/` | Root control directory |
+| `.mission/settings.json` | Repository defaults for workflow, runtime, and tracking |
+| external mission workspace root | Home for isolated mission worktrees |
 
-For a repository rooted at `/repo/example`, the default worktree root is conceptually:
+The important rule is that `.mission/settings.json` belongs to the repository, while `mission.json` belongs to one specific mission.
 
-```text
-~/missions/example
-```
+## What Stays Clean
 
-This is where Mission isolates mission execution worktrees. The repository checkout remains the control root. The mission workspace root is a separate operator-owned storage area.
+Mission is designed so repository setup does not mean “let the agent start editing the checkout.”
 
-## Repository Bootstrap Versus Mission Runtime
+The safety model is:
 
-The current codebase draws a clear line between three concepts:
+- repository policy lives in `.mission/`
+- mission execution lives in an external mission workspace
+- the active checkout remains the control root, not the agent sandbox
 
-| Concept | Created when | Stored where |
-| --- | --- | --- |
-| Repository bootstrap | When Mission initializes repository control state | `.mission/` in the repository checkout |
-| Mission workspace root | When user config resolves the external worktree root | Typically `~/missions/<repo-name>` |
-| Per-mission runtime state | When a mission execution is created and managed by the workflow engine | Mission workspace, including `mission.json` |
+That is one of the main reasons the product feels trustworthy in real work.
 
-This separation is one of Mission's core safety properties. The repository holds durable control settings. Mission execution state is isolated to mission workspaces. Agent work does not need to mutate the primary checkout directly.
+## Repository Defaults That Matter
 
-## About `mission init`
+The repository settings file can carry the defaults that make Mission feel tailored to a team instead of generic:
 
-There is a `runInit` implementation in the terminal source, but the public CLI router does not currently expose `mission init`. It should therefore be treated as an internal or legacy helper, not as the supported operator entrypoint.
+- workflow policy
+- tracking provider
+- instructions and skills paths
+- default runtime and mode selection
+- default model selection
+- mission workspace root
 
-From an operator perspective, repository bootstrap is currently reached through the broader Mission startup path and repository preparation services, not through a documented public `mission init` command.
+For an architecture-minded team, this is where repository governance begins. Mission is not only tracking tasks. It is capturing the default operating policy for AI work in that repository.
 
-## Repository Preparation Service
+## Repository Setup Is Not Mission Start
 
-The repository preparation flow used by the daemon is stricter than the low-level initializer. It prepares repository scaffolding in a temporary linked worktree, stages `.mission/settings.json`, pushes a branch, and opens a pull request titled `Initialize Mission repository scaffolding`.
+A repository can be adopted without any mission running.
 
-That flow is important for governance-minded teams because repository control state is proposed and reviewed like normal source changes. It avoids silently mutating the main branch while still establishing the required Mission control directory and workflow defaults.
+That separation matters because Mission treats these as different concerns:
+
+| Concern | Scope |
+| --- | --- |
+| Repository setup | Long-lived repository policy |
+| Mission start | One bounded unit of delivery work |
+| Mission runtime | Live execution state for that unit of work |
+
+This is why repository setup does not create `mission.json`. That file only appears when a real mission has been prepared.
+
+## GitHub And Review-Oriented Teams
+
+Mission's implemented intake and repository preparation flows are GitHub-centered today. That is useful for governance-heavy teams because repository scaffolding and mission intake can be reconciled with real issue tracking and normal review expectations.
+
+The product direction here is strong: Mission wants repository adoption to feel like establishing a safe operating envelope, not sneaking hidden metadata into a codebase.
+
+## Current Alpha Note
+
+There is a `mission init` implementation in source, but it is not currently part of the public routed CLI surface. For operators, repository adoption should be understood through the Mission startup and Tower control flows, not through a documented `mission init` command.

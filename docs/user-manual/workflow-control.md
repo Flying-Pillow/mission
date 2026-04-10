@@ -1,117 +1,104 @@
 ---
 layout: default
-title: Workflow Control
+title: Mission Control Tower
 parent: User Manual
 nav_order: 2
 ---
 
-# Workflow Control
+# Mission Control Tower
 
-Mission's workflow control surface is task-centric even when the UI speaks in stage language.
+Mission Control Tower is where the product becomes operational.
 
-That distinction is architectural, not stylistic. The workflow engine persists task state and mission lifecycle state. Stage status is a projection. So an operator may think "start implementation," but the daemon must translate that intent into mission, task, generation, session, or gate actions that are actually valid in runtime.
+It is the place where you watch a mission advance, decide what should happen next, and intervene when the workflow needs human judgment.
 
-## The Control Boundary
+## What You Can Monitor
 
-The daemon-owned mission object currently exposes action handling for these executable families:
+When a mission is selected, Tower gives the operator visibility into the most important runtime questions:
 
-| Action family | Examples in the current code |
-| --- | --- |
-| Mission actions | pause, resume, panic stop, clear panic, deliver |
-| Generation actions | generate tasks for the eligible stage |
-| Task actions | start, launch, mark done, mark blocked, reopen, enable or disable autostart, set launch mode |
-| Session actions | cancel session, terminate session |
+- which stage is active
+- which tasks are ready, running, blocked, or done
+- which artifact belongs to the current stage
+- whether a live agent session is attached to a task
+- whether the mission is paused, panicked, or ready to proceed
 
-Selection and gate-focused behavior are then projected around those action families rather than replacing them.
+That is the difference between Mission and generic AI tooling: the system is built to make runtime state observable.
 
-## Mission Actions
+## What You Can Steer
 
-Mission actions operate on lifecycle and governance state:
+The control surface exposes operator actions at several levels.
 
-- pause mission
-- resume mission
-- panic stop mission
+### Repository-Level Actions
+
+In discovery and repository flows, the current control plane exposes actions for:
+
+- configuring repository setup
+- preparing a new mission brief
+- opening an existing local mission
+- switching repositories
+- registering a repository
+- browsing open GitHub issues when issue intake is configured
+
+Those are the actions that make Mission feel like a product instead of a low-level runtime API.
+
+### Mission-Level Actions
+
+At mission level, the operator can govern the whole run:
+
+- pause the mission
+- resume the mission
+- panic-stop the mission
 - clear panic
-- deliver mission
+- deliver the mission
 
-These actions map directly to workflow events such as `mission.paused`, `mission.resumed`, `mission.panic.requested`, `mission.panic.cleared`, and `mission.delivered`.
+These are not cosmetic buttons. They correspond to real mission lifecycle transitions.
 
-This is the correct abstraction layer for human control. Operators control the mission as a governed runtime, not as a collection of ad hoc shell commands.
+### Task-Level Actions
 
-## Task Actions
+Tasks are where actual work moves.
 
-Tasks are the units that execute work. The current daemon mission surface supports:
+The implemented task action surface includes:
 
 - start a task
 - launch a task session
 - mark a task done
 - mark a task blocked
 - reopen a task
-- enable or disable task autostart
-- switch task launch mode between `automatic` and `manual`
+- enable or disable autostart
+- switch launch mode between `automatic` and `manual`
 
-Those controls operate on runtime task state and on task runtime policy. They do not mutate stage runtime state because stages do not own execution.
+This is a crucial product design choice. Tower speaks in stage language because humans think that way, but the real runtime authority lives at the task level.
 
-## Session Actions
+### Session-Level Actions
 
-Sessions are runtime attachments to tasks. The current action surface includes:
+When a task has a live agent attached, the operator can also act on the session itself:
 
-- cancel a session
-- terminate a session
+- prompt it
+- interrupt it
+- cancel it
+- terminate it
 
-Session prompting and command submission also exist in the runtime and mission layers, even when they are not the primary top-level toolbar action. This matters because a task and a session are not interchangeable:
+That gives the human a direct supervisory path into live execution.
 
-- the task is the workflow unit
-- the session is the live runtime attached to that task
+## How To Read The Stage Rail
 
-## Generation Actions
+The stage rail is your strategic view, not the execution engine.
 
-Mission can request task generation for the currently eligible stage. The daemon enforces that generation is only allowed for that eligible stage and rejects generation if runtime tasks already exist for it.
+Use it to answer questions like:
 
-This is how stage-oriented operator language is made safe. When a human says "start the next stage," the implemented action is not a stage mutation. It is usually one of these:
+- are we still turning the brief into requirements?
+- are we ready to move from specification to implementation?
+- are we blocked in audit?
+- has delivery actually happened?
 
-1. generate the tasks for the eligible stage
-2. start a ready task in that stage
-3. change launch policy for tasks in that stage
-4. resume a paused mission so ready work can proceed
+The important nuance is that stages are projections. Tasks are the executable units underneath them.
 
-## Selection And Gate-Focused Interaction
+## A Good Mental Model For Operators
 
-The operator surface also projects selection state:
+Think about Mission Control Tower like this:
 
-- repository selection
-- mission selection
-- stage focus
-- task focus
-- session focus
+- the stage rail tells you where the mission is
+- the task tree tells you what concrete work exists
+- the artifact view tells you what evidence the stage has produced
+- the session view tells you what an agent is doing right now
 
-That selection state matters because action availability and target context are derived from it. In the Tower, selected mission, stage, task, and session state shape which command descriptors are relevant.
-
-Mission also exposes workflow gates as projections. Gates such as `implement`, `verify`, `audit`, and `deliver` are derived from workflow state and evaluated by the daemon. They are not terminal layout slots and they are not stage commands.
-
-This is the distinction to keep straight:
-
-- workflow gates are readiness projections
-- airport gates are layout slots such as `dashboard`, `editor`, and `agentSession`
-
-## Stage Language Is Translation, Not Authority
-
-Principal Architects will naturally speak in stage-oriented language. Mission supports that language at the surface layer, but the daemon translates it into valid runtime intents.
-
-So when an operator says:
-
-- "start this stage"
-- "stop this stage"
-- "go back to this stage"
-
-the daemon should interpret that as combinations of:
-
-- mission lifecycle changes
-- task generation
-- task start or reopen actions
-- launch policy changes
-- session cancellation or termination
-
-The stage itself remains structural and derived.
-
-That is one of Mission's core safety properties: stage vocabulary can help the human think, but it is not allowed to become an ambiguous runtime authority.
+That model is one of Mission's best design choices because it keeps strategy, execution, evidence, and runtime supervision connected without collapsing them into one pane of terminal noise.

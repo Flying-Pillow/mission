@@ -7,91 +7,83 @@ nav_order: 1
 
 # Spec-Driven Development
 
-> As a Principal Architect, I want to convert a `BRIEF.md` into a `PRD.md` and a `PRD.md` into a `SPEC.md` before implementation begins, so the AI is constrained by explicit architecture rather than improvising code.
+Mission is built on a simple belief: AI produces better software when the work is constrained by explicit artifacts instead of improvised inside one endless session.
 
-Mission's workflow is designed to turn vague intent into bounded execution artifacts. The important distinction is that authored product templates, generated task files, and persisted runtime artifacts are not the same thing. The codebase treats them as separate layers, and adoption decisions should be based on that separation rather than on the older specification prose.
+That is what “spec-driven” means in Mission. It does not mean “write more documents for the sake of it.” It means every important phase of work leaves behind an artifact that the next phase can trust.
 
-## The Artifact Chain
+## Why This Feels Better Than Prompt-Driven Coding
 
-At the authored-product level, the current template corpus defines this progression:
+In a prompt-driven workflow, the same session often tries to do all of this at once:
 
-| Artifact | Purpose | Template location |
-| --- | --- | --- |
-| `BRIEF.md` | Canonical intake context for the mission | `templates/mission/BRIEF.md` |
-| `PRD.md` | Problem statement, outcome, constraints, success criteria | `templates/mission/products/PRD.md` |
-| `SPEC.md` | Target architecture, signatures, and file matrix | `templates/mission/products/SPEC.md` |
-| `VERIFY.md` | Runtime verification artifact for implementation evidence | Runtime artifact name from workflow manifest |
-| `AUDIT.md` | End-to-end findings and residual risks | `templates/mission/products/AUDIT.md` |
-| `DELIVERY.md` | Delivery summary, evidence, and release notes | `templates/mission/products/DELIVERY.md` |
+- interpret the problem
+- invent the architecture
+- write the code
+- decide what counts as verification
+- summarize itself as complete
 
-One detail is worth calling out explicitly: the template corpus includes `VERIFICATION.md`, but the runtime workflow manifest defines the verification artifact key as `verify` and the actual runtime file name as `VERIFY.md`. User-facing documentation should follow the manifest because that is what the running system uses.
+That is where AI coding gets brittle.
 
-## From Authored Artifacts To Runtime Tasks
+Mission splits those responsibilities apart so the operator can inspect and correct them separately.
 
-Mission does not treat a mission as one large coding chat. Instead, it turns product artifacts into bounded task files:
+## The Product Artifacts
 
-| Stage | Generated task intent | Verified source |
-| --- | --- | --- |
-| PRD | Rewrite or enrich `PRD.md` from `BRIEF.md` | `tasks/PRD/01-prd-from-brief.md` |
-| SPEC | Draft `SPEC.md` from `PRD.md` | `tasks/SPEC/01-spec-from-prd.md` |
-| SPEC | Produce the implementation and verification ledger | `tasks/SPEC/02-plan.md` |
-| Implementation | Execute planned slices and paired verification tasks | Runtime-generated under `03-IMPLEMENTATION/tasks` |
-| Audit | Review evidence and residual risk | Later-stage task generation and artifacts |
+The core artifact chain in the current workflow is:
 
-The planning task is particularly important. It instructs the planner to create paired implementation and verification task files in `03-IMPLEMENTATION/tasks`, with verification files prefixed by `verify-` and dependent on their corresponding implementation task. That is the operational mechanism by which Mission turns a high-level spec into bounded execution units.
+| Artifact | What it is for |
+| --- | --- |
+| `BRIEF.md` | Intake context for the mission |
+| `PRD.md` | Requirements, goals, and constraints |
+| `SPEC.md` | Architecture and implementation plan |
+| `VERIFY.md` | Verification evidence gathered during implementation |
+| `AUDIT.md` | Findings and residual risks |
+| `DELIVERY.md` | Final handoff and delivery summary |
 
-## Implemented Stage Model
+This structure gives the operator a crisp answer to a crucial question: what exactly are we trusting right now?
 
-The current workflow manifest defines five stages in a fixed order:
+## How Mission Uses Those Artifacts
 
-```text
-prd -> spec -> implementation -> audit -> delivery
-```
+Mission does not create artifacts as a side effect of one agent conversation. It uses them as the handoff points between phases of work.
 
-The stage directories are also fixed by the manifest:
+That changes the character of the product:
 
-| Stage | Directory | Runtime artifact bindings |
-| --- | --- | --- |
-| `prd` | `01-PRD` | `PRD.md` |
-| `spec` | `02-SPEC` | `SPEC.md` |
-| `implementation` | `03-IMPLEMENTATION` | `VERIFY.md` |
-| `audit` | `04-AUDIT` | `AUDIT.md` |
-| `delivery` | `05-DELIVERY` | `DELIVERY.md` |
+- the brief becomes a requirements document
+- requirements become a technical spec
+- the spec becomes a set of bounded implementation tasks
+- implementation produces verification evidence
+- verification feeds audit and delivery
 
-Stages are structural. Tasks execute work. That distinction is enforced in the reducer and should shape how architects evaluate the system. Mission does not model a stage as an executable actor. Instead, tasks are generated for the currently eligible stage, and stage status is later projected from task state.
+In other words, Mission turns “AI coding” into an inspectable supply chain.
 
-```mermaid
-flowchart LR
-    B[BRIEF.md] --> P[PRD.md]
-    P --> S[SPEC.md]
-    S --> L[Planning tasks]
-    L --> I[Implementation task files]
-    I --> V[VERIFY.md plus verify-* tasks]
-    V --> A[AUDIT.md]
-    A --> D[DELIVERY.md]
-```
+## Bounded Tasks Instead Of One Giant Session
 
-## Why This Reduces Context Drift
+Mission does not want implementation to begin as one giant blob of intent.
 
-Mission constrains AI by narrowing the active objective at each step:
+By the time a mission reaches implementation, the system is already set up to work through bounded tasks. In the current workflow, implementation also has paired verification behavior: verification tasks are prefixed with `verify-` and depend on their matching implementation tasks.
 
-1. The PRD task is allowed to change only `PRD.md`.
-2. The spec task is allowed to change only `SPEC.md`.
-3. The planning task creates execution ledger files, not application code.
-4. Implementation is broken into bounded slices with paired verification work.
-5. Audit and delivery are separate terminal steps rather than afterthoughts.
+That pairing is one of the reasons Mission feels disciplined. Verification is not something the agent gets to vaguely claim. It is part of the workflow structure.
 
-This matters because the common failure mode in AI-assisted development is not merely wrong code. It is unbounded scope expansion: requirements, architecture, implementation, verification, and delivery all collapse into one long improvisational session. Mission resists that collapse by pushing each responsibility into its own artifact or task boundary.
+## Why Architects Like This Model
 
-## Verification And Audit In The Lifecycle
+Spec-driven execution gives teams leverage in exactly the places where AI usually creates risk:
 
-Verification is not optional commentary after implementation. The manifest binds verification to the implementation stage through paired task definitions and the `verify` artifact key. Audit is then a separate later stage with its own artifact and gate.
+- scope becomes explicit before coding starts
+- architecture becomes reviewable before files change
+- verification becomes a named deliverable instead of a promise
+- audit and delivery become real stages instead of cleanup chores
 
-In practical terms:
+For a Principal Architect, that means Mission is not only fast. It is legible.
 
-- implementation produces code and focused verification evidence
-- verification consolidates proof in `VERIFY.md`
-- audit records findings and residual risks in `AUDIT.md`
-- delivery summarizes the outcome and operator-facing evidence in `DELIVERY.md`
+## A Better Way To Trust AI Output
 
-That structure gives an adopting team a cleaner answer to a hard question: not just "did the agent write code," but "what requirements constrained it, what spec bounded it, what evidence verified it, and what audit judged the result?"
+Mission does not ask you to trust the last thing the agent said. It asks you to trust a chain of increasingly concrete artifacts.
+
+That is a much stronger operating model:
+
+1. The brief states the intent.
+2. The PRD defines the target outcome.
+3. The SPEC constrains the implementation.
+4. Implementation tasks do bounded work.
+5. Verification proves what happened.
+6. Audit and delivery make the result reviewable.
+
+This is the core product promise behind Mission's workflow.

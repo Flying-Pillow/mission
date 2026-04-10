@@ -1,111 +1,81 @@
 ---
 layout: default
-title: Tower Layout
+title: Tower Overview
 parent: User Manual
 nav_order: 1
 ---
 
-# Tower Layout
+# Tower Overview
 
-The Tower is Mission's terminal surface, not Mission's layout authority.
+The Tower is the operator's cockpit for Mission.
 
-That distinction matters operationally. The operator sees the Tower, but the daemon and airport control plane own the authoritative gate bindings, focus intent, and panel registration state after startup handoff. Tower projects that state and provides interactive control over it.
+It is where you move from “I have work to do” to “I can see the mission, the stage, the tasks, the artifacts, and the live agent session that is doing the work.”
 
-## Startup Layering
+## What You See When Mission Launches
 
-The current startup path is deliberately layered:
+On a normal POSIX setup, Mission can bootstrap an airport-style layout with three coordinated panes:
 
-1. `mission` shell entry determines whether to launch Tower directly or bootstrap the broader airport layout.
-2. `routeTowerEntry` parses the command and dispatches to the appropriate handler.
-3. Mission either boots the airport layout or starts a Tower pane.
-4. The pane connects to the daemon and registers itself through `airport.connectPanel(...)`.
-5. The UI runtime mounts.
-6. `TowerController` becomes the active surface controller.
+- Mission Tower on the left
+- an agent session pane on the upper right
+- an editor gate on the lower right
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Operator
-    participant Shell as mission entry
-    participant Router as routeTowerEntry
-    participant Bootstrap as bootstrapTowerPane or airport layout bootstrap
-    participant Daemon as Mission daemon
-    participant Airport as airport.connectPanel
-    participant UI as TowerController
+That layout is one of the reasons the product feels usable in practice. You do not have to mentally stitch together a CLI, a text editor, and a random agent terminal. Mission places them into one operating surface.
 
-    Operator->>Shell: run mission
-    Shell->>Router: forward argv
-    Router->>Bootstrap: dispatch surface handler
-    Bootstrap->>Daemon: connect surface client
-    Bootstrap->>Airport: connectPanel(gateId)
-    Bootstrap->>UI: mount Tower UI
-```
+## Repository Mode And Mission Mode
 
-The public router currently exposes `mission` as the default Tower entry and supports the internal airport pane launch commands only as bootstrap hooks. Those internal hooks are not the public CLI surface.
+Tower has two main operating contexts:
 
-## Repository Mode Versus Mission Mode
+| Mode | What it is for |
+| --- | --- |
+| Repository mode | Repository setup, mission intake, issue browsing, and selection |
+| Mission mode | Stage progress, tasks, artifacts, sessions, and mission actions |
 
-The Tower shell has two top-level contexts:
+Launching from a repository checkout opens repository mode. Launching from an existing mission workspace automatically selects that mission and opens mission mode.
 
-- repository mode
-- mission mode
+That is a good product detail because it means the surface adapts to where you are in the workflow instead of making every screen feel the same.
 
-Launching from a mission worktree auto-selects that mission. Launching from the repository checkout opens repository mode. In the UI controller this distinction becomes a `TowerMode` of either `repository` or `mission`, and the center route is then projected from the selected shell target and the daemon snapshot.
+## The Main Tower Regions
 
-Repository mode is used for repository-wide intake and setup flows. Mission mode is used to inspect and control a selected mission's stage rail, task tree, sessions, and actions.
-
-## The Current Shell Stack
-
-The Tower shell currently renders as a fixed vertical stack:
+The current Tower shell is built around four persistent areas:
 
 1. Header
 2. Center panel
 3. Command panel
 4. Key hints row
 
-This is not aspirational. `TowerScreen.tsx` renders those four layers directly.
-
 ### Header
 
-The header stays visible at all times. It carries:
+The header gives you fast situational awareness:
 
-- panel title and workspace context
-- repository or mission tabs
-- stage rail items
-- status lines and footer badges
+- current repository or mission context
+- stage rail
+- status badges and summary context
 
-In mission mode, the header reflects the selected mission context and stage rail projection supplied by daemon state.
+When you are in mission mode, the stage rail is the quickest way to understand where the mission is and what still needs attention.
 
 ### Center Panel
 
-The center panel is the main routed surface. The current controller resolves two primary center routes:
+The center panel is the main work surface.
 
-- repository flow
-- mission control
-
-Which route appears is driven by shell mode and the dashboard airport projection. The center panel is where repository flows and mission-control content are rendered, but it is still downstream of daemon state and airport projection.
+In repository mode, it is where Mission can drive repository and intake flows. In mission mode, it becomes the mission-control view for stages, tasks, artifacts, and sessions.
 
 ### Command Panel
 
-The command panel remains visible across the shell. It is the stable entry point for commands, action execution, and confirmation flows. Repository flows do not replace it.
+The command panel is the stable operator control surface. This is where Mission exposes available actions and confirmation flows instead of forcing you to remember fragile shell commands.
 
 ### Key Hints Row
 
-The bottom row displays command help and key hints based on the current focus area. It is always present and acts as the shell's lightweight interaction legend.
+The bottom hint row keeps interaction discoverable. That matters in a terminal product because the UI has to stay fast without becoming obscure.
 
-## Gate And Panel Terminology
+## Why Tower Matters
 
-Tower panels are launched with an injected airport gate id. The current bootstrap expects one of:
+Mission is not only a workflow engine. It is a supervised operations product.
 
-- `dashboard`
-- `editor`
-- `agentSession`
+Tower is how that supervision becomes practical:
 
-When the Tower pane connects, it registers that gate with the daemon through the airport API. At that point, layout authority belongs to airport state, not to Tower-local assumptions.
+- you can see what stage is active
+- you can inspect which task is ready or blocked
+- you can open the live session that is doing work
+- you can keep the editor next to the agent instead of in a separate universe
 
-This is the boundary to remember:
-
-- Tower is the surface client
-- Airport and daemon projections are the layout authority
-
-That boundary is what allows pane registration, focus reconciliation, and mission selection to survive beyond any one surface process.
+This is a big part of why Mission is compelling. It makes AI-assisted delivery feel governable instead of chaotic.

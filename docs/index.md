@@ -7,56 +7,100 @@ nav_order: 1
 
 # Flying Pillow Mission
 
-Mission is a local state machine, daemon-owned control plane, and terminal surface for AI-driven software development. It exists to solve a narrow operational problem: most AI coding workflows still rely on long-lived chat context, ad hoc shell scripts, and work on the active branch. That combination produces context rot, branch corruption, and brittle orchestration that becomes hard to trust once a session crashes or drifts.
+Mission is for teams that want the speed of AI coding agents without giving up architectural discipline, repository safety, or human control.
 
-Mission replaces that model with explicit runtime state, isolated mission workspaces, and a human-governed execution surface. In the current codebase, the public CLI entry routes through `mission` and resolves to the Tower surface by default, with the daemon auto-started when needed. The Tower is the operator console; the daemon and its airport projections own control-plane truth.
+Instead of one long chat session working directly on your active branch, Mission turns software delivery into a governed operational flow:
 
-## Why Teams Evaluate Mission
+- adopt a repository once
+- start a mission from a new brief or an existing GitHub issue
+- let Mission create an isolated mission workspace
+- move through requirements, specification, implementation, audit, and delivery
+- monitor and steer everything from the Mission Control Tower
 
-Principal Architects generally care about three things before adopting an AI orchestration system:
+The result is a workflow that feels closer to running a flight operation than babysitting a chatbot.
 
-1. Whether runtime state is explicit and recoverable.
-2. Whether agent work is isolated from the active repository checkout.
-3. Whether a human can interrupt, gate, and resume execution without ambiguity.
+## What Mission Is For
 
-Mission addresses those concerns with a reducer-driven workflow runtime, repository-scoped daemon settings under `.mission/`, and mission worktrees rooted outside the main checkout. The operator launches the Tower, the daemon maintains the authoritative control state, and each unit of work is executed in a bounded mission workspace instead of a shared chat window or mutable active branch.
+Mission exists to solve the problems that show up as soon as AI coding becomes real work instead of a demo:
 
-## Air Traffic Control For AI Development
+- agents lose architectural discipline in long, improvised sessions
+- verification gets mixed together with implementation
+- active branches become unsafe places to experiment
+- crashes and disconnects destroy context
+- humans lose the ability to intervene cleanly
 
-Mission is best understood as air traffic control for a repository:
+Mission fixes that by separating intake, planning, implementation, verification, audit, and delivery into explicit artifacts, explicit tasks, and explicit runtime state.
 
-- The daemon maintains control-plane state and airport projections.
-- The Tower is the interactive surface used to observe and steer that state.
-- Agent sessions are launched into isolated mission workspaces instead of the primary checkout.
-- Human governance remains explicit through pause, panic, and launch policy controls.
+## What Using Mission Feels Like
 
-```mermaid
-flowchart LR
-    H[Operator] --> T[Mission Tower]
-    T --> D[Mission daemon]
-    D --> A[Airport control plane]
-    D --> W[Workflow engine]
-    W --> S[Bounded agent session]
-    S --> M[Mission workspace / worktree]
-```
+Mission is built around a simple operator journey:
 
-This architecture matters because Tower is not the layout authority and the agent is not the workflow authority. Layout truth lives in the airport control plane. Execution truth lives in the workflow engine and its persisted mission runtime record. The UI is a projection of daemon state, not a substitute for it.
+1. Install Mission and open the Tower.
+2. Register or switch to the repository you want to operate on.
+3. Prepare a mission from a brief or select an existing GitHub issue.
+4. Review the generated dossier and let the workflow advance from `prd` to `spec` to `implementation`, then `audit` and `delivery`.
+5. Watch stages, tasks, artifacts, and live agent sessions in the Tower.
+6. Pause, resume, relaunch, interrupt, or panic-stop work whenever you need to.
+7. Deliver from a verified mission workspace instead of hoping an AI chat stayed in bounds.
 
-## Current Public Surface
+Mission is intentionally opinionated about process, but lightweight in day-to-day operation. The product is designed so the operator always understands what exists, what is running, what produced an artifact, and what still needs human judgment.
 
-The public CLI surface currently consists of:
+## Why Teams Adopt It
 
-- `mission` to launch the terminal Tower surface.
-- `mission install` to configure user-level Mission prerequisites.
-- `mission airport:status` to inspect airport state.
-- `mission daemon:stop` to stop the daemon.
-- `missiond` as the related daemon process entry.
+Mission is attractive when you care about these outcomes:
 
-The router does not currently expose `mission init` as a supported public command. Repository scaffolding can still occur automatically when Mission starts and discovers missing control state, but user-facing documentation should treat `init` as an internal helper present in source rather than the public entrypoint.
+| Outcome | What Mission does |
+| --- | --- |
+| Protect the main checkout | Runs work in isolated mission workspaces and worktrees |
+| Reduce context drift | Breaks missions into staged artifacts and bounded task sessions |
+| Make progress recoverable | Persists mission runtime state instead of relying on terminal scrollback |
+| Keep humans in charge | Exposes pause, panic, launch policy, and task-level control as first-class operations |
+| Separate writing from verification | Uses explicit verification tasks and a dedicated `VERIFY.md` artifact |
+| Avoid vendor lock-in at the workflow layer | Keeps runtime selection separate from workflow policy |
+
+## Freedom Without Workflow Chaos
+
+Mission is not meant to lock you into one giant vendor-specific session.
+
+The workflow engine, runtime contract, and Tower all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
+
+- the selected runtime
+- the default execution mode
+- the default model
+- task-level runner assignment in workflow settings and task templates
+
+That matters because it keeps Mission's workflow model independent from any one provider. The current alpha is not yet shipping first-class runners for Claude Code, Gemini CLI, Codex, Pi, and similar tools, but the system is clearly built so those runtimes can be added without redesigning how missions, stages, artifacts, and Tower control work.
+
+## The Mission Flow In One View
+
+Every mission starts with intent and ends with delivery evidence:
+
+| Step | What the operator gets |
+| --- | --- |
+| Brief or issue intake | A concrete mission with title, scope, and tracking link |
+| PRD stage | A requirements document that states the problem and success criteria |
+| SPEC stage | A technical plan that bounds how the change should be built |
+| Implementation stage | Bounded coding tasks plus paired verification work |
+| Audit stage | Recorded findings, residual risks, and post-build review |
+| Delivery stage | A final delivery artifact for handoff and release readiness |
+
+That staged model is what makes Mission feel safe. It does not ask you to trust a stream of agent output. It gives you checkpoints, artifacts, and explicit runtime state at every step.
+
+## Current Alpha Reality
+
+Mission is already usable, but it is still an alpha product. A few current truths matter for operators:
+
+- the public CLI centers on launching Tower, installing prerequisites, inspecting airport state, and stopping the daemon
+- Tower currently requires Bun at runtime
+- GitHub is the tracking provider used by the implemented mission intake flows
+- repository scaffolding is real, but `mission init` is not currently exposed as a public routed command
+
+Those constraints do not change the product direction. They just define the current operational boundary.
 
 ## What To Read Next
 
-- [Installation](getting-started/installation.md) covers user-level setup and first-run behavior.
-- [Repository Setup](getting-started/repository-setup.md) explains what repository bootstrap creates and what it does not create.
-- [Workflow Engine](architecture/workflow-engine.md) explains how the reducer-based mission runtime works.
-- [CLI Commands](reference/cli-commands.md) enumerates the routed command surface exactly as it exists today.
+- [Installation](getting-started/installation.md) explains the first-run operator setup.
+- [Repository Setup](getting-started/repository-setup.md) explains how to adopt a repository and keep the control layer separate from delivery work.
+- [Start Your First Mission](getting-started/start-your-first-mission.md) walks through intake from a brief or an existing issue.
+- [Mission Lifecycle](core-workflows/mission-lifecycle.md) explains the five stages, their artifacts, and how work moves forward.
+- [Mission Control Tower](user-manual/workflow-control.md) explains how to monitor and steer live work.

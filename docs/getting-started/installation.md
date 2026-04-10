@@ -7,80 +7,94 @@ nav_order: 1
 
 # Installation
 
-Mission has two distinct setup layers:
+Mission installation is about preparing your machine to act as an operator console. It is not yet about adopting a specific repository or starting a specific mission.
 
-- User-level installation, which configures the local machine that will run Tower.
-- Repository-level preparation, which creates repo-scoped control state under `.mission/`.
+Mission separates setup into two layers:
 
-This page covers the user-level path only.
+- user-level setup for the machine that will run Tower
+- repository-level setup for each Git checkout you want Mission to manage
 
-## Install The CLI
+This page covers the first layer only.
 
-Install Mission globally:
+## Install Mission
+
+Install the package globally:
 
 ```bash
 npm install -g @flying-pillow/mission
 ```
 
-The public entry routes through `mission`. Running `mission install` performs user-level setup without launching the Tower surface.
+Then run the installer:
 
-## What `mission install` Configures Today
+```bash
+mission install
+```
 
-`mission install` calls the same installation guard that the Tower uses on startup. In the current codebase it ensures:
+That prepares the operator environment without launching the full Tower session.
 
-| Setting | Purpose | Current behavior |
-| --- | --- | --- |
-| Mission user config | Stores operator defaults | Written to `$XDG_CONFIG_HOME/mission/config.json` when `XDG_CONFIG_HOME` is set, otherwise `~/.config/mission/config.json` |
-| `missionWorkspaceRoot` | Root directory for per-repository mission worktrees | Defaults to `missions`; relative values resolve under the operator home directory |
-| `terminalBinary` | Terminal manager used by Mission | Defaults to `zellij`; on Linux Mission can auto-install it into `~/.local/bin` |
-| `editorBinary` | Editor launched into the editor gate | Defaults to `micro`; on Linux Mission can auto-install it into `~/.local/bin`, otherwise it falls back to `nano`, `vim`, or `vi` when available |
+## What The Installer Sets Up
 
-If the configured workspace root cannot be created, the installer prompts for a writable alternative. If the configured binaries are missing, Mission tries automatic installation for managed dependencies first, then falls back to prompting for a valid command or absolute path.
+The current installer prepares the things Mission needs in order to feel smooth on first run:
 
-## Runtime Prerequisites That Are True Right Now
-
-The current runtime has a few important operational constraints:
-
-| Requirement | Status in code |
+| Area | What Mission sets up |
 | --- | --- |
-| Bun | Required to launch the OpenTUI Tower surface because the Tower imports `bun:ffi` at runtime |
-| Node.js | Still usable for non-Tower CLI commands |
-| zellij | Preferred terminal substrate; Mission can auto-install it on Linux |
-| Editor binary | Required for the editor gate; configured in user config |
-| Daemon | Auto-started when launching Tower if it is not already running |
+| Operator config | Creates the Mission user config file |
+| Mission workspace root | Chooses where isolated mission workspaces and worktrees will live |
+| Terminal substrate | Resolves the terminal manager Mission uses for the airport layout |
+| Editor integration | Resolves the editor binary used in the editor gate |
 
-The first important caveat is that `mission` and `mission install` are not equivalent. `mission install` prepares the operator environment. Bare `mission` still performs the installation guard first, then proceeds into the Tower bootstrap path.
+In the current implementation, the user config is written to the usual XDG config location when available, otherwise under `~/.config/mission/config.json`.
 
-## First-Run Operator Experience
+## What Mission Expects On Your Machine
 
-On a clean machine, the current first-run experience is:
+These current runtime facts matter:
 
-1. Install the package globally.
-2. Run `mission install` to populate user config and validate binaries.
-3. Run `mission` to launch the Tower surface.
-4. If the daemon is not running, Tower starts it automatically.
-5. If repository control state is missing, Mission scaffolds it before continuing.
+| Requirement | Why it matters |
+| --- | --- |
+| Bun | Required for the Tower runtime today |
+| Node.js | Still fine for non-Tower commands |
+| zellij | Preferred terminal substrate for the airport layout |
+| An editor binary | Needed for the editor gate |
+| The daemon | Auto-started by Tower when needed |
 
-On POSIX shells, bare `mission` also attempts to bootstrap the airport layout through the terminal manager when that substrate is available. The current layout places Mission Tower on the left, an agent session pane on the upper right, and the editor gate on the lower right.
+On Linux, Mission can auto-install some dependencies, including `zellij`, into the local user bin path when they are missing.
 
-## User-Level Setup Versus Repository-Level Setup
+## Your First Run
 
-Do not conflate these two steps:
-
-- User-level setup writes the operator config and resolves binaries.
-- Repository-level setup creates repo-scoped Mission control state such as `.mission/settings.json`.
-
-User-level setup is global to the machine. Repository-level setup is tied to a specific Git checkout. The second step is documented in [Repository Setup](repository-setup.md).
-
-## Practical Guidance
-
-For a predictable first run on Linux:
+For most operators, the first good run looks like this:
 
 ```bash
 npm install -g @flying-pillow/mission
 mission install
-bun --version
 mission
 ```
 
-If Tower fails to launch but non-Tower commands work, verify Bun first. That is the main runtime distinction enforced by the current bootstrap code.
+What happens next:
+
+1. Mission validates the operator setup.
+2. Tower launches.
+3. The daemon starts automatically if it is not already running.
+4. If repository control state is missing, Mission can scaffold it on the way in.
+
+On POSIX shells, Mission also tries to bootstrap the airport-style terminal layout so the Tower, agent session pane, and editor gate open as one coordinated surface.
+
+## Why The Setup Matters
+
+The goal is not to make installation complicated. The goal is to make operation predictable.
+
+Once installation is done:
+
+- your mission workspaces have a known home
+- Tower knows which terminal and editor tools to use
+- reconnecting to Mission feels consistent across repositories
+
+That is part of the product promise: Mission should feel like a real operations tool, not a pile of one-off scripts.
+
+## What This Page Does Not Cover
+
+This page does not adopt a repository and does not start a mission.
+
+Those come next:
+
+- [Repository Setup](repository-setup.md)
+- [Start Your First Mission](start-your-first-mission.md)

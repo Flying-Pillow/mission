@@ -2,91 +2,77 @@
 layout: default
 title: The Human In The Loop
 parent: Core Workflows
-nav_order: 2
+nav_order: 3
 ---
 
 # The Human In The Loop
 
-> As the operator, I want the AI to remain subordinate to explicit workflow policy and human approval, so automation never outruns governance.
+Mission is designed for a world where the human operator stays above the automation, not behind it.
 
-Mission treats the human as the runtime authority, not as a passive observer. The codebase expresses that authority through mission lifecycle events, pause state, panic state, task launch policy, and daemon-surfaced actions. The workflow engine may generate requests and signals, but operator control remains explicit and reviewable.
+That principle shows up everywhere in the product:
 
-## Governance Model
+- the mission can be paused
+- active sessions can be interrupted or terminated
+- implementation can stay manual while earlier stages remain more automatic
+- panic is a first-class stop state, not a UI trick
+- task execution happens inside bounded mission workspaces
 
-The runtime state distinguishes mission lifecycle from task execution:
+## What Human Control Means In Practice
 
-- missions move through `draft`, `ready`, `running`, `paused`, `panicked`, `completed`, and `delivered`
-- tasks move through `pending`, `ready`, `queued`, `running`, `blocked`, `completed`, `failed`, and `cancelled`
-- sessions move through `starting`, `running`, `completed`, `failed`, `cancelled`, and `terminated`
+Mission separates three things that many tools blur together:
 
-That distinction matters because stages do not execute work. Tasks execute work. The operator therefore governs the mission by controlling lifecycle and by deciding which tasks may proceed.
-
-## Pause, Checkpoints, And Manual Control
-
-The runtime model supports several pause reasons:
-
-| Pause reason | Meaning in code |
+| Layer | What it controls |
 | --- | --- |
-| `human-requested` | Operator explicitly paused the mission |
-| `panic` | Emergency stop is active |
-| `checkpoint` | Workflow started in a checkpointed pause state |
-| `agent-failure` | Reserved pause reason for failure handling |
-| `system` | Reserved system pause reason |
+| Mission lifecycle | Whether the whole mission is running, paused, panicked, completed, or delivered |
+| Task execution | Which bounded units of work are ready, active, blocked, or done |
+| Agent sessions | Which live provider-backed sessions are currently running |
 
-When the reducer receives `mission.started`, it either moves the mission to `running` or pauses immediately with reason `checkpoint` if `humanInLoop.pauseOnMissionStart` is enabled in the workflow snapshot. In the default workflow, `pauseOnMissionStart` is `false`, so a newly started mission is not checkpoint-paused by default.
+That gives the operator real leverage. You are not forced to either “trust the agent” or “kill everything.” You can intervene at the right level.
 
-The default workflow snapshot does, however, encode a manual policy for some stages:
+## Manual Where It Matters Most
 
-| Stage | Default autostart | Launch mode |
-| --- | --- | --- |
-| PRD | `true` | `automatic` |
-| SPEC | `true` | `automatic` |
-| Implementation | `false` | `manual` |
-| Audit | `true` | `automatic` |
-| Delivery | `false` | `manual` |
+The default workflow policy already leans toward human control in the places where teams usually want it most:
 
-One implementation detail matters here: the reducer carries launch policy in task runtime state, but the current `queueAutostartTasks` function is still a no-op. So while the configuration snapshot and task records model autostart versus manual launch explicitly, operator-driven task actions remain the reliable control path today.
+| Stage | Default behavior |
+| --- | --- |
+| PRD | automatic launch policy |
+| SPEC | automatic launch policy |
+| Implementation | manual launch policy |
+| Audit | automatic launch policy |
+| Delivery | manual launch policy |
 
-## What The Agent Is Actually Allowed To See
+That is a good product choice. Most teams are comfortable letting Mission turn a brief into a PRD and SPEC. They are much less comfortable letting implementation and delivery happen without deliberate oversight.
 
-Mission launches work with a bounded task prompt. The launch prompt explicitly tells the agent:
+One honest alpha note matters here: launch policy is modeled clearly in the runtime, but operator-driven task actions are still the reliable path in practice today.
+
+## What The Agent Is Allowed To Do
+
+Mission does not launch an agent into a vague prompt. It launches a session with bounded mission and task context.
+
+The task launch prompt tells the agent:
 
 - which task it is working on
-- the exact mission workspace boundary it must stay inside
-- the authoritative task file path
-- the task summary extracted from that file
+- which mission it belongs to
+- which workspace boundary it must stay inside
+- which task file is authoritative
 
-That is a concrete safety boundary, not a documentation promise. The task launch prompt instructs the agent to stay strictly inside the mission workspace and to treat the task file as authoritative. The mission workspace path and task file path are injected directly into the prompt text.
+That is why Mission feels different from raw chat tooling. The agent is working inside an operating envelope that the human can inspect.
 
-## How Humans Start, Pause, And Resume Work
+## The Operator's Real Powers
 
-At the daemon surface, the implemented mission actions include:
+In current Mission flows, the human operator can meaningfully control:
 
-- pause mission
-- resume mission
-- panic stop mission
-- clear panic
-- deliver mission
+1. whether a mission is running or paused
+2. whether emergency panic is active
+3. which mission is selected in Tower
+4. which task is launched next
+5. whether a session should be interrupted, cancelled, or terminated
+6. whether work should continue to delivery
 
-The task-level action surface then handles actual work selection and status changes. This is consistent with Mission's architectural rule that task execution is authoritative and stage control is presentation shorthand at most.
+That is the shape of a serious AI operations product. The human is not reduced to reading logs after the fact.
 
-In practice, that means the human decides:
+## Why This Matters To Teams
 
-1. when a mission enters running state
-2. when it is paused
-3. when panic is invoked
-4. which ready task is started or relaunched
-5. whether future tasks should remain manual or be allowed to autostart under policy
+Human-in-the-loop is not a slogan here. It is what makes Mission suitable for repositories where architectural correctness, verification quality, and delivery confidence matter more than raw token throughput.
 
-## Manual Launch Policy And Autostart Policy
-
-Mission snapshots workflow policy into the mission runtime record. That means launch policy is a property of the mission's persisted configuration snapshot, not a transient UI preference. The operator can reason about policy by reading mission state, not by reconstructing what the UI happened to do earlier.
-
-The practical interpretation for senior operators is:
-
-- policy is durable and mission-local
-- task execution remains bounded to task files and mission workspaces
-- stage vocabulary is descriptive, not executable
-- the human remains the governing authority over start, pause, resume, and emergency stop behavior
-
-This is the correct boundary for AI governance. The system can automate request execution, but it does not demote the human below the workflow policy.
+Mission is trying to give you the best part of AI coding speed without handing over operational authority.

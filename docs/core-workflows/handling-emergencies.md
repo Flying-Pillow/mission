@@ -2,77 +2,62 @@
 layout: default
 title: Handling Emergencies
 parent: Core Workflows
-nav_order: 3
+nav_order: 4
 ---
 
 # Handling Emergencies
 
-> As an operator, I want a hard emergency stop when an agent goes rogue, so I can sever transport, stop new launches, and recover the mission safely.
+Mission takes emergencies seriously because real AI operations need a real stop button.
 
-Mission's emergency model is encoded in the workflow reducer as panic state, not as an informal UI convention. That matters because emergency handling has to survive crashes, restarts, and surface reconnects. The persisted runtime state needs to say exactly what happened and what the system is still allowed to do.
-
-## What Panic Means In The Current Reducer
-
-When the reducer ingests `mission.panic.requested`, it performs a concrete state transition:
-
-- mission lifecycle becomes `panicked`
-- mission pause state becomes `paused: true` with reason `panic`
-- panic state becomes active
-- panic policy is copied from the workflow configuration snapshot
-
-The panic state currently includes these policy flags:
-
-| Field | Meaning |
-| --- | --- |
-| `terminateSessions` | Whether active runtime sessions should be terminated |
-| `clearLaunchQueue` | Whether queued launches should be removed |
-| `haltMission` | Whether mission progression must remain halted until human recovery |
-
-In the default workflow snapshot, all three are `true`.
-
-## What Happens To The Launch Queue
-
-If `clearLaunchQueue` is enabled, panic is not only a visual stop. The reducer actively clears `launchQueue`. Any task that had already been marked `queued` through that queue is moved back to `ready` when panic is requested.
-
-That gives the operator an important recovery guarantee: queued-but-not-started work is not silently lost, but it is also not allowed to keep launching after a panic stop.
-
-## What Happens To Active Sessions
-
-After normalization, if panic is active and `terminateSessions` is enabled, the reducer emits `session.terminate` requests for any session whose lifecycle is still `starting` or `running`.
-
-That is the hard-stop behavior operators care about. Panic is designed to sever active transport rather than merely suppress future queue processing. If a session is still alive, the engine requests termination.
+If an agent starts drifting, ignores scope, or behaves in a way you no longer trust, Mission gives the operator a hard containment path instead of hoping the model will cooperate.
 
 ## Pause Versus Panic
 
-Pause and panic are not interchangeable:
+Mission makes a clear distinction:
 
-| Mechanism | Intended use | Runtime effect |
+| Control | Use it when | Effect |
 | --- | --- | --- |
-| Pause | Controlled operator stop | Mission lifecycle becomes `paused`; no emergency semantics are implied |
-| Panic | Emergency intervention | Mission lifecycle becomes `panicked`; pause reason becomes `panic`; queue clearing and session termination may be requested |
+| Pause | You want a controlled stop for review or pacing | Work stops without emergency semantics |
+| Panic | You need immediate containment | The mission enters a panicked state and Mission can halt launches and terminate sessions |
 
-A normal pause is for governance and pacing. Panic is for containment.
+This difference is important. A pause is normal governance. Panic is emergency response.
 
-This distinction is important during incident response. A paused mission may still have intact runtime sessions and a recoverable execution queue. A panicked mission is signaling that active work may need to be cut off immediately and that future launches are no longer permitted.
+## What Panic Does
 
-## Clearing Panic And Recovering
+In the current workflow model, panic is not only a visual badge in Tower. It changes mission state in a concrete way:
 
-When the reducer ingests `mission.panic.cleared`, it does not jump directly back to `running`. Instead it:
+- the mission becomes `panicked`
+- the pause reason becomes `panic`
+- the panic policy becomes active
 
-- leaves the mission in lifecycle `paused`
-- keeps the pause reason as `panic`
-- sets `panic.active` to `false`
+By default, that panic policy is configured to:
 
-That design forces a deliberate human recovery step. Clearing panic only exits the emergency state; it does not automatically resume work. The operator must still decide when to move from paused recovery back to active execution.
+- terminate active sessions
+- clear queued launches
+- halt further mission progression until a human recovers the mission
 
-## Operational Interpretation
+That is exactly the behavior an operator wants in a serious incident.
 
-For an adopting engineering organization, the concrete emergency semantics are:
+## Why This Matters
 
-1. Panic is persisted mission state, not surface-local state.
-2. Panic can clear queued launches before they start.
-3. Panic can request termination of active sessions.
-4. Clearing panic still leaves the mission paused.
-5. Human intervention is required before execution can continue.
+Many AI tools have no real emergency model. At best they let you close a tab and hope the session is gone.
 
-That is the correct shape for a safe stop. It prevents automation from outrunning governance during exactly the situations where governance matters most.
+Mission is better than that because the emergency state is part of the mission runtime itself. The stop is durable, visible, and recoverable. If Tower reconnects later, it can still tell that the mission was panicked.
+
+## What Recovery Looks Like
+
+Clearing panic does not automatically throw the system back into motion. Mission leaves the mission paused so the operator can decide what comes next.
+
+That is the right product behavior. When something has gone wrong badly enough to justify panic, the system should not restart itself optimistically.
+
+## A Practical Operator Checklist
+
+When something feels wrong:
+
+1. Panic the mission.
+2. Confirm that active sessions are no longer running.
+3. Review which tasks were in flight and what changed in the mission workspace.
+4. Decide whether to relaunch work, reopen a task, or change the plan.
+5. Resume only after the mission is trustworthy again.
+
+This is one of Mission's strongest operational ideas: it assumes AI workflows sometimes need containment, and it designs for that reality instead of ignoring it.
