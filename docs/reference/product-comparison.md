@@ -9,7 +9,7 @@ nav_order: 3
 
 <section class="mission-section-hero">
 	<span class="mission-section-kicker">Landscape</span>
-	<div class="mission-section-title">Mission is not a model and not a coding agent. It is the orchestration layer that controls AI software delivery.</div>
+	<div class="mission-section-title">The great work of latest initiatives compared!</div>
 	<p class="mission-section-lead">Spec Kit, BMAD, and GSD all improve AI-assisted development, but they optimize for different things. This page compares their public operating models against Mission's current implementation so teams can choose the right system deliberately.</p>
 </section>
 
