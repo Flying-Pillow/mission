@@ -1,5 +1,5 @@
 ---
-fileName: 01-draft-spec.md
+fileName: 01-spec-from-prd.md
 subject: Draft Spec
 agent: copilot
 ---
