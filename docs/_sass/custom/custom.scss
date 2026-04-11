@@ -10,30 +10,64 @@
   backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(138, 18, 160, 0.12);
   height: 4.5rem;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .site-title {
+  width: 100%;
+  height: 4.5rem;
   min-height: 4.5rem;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
+  padding: 0.55rem 1rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.7rem;
+  align-content: center;
+  justify-items: start;
   overflow: hidden;
   box-sizing: border-box;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
 
+  &::before,
   &::after {
+    display: block;
+    grid-column: 2;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  &::before {
     content: "Mission";
-    font-size: 1.15rem;
+    grid-row: 1;
+    align-self: end;
+    font-size: 1.05rem;
+    line-height: 1.05;
     font-weight: 700;
     color: #412548;
     letter-spacing: -0.02em;
-    white-space: nowrap;
+  }
+
+  &::after {
+    content: "by Flying Pillow";
+    grid-row: 2;
+    align-self: start;
+    margin-top: 0.08rem;
+    font-size: 0.68rem;
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8b12a0;
   }
 }
 
 .site-logo {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
   max-height: 2.5rem;
   background-size: contain;
   filter: drop-shadow(0 10px 24px rgba(209, 14, 240, 0.16));
@@ -487,13 +521,57 @@
   box-shadow: 0 16px 40px rgba(62, 17, 74, 0.06);
 }
 
-.mission-video-embed iframe {
+.mission-video-link {
+  display: grid;
+  grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mission-video-link:hover {
+  text-decoration: none;
+}
+
+.mission-video-link__poster {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border: 0;
   border-radius: 0.9rem;
   background: #17081a;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.mission-video-link__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.mission-video-link__eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b12a0;
+}
+
+.mission-video-link__title {
+  font-size: 1.15rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #17081a;
+}
+
+.mission-video-link__text {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: #6b4a74;
 }
 
 .mission-comparison-grid {
@@ -670,7 +748,8 @@
 
   .mission-section-grid,
   .mission-section-grid--three,
-  .mission-comparison-grid {
+  .mission-comparison-grid,
+  .mission-video-link {
     grid-template-columns: 1fr;
   }
 }

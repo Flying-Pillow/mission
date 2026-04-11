@@ -14,14 +14,14 @@ Traditional debt tends to show up as tangled code, weak tests, or deferred clean
 In his presentation [The Elephant in the Room: AI Technical Debt](https://www.youtube.com/watch?v=04p9X_XpX-Y), IBM Distinguished Engineer Jeff Crume describes the pattern as "Ready, Fire, Aim." Teams ship AI-assisted workflows for immediate speed, then pay later through instability, leakage, and loss of control.
 
 <div class="mission-video-embed">
-	<iframe
-		src="https://www.youtube-nocookie.com/embed/04p9X_XpX-Y"
-		title="The Elephant in the Room: AI Technical Debt"
-		loading="lazy"
-		referrerpolicy="strict-origin-when-cross-origin"
-		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-		allowfullscreen>
-	</iframe>
+	<a class="mission-video-link" href="https://www.youtube.com/watch?v=04p9X_XpX-Y" target="_blank" rel="noopener noreferrer">
+		<span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/04p9X_XpX-Y/hqdefault.jpg');"></span>
+		<span class="mission-video-link__body">
+			<span class="mission-video-link__eyebrow">Source Talk</span>
+			<span class="mission-video-link__title">The Elephant in the Room: AI Technical Debt</span>
+			<span class="mission-video-link__text">Open the presentation on YouTube. Some YouTube embeds are blocked by player policy in local previews and privacy-restricted contexts.</span>
+		</span>
+	</a>
 </div>
 
 Mission is built to invert that pattern. It treats coding agents as probabilistic workers inside a deterministic operating system. The model stays non-deterministic. The delivery harness does not.
