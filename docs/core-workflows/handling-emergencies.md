@@ -2,7 +2,7 @@
 layout: default
 title: Handling Emergencies
 parent: Core Workflows
-nav_order: 4
+nav_order: 5
 ---
 
 # Handling Emergencies

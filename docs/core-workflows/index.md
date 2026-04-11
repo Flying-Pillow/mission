@@ -19,6 +19,11 @@ has_children: true
 		<span class="mission-section-card__title">Spec-Driven Development</span>
 		<span class="mission-section-card__text">See how Mission uses artifacts to stop AI work from collapsing into one long improvisational session.</span>
 	</a>
+	<a class="mission-section-card" href="{{ '/core-workflows/ai-technical-debt.html' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Why It Exists</span>
+		<span class="mission-section-card__title">AI Technical Debt</span>
+		<span class="mission-section-card__text">See how Mission turns common AI delivery failure modes into explicit operational controls.</span>
+	</a>
 	<a class="mission-section-card" href="{{ '/core-workflows/mission-lifecycle.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Stage Map</span>
 		<span class="mission-section-card__title">Mission Lifecycle</span>

@@ -68,6 +68,8 @@ Mission exists to solve the problems that show up as soon as AI coding becomes r
 
 Mission fixes that by separating intake, planning, implementation, verification, audit, and delivery into explicit artifacts, explicit tasks, and explicit runtime state.
 
+If you want the shortest explanation of why that operating model matters, read [AI Technical Debt and Mission](core-workflows/ai-technical-debt.md).
+
 ## What Using Mission Feels Like
 
 Mission is built around a simple operator journey:
@@ -137,6 +139,7 @@ Those constraints do not change the product direction. They just define the curr
 ## What To Read Next
 
 - [Installation](getting-started/installation.md) explains the first-run operator setup.
+- [AI Technical Debt](core-workflows/ai-technical-debt.md) explains the failure modes Mission is explicitly designed to contain.
 - [Repository Setup](getting-started/repository-setup.md) explains how to adopt a repository and keep the control layer separate from delivery work.
 - [Start Your First Mission](getting-started/start-your-first-mission.md) walks through intake from a brief or an existing issue.
 - [Mission Lifecycle](core-workflows/mission-lifecycle.md) explains the five stages, their artifacts, and how work moves forward.

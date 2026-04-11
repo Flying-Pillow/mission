@@ -2,7 +2,7 @@
 layout: default
 title: Mission Lifecycle
 parent: Core Workflows
-nav_order: 2
+nav_order: 3
 ---
 
 # Mission Lifecycle

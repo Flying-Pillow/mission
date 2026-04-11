@@ -3,14 +3,13 @@ import type { MissionRepositoryCandidate, MissionSelectionCandidate } from '../t
 import type { ControlRepositoriesAdd, Notification, Request } from './contracts.js';
 import { MissionWorkspace } from './Workspace.js';
 import type { AgentRunner } from '../runtime/AgentRunner.js';
-import { listRegisteredMissionUserRepos, readMissionUserConfig, registerMissionUserRepo } from '../lib/userConfig.js';
+import { listRegisteredMissionUserRepos, registerMissionUserRepo } from '../lib/userConfig.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 import type { MissionControlSource } from './system/types.js';
 
 export class WorkspaceManager {
     private readonly workspaces = new Map<string, MissionWorkspace>();
     private readonly missionWorkspaceRoots = new Map<string, string>();
-    private readonly registeredControlRoots = new Set<string>();
 
     public constructor(
         private readonly runners: Map<string, AgentRunner>,
@@ -53,7 +52,6 @@ export class WorkspaceManager {
         if (!workspaceRoot) {
             throw new Error('Mission control source requires a surfacePath or workspaceRoot.');
         }
-        await this.ensureRegisteredRepoRoot(workspaceRoot);
         const workspace = this.getWorkspace(workspaceRoot);
         const availableRepositories = await this.listRegisteredRepositories(workspaceRoot);
         return workspace.readMissionControlSource({
@@ -131,7 +129,7 @@ export class WorkspaceManager {
         if (!resolveGitWorkspaceRoot(controlRoot) && !resolveGitWorkspaceRoot(trimmedPath)) {
             throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
         }
-        await this.ensureRegisteredRepoRoot(controlRoot);
+		await registerMissionUserRepo(controlRoot);
         const repos = await this.listRegisteredRepositories(controlRoot);
         const registered = repos.find((candidate) => candidate.repositoryRootPath === controlRoot);
         if (!registered) {
@@ -181,29 +179,11 @@ export class WorkspaceManager {
             this.resolveControlRootFromMissionPath(normalizedSurfacePath)
             ?? resolveGitWorkspaceRoot(normalizedSurfacePath)
             ?? normalizedSurfacePath;
-        await this.ensureRegisteredRepoRoot(primaryControlRoot);
         return {
             surfacePath: normalizedSurfacePath,
             primaryControlRoot,
             controlRoots: [primaryControlRoot]
         };
-    }
-
-    private async ensureRegisteredRepoRoot(controlRoot: string): Promise<void> {
-        const normalizedControlRoot = path.resolve(controlRoot);
-		if (!resolveGitWorkspaceRoot(normalizedControlRoot)) {
-			return;
-		}
-        if (this.registeredControlRoots.has(normalizedControlRoot) && this.isRegisteredRepoPersisted(normalizedControlRoot)) {
-            return;
-        }
-        await registerMissionUserRepo(normalizedControlRoot);
-        this.registeredControlRoots.add(normalizedControlRoot);
-    }
-
-    private isRegisteredRepoPersisted(controlRoot: string): boolean {
-        const config = readMissionUserConfig();
-        return (config?.registeredRepositories ?? []).some((entry) => entry.checkoutPath === controlRoot);
     }
 
     private discoverSurfaceRoot(surfacePath: string): string {

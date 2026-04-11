@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WorkspaceManager } from './WorkspaceManager.js';
-import { getMissionUserConfigPath, readMissionUserConfig } from '../lib/userConfig.js';
+import { readMissionUserConfig } from '../lib/userConfig.js';
 
 describe('WorkspaceManager surface resolution', () => {
 	beforeEach(async () => {
@@ -66,35 +66,13 @@ describe('WorkspaceManager surface resolution', () => {
         }
     });
 
-    it('re-registers the active repo if config is cleaned while the daemon cache is still warm', async () => {
+    it('does not auto-register repositories during surface discovery', async () => {
         const workspaceRoot = await createTempRepo();
         const manager = createWorkspaceManagerTestHarness();
 
         try {
             await manager.discoverSurface(workspaceRoot);
-            expect(readMissionUserConfig()).toMatchObject({
-                registeredRepositories: [
-                    { checkoutPath: workspaceRoot }
-                ]
-            });
-
-            await fs.writeFile(
-                getMissionUserConfigPath(),
-                JSON.stringify({
-                    version: 1,
-                    missionWorkspaceRoot: 'missions',
-                    terminalBinary: 'zellij',
-                    editorBinary: 'micro'
-                }, null, 2) + '\n',
-                'utf8'
-            );
-
-            await manager.discoverSurface(workspaceRoot);
-            expect(readMissionUserConfig()).toMatchObject({
-                registeredRepositories: [
-                    { checkoutPath: workspaceRoot }
-                ]
-            });
+            expect(readMissionUserConfig()).toBeUndefined();
         } finally {
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }

@@ -217,15 +217,15 @@ export function TowerController({
 			? systemDomain()?.missions[target.missionId]
 			: undefined;
 	});
-	const selectedTowerProjection = createMemo(() =>
-		selectedMissionMatchesLoaded() ? status().tower : undefined
-	);
 	const selectedMissionMatchesLoaded = createMemo(() => {
 		const target = selectedShellTarget();
 		return target.kind === 'mission'
 			&& status().found
 			&& target.missionId === currentMissionId();
 	});
+	const selectedTowerProjection = createMemo(() =>
+		selectedMissionMatchesLoaded() ? status().tower : undefined
+	);
 	const centerRoute = createMemo<CenterRoute>(() => {
 		if (towerMode() === 'repository') {
 			return { kind: 'repository-flow' };

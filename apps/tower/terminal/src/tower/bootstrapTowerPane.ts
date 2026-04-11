@@ -77,6 +77,9 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 			launchMode
 		});
 		const api = new DaemonApi(client);
+		if (workspaceContext.kind === 'control-root') {
+			await api.control.addRepository(workspaceContext.workspaceRoot).catch(() => undefined);
+		}
 		const snapshot = await api.airport.connectPanel(
 			createAirportPanelConnectParams(gateId, `mission-${gateId}`)
 		);
