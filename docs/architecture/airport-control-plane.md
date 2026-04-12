@@ -69,8 +69,10 @@ flowchart TD
 Semantic selection is a separate concern from focus intent:
 
 - mission or repository selection updates pane bindings and projections
-- explicit airport focus observations update `focus.intentPaneId`
+- explicit airport focus observations update observed focus state; they do not reassert stale intent
 - selecting an artifact or agent session must not, by itself, move terminal focus away from Tower
+
+If observed focus conflicts with previously recorded focus intent, the observed focus wins until a new explicit airport command asserts new intent.
 
 ## Persistence Boundary
 
