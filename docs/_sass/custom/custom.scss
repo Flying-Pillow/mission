@@ -492,6 +492,42 @@
   margin-bottom: 0;
 }
 
+.mission-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.mission-status-card {
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(138, 18, 160, 0.12);
+  background: linear-gradient(180deg, rgba(255, 240, 255, 0.92), rgba(255, 248, 255, 0.96));
+  box-shadow: 0 16px 40px rgba(62, 17, 74, 0.06);
+}
+
+.mission-status-card strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #17081a;
+}
+
+.mission-status-card p {
+  margin: 0;
+  color: #583062;
+}
+
+.mission-status-card--current {
+  border-color: rgba(22, 126, 114, 0.22);
+  background: linear-gradient(180deg, rgba(236, 255, 250, 0.98), rgba(247, 255, 252, 0.98));
+}
+
+.mission-status-card--target {
+  border-color: rgba(180, 115, 8, 0.22);
+  background: linear-gradient(180deg, rgba(255, 248, 231, 0.98), rgba(255, 252, 244, 0.98));
+}
+
 .mission-compare-callout {
   margin: 1.5rem 0 2rem;
   padding: 1rem 1.1rem;

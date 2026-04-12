@@ -18,11 +18,11 @@ Airport is the repository-scoped layout authority for Mission surfaces. It decid
 | `TerminalManagerSubstrateController` | Observe and drive the terminal substrate | observed zellij pane state |
 | Projection helpers | Derive Tower, Briefing Room, and Runway projections | pure projection output |
 
-## Gate Model
+## Pane Model
 
-The current airport implementation has three fixed panes:
+The current airport implementation has three fixed panes. Some internal types still use gate-style naming, but the documentation treats these as panes to avoid confusion with workflow gates:
 
-| Gate id | Purpose |
+| Pane id | Purpose |
 | --- | --- |
 | `tower` | Repository or mission control surface |
 | `briefingRoom` | Artifact or mission view surface |

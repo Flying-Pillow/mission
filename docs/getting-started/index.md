@@ -27,6 +27,6 @@ has_children: true
 	<a class="mission-section-card" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 3</span>
 		<span class="mission-section-card__title">Start Your First Mission</span>
-		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Mission terminal control.</span>
+		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Tower inside the Airport layout.</span>
 	</a>
 </div>

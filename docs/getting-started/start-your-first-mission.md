@@ -98,7 +98,7 @@ The current implementation has a few honest boundaries:
 
 - issue-backed intake is GitHub-specific today
 - the public CLI does not yet expose a polished top-level `mission start` command
-- the live intake flow exists through the daemon and Mission terminal control surfaces rather than a broad CLI wizard
+- the live intake flow exists through the daemon and Tower inside the Airport layout rather than a broad CLI wizard
 
 That does not reduce the value of the workflow. It simply means the product direction is ahead of the final operator polish in some areas.
 

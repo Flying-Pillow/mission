@@ -1,21 +1,26 @@
 ---
 layout: default
-title: Airport Layout Overview
+title: Airport Layout
 parent: User Manual
 nav_order: 1
 ---
 
-# Airport Layout Overview
+# Airport Layout
 
 The Airport layout is the operator's cockpit for Mission.
 
 It is where you move from “I have work to do” to “I can see the mission, the stage, the tasks, the artifacts, and the live agent session that is doing the work.”
 
+<div class="mission-compare-callout">
+	<strong>Airport panes are not workflow gates</strong>
+	<p>Airport names the layout panes: Tower, Runway, and Briefing Room. Workflow gates name mission progression: `implement`, `verify`, `audit`, and `deliver`. The layout helps you supervise the workflow, but the two vocabularies describe different layers.</p>
+</div>
+
 ## What You See When Mission Opens
 
-On a normal POSIX setup, Mission can bootstrap an airport-style layout with three coordinated surfaces:
+On a normal POSIX setup, Mission can bootstrap the Airport layout with three coordinated panes:
 
-- Mission Tower on the left
+- Tower on the left
 - Runway on the upper right when a live agent session is selected
 - Briefing Room on the lower right
 
@@ -36,7 +41,7 @@ That is a good product detail because it means the surface adapts to where you a
 
 ## The Main Airport Regions
 
-The current Airport layout is built around three outer regions, with Tower itself built around four inner regions.
+The current Airport layout is built around three outer panes, with Tower itself built around four inner regions.
 
 Outer layout:
 

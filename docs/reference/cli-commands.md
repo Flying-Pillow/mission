@@ -7,7 +7,7 @@ nav_order: 1
 
 # CLI Commands
 
-This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the terminal surface router in `apps/airport/terminal/src/routeAirportTerminalSurfaceEntry.ts`.
+This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the Airport layout router in `apps/airport/terminal/src/routeAirportTerminalSurfaceEntry.ts`.
 
 ## Public Commands
 
@@ -15,7 +15,7 @@ The current public command surface is:
 
 | Command | Status | What it does |
 | --- | --- | --- |
-| `mission` | Public | Opens the Mission terminal surface |
+| `mission` | Public | Opens the Airport layout |
 | `mission install` | Public | Runs user-level Mission setup and writes operator config |
 | `mission airport:status` | Public | Prints daemon airport status, or JSON with `--json` |
 | `mission daemon:stop` | Public | Stops the daemon process and reports the result |
@@ -44,9 +44,9 @@ missiond status
 mission [--hmr] [--banner] [--no-banner]
 ```
 
-Behavior verified in the current CLI package and Airport terminal router:
+Behavior verified in the current CLI package and Airport layout router:
 
-- runs the installation guard before the Mission terminal surface starts
+- runs the installation guard before the Airport layout starts
 - opens the Airport layout by default, with Tower as the left-side control surface
 - auto-starts the daemon when needed
 - attempts airport layout bootstrap through the terminal manager on POSIX shells when available

@@ -7,7 +7,7 @@ nav_order: 1
 
 # Installation
 
-Mission installation is about preparing your machine to run the published Mission CLI and operator surfaces. It is not yet about adopting a specific repository or starting a specific mission.
+Mission installation is about preparing your machine to run the published Mission CLI and Airport layout. It is not yet about adopting a specific repository or starting a specific mission.
 
 Mission separates setup into two layers:
 
@@ -36,7 +36,7 @@ Then run the installer:
 mission install
 ```
 
-That prepares the operator environment without opening the full Airport terminal session.
+That prepares the operator environment without opening the full Airport layout.
 
 ## What The Installer Sets Up
 
@@ -61,7 +61,7 @@ These current runtime facts matter:
 | Node.js | Still fine for CLI-only and daemon-only commands |
 | zellij | Preferred terminal substrate for the airport layout |
 | An editor binary | Needed for Briefing Room |
-| The daemon | Auto-started by Mission terminal surfaces when needed |
+| The daemon | Auto-started by the Airport layout when needed |
 
 On Linux, Mission can auto-install some dependencies, including `zellij`, into the local user bin path when they are missing.
 
@@ -82,7 +82,7 @@ What happens next:
 3. The daemon starts automatically if it is not already running.
 4. If repository control state is missing, Mission can scaffold it on the way in.
 
-On POSIX shells, Mission also tries to bootstrap the airport-style terminal layout so the Tower control surface, runway session surface, and briefing-room editor surface open as one coordinated operator environment.
+On POSIX shells, Mission also tries to bootstrap the Airport layout so Tower, Runway, and Briefing Room open as one coordinated operator environment.
 
 ## Why The Setup Matters
 
@@ -91,7 +91,7 @@ The goal is not to make installation complicated. The goal is to make operation 
 Once installation is done:
 
 - your mission workspaces have a known home
-- the Airport terminal surfaces know which terminal and editor tools to use
+- the Airport layout knows which terminal and editor tools to use
 - reconnecting to Mission feels consistent across repositories
 
 That is part of the product promise: Mission should feel like a real operations tool, not a pile of one-off scripts.

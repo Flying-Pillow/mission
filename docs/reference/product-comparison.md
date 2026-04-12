@@ -9,7 +9,7 @@ nav_order: 3
 
 <section class="mission-section-hero">
 	<span class="mission-section-kicker">Landscape</span>
-	<div class="mission-section-title">The great work of latest initiatives compared!</div>
+	<div class="mission-section-title">How Mission differs from other AI delivery systems.</div>
 	<p class="mission-section-lead">Spec Kit, BMAD, and GSD all improve AI-assisted development, but they optimize for different things. This page compares their public operating models against Mission's current implementation so teams can choose the right system deliberately.</p>
 </section>
 
@@ -18,7 +18,7 @@ nav_order: 3
 	<p>This comparison is based on Mission's current codebase plus the public documentation and READMEs for Spec Kit, BMAD Method, and GSD. It focuses on workflow shape, control model, context handling, and recovery behavior rather than community size or branding.</p>
 </div>
 
-We are standing on the shoulders of giants, and we want to earnestly thank the creators of these systems for their constantly evolving insights on coding and AI. The reality of "AI slop" generation is currently so prevalent and frustrating for developers and project managers alike that explicitly harnessing and controlling the software development process is more important than ever.
+Mission belongs in the same broader effort to make AI-assisted development less improvised and more reliable. The comparison below stays deliberately operational: it is about how each system structures control, context, recovery, and supervision.
 
 ## The Short Version
 
@@ -59,7 +59,7 @@ Flying Pillow Mission is the orchestration layer that controls the proper flow o
 | **Authority** | Agent decides next steps | Agent decides via rules | Agent decides via plans | Hard-coded software gates |
 | **State** | Chat history & specs | Chat history & modules | Active chat & `.planning` | External daemon database |
 | **Isolation** | User's active checkout | User's active checkout | Fresh contexts, active checkout | Sandboxed mission worktrees |
-| **Workspace** | Single active repo | Single active repo | Single active repo | Multi-repo Control Tower |
+| **Workspace** | Single active repo | Single active repo | Single active repo | Multi-repo Airport layout with Tower control |
 | **Recovery** | Re-read spec & prompt | Re-enter role workflow | Re-read `.planning` logs | Instant hot-reload via API |
 | **Steering UI** | Text prompt / chat | Text prompt / chat | Chat / CLI commands | Visual Control Tower UI |
 
@@ -71,19 +71,19 @@ The fundamental difference between these tools lies in **who controls the workfl
 
 Mission operates *outside* the agent. It leverages a strict, code-driven state machine to orchestrate the software delivery lifecycle. Mission invokes the AI strictly to do bounded work, but the engine and the human operator retain ultimate control over progression, state, and verification. Because the workflow is not a prompt, it cannot be ignored, hallucinated, or skipped by the LLM.
 
-**1. Engine & Authority (The Core USP)**
+**1. Engine & Authority**
 - **Spec Kit & BMAD:** Feed markdown rules into the system prompt. The host agent parses these rules and decides locally how to execute the workflow.
 - **GSD:** Heavily engineers the context loop. It forces the creation of atomic `.planning/` files and executes in fresh contexts to avoid rot, but the agent itself is still reading a meta-prompt to figure out its next action.
-- **Mission:** Uses a background daemon to track the mission phase (PRD → SPEC → Impl → Audit). The progression logic is strict code. The agent cannot skip a security audit or merge a PR just because its context window got confused.
+- **Mission:** Uses a background daemon to track the mission phase (PRD → SPEC → implementation → audit → delivery). The progression logic is strict code. The agent cannot skip a security audit or merge a PR just because its context window got confused.
 
 **2. State & Recovery**
 - **Spec Kit, BMAD & GSD:** If your IDE crashes or you close your terminal, the state of the "workflow" is lost. To recover, you must open a new chat, point the agent at the generated markdown logs (`.planning/` or spec files), and prompt it to figure out where it left off.
-- **Mission:** The daemon persistently stores every action, artifact, and stage status in a local database (`.mission/`). If you close your laptop, the Mission terminal surfaces hot-reload instantly exactly where you left off. The workflow state is native data, not a chat history.
+- **Mission:** The daemon persistently stores every action, artifact, and stage status in `.mission/`. If you close your laptop, the Airport layout reconnects to the same mission state instead of asking a new chat session to reconstruct it from notes.
 
 **3. Execution Isolation and Multi-Repo Workspace Hub**
 - **Spec Kit & BMAD:** Function strictly within the boundary of your single currently active development branch. They rewrite your actual, current checkout.
 - **GSD:** Offers some optional worktree capabilities, but highly depends on the host agent's internal configuration and is still scoped to a single active repository.
-- **Mission:** Fundamentally reimagines the workspace. It enforces execution strictly inside bounded, invisible Git worktrees (the sandbox) tied deeply to native GitHub integrations (such as importing directly from GitHub issues). Furthermore, the Airport layout with Tower as its control surface serves as a centralized hub allowing a single operator to spawn, monitor, and merge parallel missions simultaneously across **multiple different repositories** without ever needing to jump between IDE instances or pollute their local branches.
+- **Mission:** Fundamentally reimagines the workspace. It enforces execution inside bounded Git worktrees tied to native GitHub integrations such as importing directly from GitHub issues. The Airport layout, with Tower as the control surface, lets one operator supervise parallel missions across multiple repositories without jumping between IDE instances or polluting local branches.
 
 ## Why Mission Exists If These Tools Already Exist
 

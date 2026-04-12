@@ -12,7 +12,7 @@ nav_order: 1
 	<div class="mission-home-actions">
 		<a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
 		<a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
-		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Open the Terminal Guide</a>
+		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Read Tower Control</a>
 	</div>
 	<div class="mission-home-grid">
 		<div class="mission-home-card">
@@ -40,7 +40,7 @@ Instead of one long chat session working directly on your active branch, Mission
 - start a mission from a new brief or an existing GitHub issue
 - let Mission create an isolated mission workspace
 - move through requirements, specification, implementation, audit, and delivery
-- monitor and steer everything from the Mission terminal surface
+- monitor and steer everything from the Airport layout, with Tower as the control surface
 
 The result is a workflow that feels closer to running a flight operation than babysitting a chatbot.
 
@@ -51,10 +51,31 @@ Mission sits above the agent runtime.
 - Mission controls the flow of work.
 - Mission decides which stage comes next.
 - Mission persists the mission state and artifacts.
-- Mission gives the operator a published CLI, an Airport terminal layout, and daemon control surfaces.
+- Mission gives the operator a published CLI, an Airport layout, and daemon control surfaces.
 - The coding agent is used to execute the current task inside that structure.
 
 That distinction is the whole point of the product. The value is not just "AI that can code." The value is a governed operating layer that keeps coding work bounded, inspectable, recoverable, and steerable.
+
+## The Vocabulary To Keep Stable
+
+Use these terms consistently while reading the docs:
+
+- Airport is the overall operator layout.
+- Tower is the left-side control surface.
+- Runway is the live agent-session pane.
+- Briefing Room is the artifact and editor pane.
+- Workflow gates such as `implement`, `verify`, `audit`, and `deliver` describe mission progression, not Airport panes.
+
+<div class="mission-status-grid">
+	<div class="mission-status-card mission-status-card--current">
+		<strong>Current implementation</strong>
+		<p>Reference pages and routed CLI pages describe the exact behavior Mission ships today: current commands, persisted state, daemon behavior, and Airport pane bindings.</p>
+	</div>
+	<div class="mission-status-card mission-status-card--target">
+		<strong>Target architecture</strong>
+		<p>Some architecture and specification pages also explain the cleaner model Mission is steering toward. When current code and target direction differ, prefer the current implementation for operational truth.</p>
+	</div>
+</div>
 
 ## What Mission Is For
 
@@ -101,7 +122,7 @@ Mission is attractive when you care about these outcomes:
 
 Mission is not meant to lock you into one giant vendor-specific session.
 
-The workflow engine, runtime contract, and Mission terminal surfaces all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
+The workflow engine, runtime contract, and Airport layout all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
 
 - the selected runtime
 - the default execution mode
@@ -130,7 +151,7 @@ That staged model is what makes Mission feel safe. It does not ask you to trust 
 Mission is already usable, but it is still an alpha product. A few current truths matter for operators:
 
 - the published CLI package is `@flying-pillow/mission`
-- the public CLI centers on opening the Mission terminal surface, installing prerequisites, inspecting airport state, and stopping the daemon
+- the public CLI centers on opening the Airport layout, installing prerequisites, inspecting airport state, and stopping the daemon
 - the Airport terminal surfaces currently require Bun at runtime
 - GitHub is the tracking provider used by the implemented mission intake flows
 - repository scaffolding is real, but `mission init` is not currently exposed as a public routed command
@@ -144,4 +165,4 @@ Those constraints do not change the product direction. They just define the curr
 - [Repository Setup](getting-started/repository-setup.md) explains how to adopt a repository and keep the control layer separate from delivery work.
 - [Start Your First Mission](getting-started/start-your-first-mission.md) walks through intake from a brief or an existing issue.
 - [Mission Lifecycle](core-workflows/mission-lifecycle.md) explains the five stages, their artifacts, and how work moves forward.
-- [Mission Terminal Control](user-manual/workflow-control.md) explains how to monitor and steer live work.
+- [Tower Control](user-manual/workflow-control.md) explains how to monitor and steer live work.

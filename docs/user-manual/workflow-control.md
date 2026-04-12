@@ -1,15 +1,20 @@
 ---
 layout: default
-title: Tower Control Surface
+title: Tower Control
 parent: User Manual
 nav_order: 2
 ---
 
-# Tower Control Surface
+# Tower Control
 
 Tower is the left-side control surface inside the Airport layout where the product becomes operational.
 
 It is the place where you watch a mission advance, decide what should happen next, and intervene when the workflow needs human judgment.
+
+<div class="mission-compare-callout">
+	<strong>Keep the two vocabularies separate</strong>
+	<p>Tower, Runway, and Briefing Room are Airport panes. `implement`, `verify`, `audit`, and `deliver` are workflow gates. Tower shows workflow progression, but Tower is not itself a workflow gate.</p>
+</div>
 
 ## What You Can Monitor
 

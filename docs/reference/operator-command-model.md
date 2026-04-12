@@ -9,171 +9,669 @@ nav_order: 4
 
 This page defines the intended operator command model for Mission.
 
-It is not only a list of current command strings. It explains which layer owns a command, when that command should be available, what context the operator is acting in, and what the command is supposed to change.
+It is deliberately written around command cards instead of wide tables because the important part is not only the command name. The operator needs to understand:
 
-This distinction matters because Mission is not a flat command shell. The operator is steering a workflow engine with several different semantic layers:
+- when a command is available
+- what context should surface it
+- which parts of the model change
+- what does not change
 
-- mission as the governance boundary
-- stage as the derived planning boundary
-- task as the primary execution boundary
-- artifact as evidence and review context
-- agentrunner as the live execution worker attached to a task
+Mission stays coherent only if commands respect the semantic layers of the system.
 
-The product stays coherent only if commands respect those boundaries.
+## Command Ownership
 
-## Core Rules
+Mission uses five user-visible layers, but not all of them own commands.
 
-The following rules anchor the tables below:
+### Mission
 
-1. Mission-level commands govern the whole mission and may affect all work inside it.
-2. Stage state is derived from tasks and should not become a second runtime control surface.
-3. Task is the main steering unit for execution.
-4. Artifacts are evidence and navigation targets, not independent workflow authorities.
-5. Agentrunner control is really live session control attached to a task, not a separate workflow lifecycle.
+Mission owns governance and recovery commands.
 
-## How To Read The Tables
+### Stage
 
-Each table uses four columns:
+Stage owns no commands.
 
-| Column | Meaning |
-| --- | --- |
-| Command | The operator-facing action concept |
-| Rules | When the command is allowed and what guards apply |
-| Context | Which selection or runtime context should surface the command |
-| Result | What the command is expected to change |
+Stages are structural and derived. They explain where the mission is, but they do not execute work and they do not mutate workflow state directly.
+
+The earlier idea that a stage could "generate tasks" as a stage command is not the right model. In the implementation flow, task creation is the consequence of upstream work, especially the planning work in the `spec` stage, not an operator command attached to the stage itself.
+
+### Task
+
+Task is the primary steering unit.
+
+This is where the operator starts work, launches execution, marks outcomes, reopens work, and adjusts launch policy.
+
+### Artifact
+
+Artifact owns no commands.
+
+Artifacts are evidence and context. When the operator focuses an artifact, the artifact should open because of selection and routing behavior, not because "open artifact" exists as a command. Any relevant commands should already be present because the owning task is in context.
+
+### Session
+
+Session owns only live execution controls.
+
+Launching is not a session command. Launch belongs to the task. Reattach and runner reassignment are out of scope for the current command model.
+
+## Status Model Reference
+
+The command cards below refer to these workflow state families.
+
+### Mission lifecycle
+
+- `draft`
+- `ready`
+- `running`
+- `paused`
+- `panicked`
+- `completed`
+- `delivered`
+
+### Task lifecycle
+
+- `pending`
+- `ready`
+- `queued`
+- `running`
+- `blocked`
+- `completed`
+- `failed`
+- `cancelled`
+
+### Session lifecycle
+
+- `starting`
+- `running`
+- `completed`
+- `failed`
+- `cancelled`
+- `terminated`
+
+### Stage lifecycle
+
+Stage state is derived. It is not directly commanded.
+
+- `pending`
+- `ready`
+- `active`
+- `blocked`
+- `completed`
 
 ## Mission Commands
 
-Mission commands are global governance controls. They should be few, explicit, and consequential.
+## `/mission pause`
 
-| Command | Rules | Context | Result |
-| --- | --- | --- | --- |
-| Pause mission | Allowed only when the mission is running. Use for controlled review or pacing, not emergency containment. | Mission selected, or any lower-level selection inside that mission when mission governance controls are still relevant. | Stops further mission progression and prevents new work from being queued or launched until the mission is resumed. |
-| Resume mission | Allowed only when the mission is paused and not in panic state. | Mission selected, or any lower-level selection inside a paused mission. | Re-enables mission progression and task scheduling. It does not mark any task complete or restart terminated work automatically. |
-| Panic stop mission | Allowed only when the mission has started and is not already panicked or delivered. | Mission selected, or any lower-level selection when emergency recovery actions must take priority. | Puts the mission into panic state, halts launches, and should terminate active sessions and clear queued launch work according to panic policy. |
-| Clear panic | Allowed only when the mission is panicked. Clearing panic must not silently resume execution. | Mission selected, or any lower-level selection in a panicked mission. | Removes the panic latch and leaves the mission paused so the operator must explicitly decide what happens next. |
-| Deliver mission | Allowed only when the mission is completed, delivery conditions are satisfied, and no unresolved active work remains. | Mission selected, usually near the end of the workflow. | Marks the mission as delivered and closes the delivery lifecycle. |
+Pause the whole mission for controlled review or pacing.
 
-### Mission Notes
+**Rules**
 
-- Mission commands are lifecycle and containment controls.
-- Mission commands must not be overloaded with task-like behavior such as starting work, marking slices done, or changing artifact content directly.
-- Recovery actions such as resume and clear panic should rank above local task or session actions when the mission is paused or panicked.
+- Available only when mission lifecycle is `running`.
+- This is governance, not emergency containment.
+- The command is still relevant even when the operator currently has a task or session selected inside the mission.
+
+**Context**
+
+- Mission selection.
+- Any lower-level selection inside the same mission when mission governance controls are surfaced.
+
+**Model status changes**
+
+- Mission lifecycle: `running -> paused`
+- Mission pause state: `paused: false -> true`
+- Mission pause reason: set to `human-requested`
+
+**Model status that does not change directly**
+
+- Task lifecycles do not directly change because of the pause event itself.
+- Session lifecycles do not directly change because of the pause event itself.
+- Stage lifecycles remain derived from task state.
+
+**Result**
+
+The mission stops progressing normally. New task queueing and launch behavior should no longer proceed until the mission is resumed.
+
+## `/mission resume`
+
+Resume a paused mission.
+
+**Rules**
+
+- Available only when mission lifecycle is `paused`.
+- Not available while panic is active.
+
+**Context**
+
+- Mission selection.
+- Any lower-level selection inside a paused mission when recovery controls are surfaced.
+
+**Model status changes**
+
+- Mission lifecycle: `paused -> running`
+- Mission pause state: reset to `paused: false`
+
+**Model status that does not change directly**
+
+- No task is auto-completed.
+- No terminated or cancelled session is restarted by this command.
+- Stage state remains derived from task state.
+
+**Result**
+
+Normal workflow progression and scheduling become possible again.
+
+## `/mission panic`
+
+Emergency stop for the whole mission.
+
+**Rules**
+
+- Available once the mission has started.
+- Not available when mission lifecycle is `draft` or `delivered`.
+- Not available when panic is already active.
+
+**Context**
+
+- Mission selection.
+- Any task or session selection inside the mission when emergency containment must take priority.
+
+**Model status changes**
+
+- Mission lifecycle: `running|paused|completed -> panicked`
+- Mission pause state: forced to `paused: true`
+- Mission pause reason: forced to `panic`
+- Panic state: `active: false -> true`
+- Launch queue: cleared when panic policy says to clear queued launches
+- Queued tasks: queued tasks moved back to `ready` when queue clearing happens
+
+**Model status that may change as a consequence**
+
+- Active sessions may later become `terminated` through panic side effects.
+- Their tasks may later become `cancelled` through those session lifecycle events.
+
+**Result**
+
+The mission enters durable emergency containment. This is the hard stop.
+
+## `/mission clear-panic`
+
+Clear the panic latch after emergency containment.
+
+**Rules**
+
+- Available only when panic is active and mission lifecycle is `panicked`.
+- Clearing panic must not silently resume work.
+
+**Context**
+
+- Mission selection.
+- Any lower-level selection inside a panicked mission.
+
+**Model status changes**
+
+- Mission lifecycle: `panicked -> paused`
+- Panic state: `active: true -> false`
+- Mission pause state remains `paused: true`
+
+**Model status that does not change directly**
+
+- Tasks do not restart.
+- Sessions do not relaunch.
+- Stage state remains derived.
+
+**Result**
+
+The mission leaves panic state but remains paused so the operator must make an explicit recovery decision.
+
+## `/mission deliver`
+
+Close the mission with a delivery decision.
+
+**Rules**
+
+- Available only when mission lifecycle is `completed`.
+- Delivery should only happen when no unresolved active work remains and delivery conditions are satisfied.
+
+**Context**
+
+- Mission selection near the end of the workflow.
+
+**Model status changes**
+
+- Mission lifecycle: `completed -> delivered`
+
+**Model status that does not change directly**
+
+- Task lifecycles are not rewritten by delivery.
+- Session history is not rewritten by delivery.
+- Stage state remains derived from the already-finished task ledger.
+
+**Result**
+
+The mission moves into its terminal delivered state.
 
 ## Stage Commands
 
-Stages are operator-facing structure, not execution authorities. Stage commands should stay intentionally narrow.
+There are no stage commands in the intended model.
 
-| Command | Rules | Context | Result |
-| --- | --- | --- | --- |
-| Generate stage tasks | Allowed only when the stage is the next eligible stage, no runtime tasks exist yet for that stage, and deterministic generation rules exist for it. | Stage selected, typically at the start of a stage that materializes new task inventory. | Creates runtime task records for that stage and materializes the corresponding stage/task files through the workflow generation path. |
-| Open stage artifact | Allowed whenever the stage artifact exists. This is review and navigation, not workflow mutation. | Stage selected. | Opens or focuses the stage artifact so the operator can inspect evidence and current stage output. |
-| No direct stage complete/pause/reopen/start | These should not exist as first-class runtime controls. Stage lifecycle is derived from task state and mission state. | Stage selected. | No direct mutation. The operator should act on tasks or the mission instead. |
+That is a product rule, not just a temporary omission.
 
-### Stage Notes
+### Why
 
-- Stages explain where the mission is.
-- Tasks determine whether the stage is active, blocked, ready, or completed.
-- A stage may surface generation or review operations, but not its own independent execution lifecycle.
+- Stages are derived from task state.
+- A stage does not execute work.
+- The spec-stage planning task creates the conditions for implementation work; the stage itself does not own a separate "generate tasks" command.
+- Focusing a stage artifact is selection behavior, not a command.
+
+### Model implication
+
+No command should directly mutate stage lifecycle.
+
+If a stage becomes `ready`, `active`, `blocked`, or `completed`, that change is the result of mission and task state transitions elsewhere in the model.
 
 ## Task Commands
 
-Task commands are the primary steering mechanism for the running workflow engine.
+Task commands are the main operator steering surface.
 
-The operator experiences a task as one bounded unit made of assignment, execution, and verification. Because of that, the task surface may include commands that conceptually target the task itself, the live session working on it, or the artifact that defines or proves it.
+## `/task start`
 
-| Command | Rules | Context | Result |
-| --- | --- | --- | --- |
-| Start task | Allowed only when the task is ready, dependencies are satisfied, and the mission is neither paused nor panicked. | Task selected. | Queues and begins task execution according to workflow rules. |
-| Launch agent | Allowed only when the task is ready, queued, or running, no active session already owns the task, and the mission is neither paused nor panicked. | Task selected. | Starts a live execution session for that task using the configured runner. |
-| Mark task done | Allowed only when the task outcome is complete enough to accept and no remaining active execution should still be modifying it. | Task selected. | Marks the task completed in workflow state and may advance downstream readiness. |
-| Mark task blocked | Allowed for non-terminal tasks when the operator has a real blocking reason. | Task selected. | Marks the task blocked so the workflow records that work cannot currently continue normally. |
-| Reopen task | Allowed only for completed, failed, or cancelled tasks, and only when downstream active work would not make reopen unsafe. | Task selected, usually after review or regression discovery. | Reopens the task and invalidates downstream derived progress as required by workflow rules. |
-| Enable autostart | Allowed for non-terminal tasks whose launch policy currently disables autostart. | Task selected. | Changes the per-task launch policy so the workflow may automatically queue or launch the task when eligible. |
-| Disable autostart | Allowed for non-terminal tasks whose launch policy currently enables autostart. | Task selected. | Changes the per-task launch policy so the task no longer auto-starts. |
-| Require manual start | Allowed for non-terminal tasks when the current launch mode is automatic. | Task selected. | Changes task launch mode to manual so explicit operator intent is required before execution starts. |
-| Switch to automatic launch | Allowed for non-terminal tasks when the current launch mode is manual. | Task selected. | Changes task launch mode to automatic so the workflow engine may launch it when eligible. |
-| Reply to agent | Allowed only when the task currently has a live session that is awaiting input or can accept prompts. | Task selected with an active or awaiting-input session. | Sends operator input into the live execution session for that task. |
-| Cancel agent | Allowed only when the task currently has an active live session. | Task selected with an active session. | Requests a cooperative stop for the running session associated with the task. |
-| Terminate agent | Allowed only when the task currently has an active or unhealthy session and force-stop is justified. | Task selected with an active session. | Force-stops the live session associated with the task. |
+Move a ready task into execution.
 
-### Task Notes
+**Rules**
 
-- Task is the correct place to unify assignment, execution, and verification behavior.
-- A task surface may inherit artifact and session controls because the operator usually thinks in terms of one work item, not three unrelated entities.
-- Task commands should remain authoritative over workflow truth. A session ending does not by itself mean the task is done.
+- Available only when task lifecycle is `ready`.
+- Dependencies must already be satisfied.
+- Not available while mission lifecycle is `paused` or `panicked`.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task lifecycle first enters `queued`
+- Task lifecycle then enters `running` when task execution actually starts
+
+**Derived model effects**
+
+- Stage state may move toward `active` because a task in that stage is now running.
+- Launch queue and scheduling state may normalize in the same reduce cycle.
+
+**Result**
+
+The workflow begins active execution for that task.
+
+## `/launch`
+
+Launch a live session for the selected task.
+
+**Rules**
+
+- Available only when task lifecycle is `ready`, `queued`, or `running`.
+- Not available if the task already has an active session.
+- Not available while mission lifecycle is `paused` or `panicked`.
+- Runner availability must be satisfied.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Session lifecycle: new session record created as `running`
+- Task lifecycle: forced or preserved as `running`
+
+**Model status that may change on failure**
+
+- If launch fails before a session is created, task lifecycle becomes `failed`.
+
+**Result**
+
+The task gains a live execution session.
+
+## `/task done`
+
+Accept the task outcome as complete.
+
+**Rules**
+
+- Available only when the task is in a state that validation accepts for completion.
+- In the current workflow rules this means task lifecycle must be `ready` or `running` at the moment of completion.
+- The operator should use this only when the task outcome is actually complete and reviewable.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task lifecycle: `ready|running -> completed`
+- Task `completedAt`: set
+
+**Derived model effects**
+
+- Downstream dependency blockers may clear.
+- Stage state may advance toward `completed` when all stage tasks are complete.
+- Mission lifecycle may later advance to `completed` when all workflow completion conditions are satisfied.
+
+**Result**
+
+The workflow accepts the task as finished and uses that fact to recompute downstream readiness.
+
+## `/task blocked`
+
+Record that the task cannot currently proceed normally.
+
+**Rules**
+
+- Available for non-terminal tasks when validation accepts a blocked transition.
+- In the current workflow rules this includes tasks that are `pending`, `ready`, `queued`, or `running`.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task lifecycle: `pending|ready|queued|running -> blocked`
+
+**Derived model effects**
+
+- Stage state may become `blocked` depending on surrounding task state.
+
+**Result**
+
+The workflow records a durable blocked condition instead of pretending the task is still healthy progress.
+
+## `/task reopen`
+
+Reopen previously finished or aborted work.
+
+**Rules**
+
+- Available only when task lifecycle is `completed`, `failed`, or `cancelled`.
+- Not allowed while downstream work is still active in later stages.
+
+**Context**
+
+- Task selected, usually after review, regression discovery, or invalidated assumptions.
+
+**Model status changes**
+
+- Task lifecycle: `completed|failed|cancelled -> pending`
+- Task terminal timestamps such as `completedAt`, `failedAt`, and `cancelledAt`: cleared for the reopened task
+
+**Derived model effects**
+
+- Dependency blockers and stage projections are recomputed.
+- Downstream stage progress may be invalidated by recomputation.
+
+**Result**
+
+The task becomes active workflow work again instead of preserved historical completion.
+
+## `/task autostart on`
+
+Enable automatic start policy for the task.
+
+**Rules**
+
+- Available only when validation accepts a launch-policy change.
+- Not intended for terminal tasks.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task runtime policy: `autostart: false -> true`
+
+**Model status that does not change directly**
+
+- Task lifecycle does not change just because autostart was toggled.
+- Session lifecycle does not change directly.
+
+**Result**
+
+The scheduler may automatically queue or start this task later when it becomes eligible.
+
+## `/task autostart off`
+
+Disable automatic start policy for the task.
+
+**Rules**
+
+- Available only when validation accepts a launch-policy change.
+- Not intended for terminal tasks.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task runtime policy: `autostart: true -> false`
+
+**Model status that does not change directly**
+
+- Task lifecycle does not change just because autostart was toggled.
+- Session lifecycle does not change directly.
+
+**Result**
+
+The scheduler will no longer auto-start this task.
+
+## `/task launch-mode manual`
+
+Require explicit operator intent before launch.
+
+**Rules**
+
+- Available only when validation accepts a launch-policy change.
+- Not intended for terminal tasks.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task runtime policy: `launchMode: automatic -> manual`
+
+**Model status that does not change directly**
+
+- Task lifecycle does not change directly.
+- Session lifecycle does not change directly.
+
+**Result**
+
+The task remains under explicit operator launch control even when otherwise eligible.
+
+## `/task launch-mode automatic`
+
+Allow automatic launch behavior for the task.
+
+**Rules**
+
+- Available only when validation accepts a launch-policy change.
+- Not intended for terminal tasks.
+
+**Context**
+
+- Task selected.
+
+**Model status changes**
+
+- Task runtime policy: `launchMode: manual -> automatic`
+
+**Model status that does not change directly**
+
+- Task lifecycle does not change directly.
+- Session lifecycle does not change directly.
+
+**Result**
+
+The workflow may launch the task automatically when it is eligible and policy allows it.
 
 ## Artifact Commands
 
-Artifacts are durable evidence and context. They should not become a second execution model.
+There are no artifact-owned commands in the intended model.
 
-| Command | Rules | Context | Result |
-| --- | --- | --- | --- |
-| Open artifact | Allowed whenever the artifact exists. | Artifact selected. | Opens or focuses the artifact for reading and review. |
-| Inspect owning task | Allowed whenever the artifact has an owning task or clear stage provenance. | Artifact selected. | Navigates the operator back to the task or workflow unit responsible for this artifact. |
-| Reopen owning task | Allowed only indirectly, using the owning task's reopen rules. The artifact itself does not define reopen authority. | Artifact selected, when review shows the producing task must be revisited. | Reopens the owning task through task lifecycle rules, not through artifact-local state. |
-| No direct artifact start/done/block/launch | These should not exist as artifact-owned commands. | Artifact selected. | No direct mutation. The operator should act on the owning task or mission instead. |
+### Why
 
-### Artifact Notes
-
+- Focusing an artifact is selection behavior.
 - Artifacts are evidence, not workers.
-- Artifact contexts are useful for routing, review, and understanding provenance.
-- If artifact-local actions are surfaced, they should usually be inherited task or stage actions rather than new workflow authorities.
+- If task commands are relevant while an artifact is focused, they should be available because the owning task is already in context.
 
-## Agentrunner Commands
+### Model implication
 
-Agentrunner commands should be treated as live execution controls for a task-bound session.
+No artifact command should directly mutate mission, task, session, or stage lifecycle.
 
-In practical product terms, this means the operator is usually acting on a session attached to a task, even if the UI presents that surface as "agent" or "runway" control.
+## Session Commands
 
-| Command | Rules | Context | Result |
-| --- | --- | --- | --- |
-| Launch agent for task | Allowed only through task launch rules, runner availability, and mission policy. | Task selected before a session exists. | Creates a new live session to execute the selected task. |
-| Prompt or reply | Allowed only while a live session can accept operator input. | Agentrunner or session selected, or task selected with a live session. | Sends normalized operator input into the active session. |
-| Interrupt | Allowed only while a live session is active and the runtime supports an interrupt-style command. | Live session selected. | Requests a structured interruption of the active session. |
-| Cancel | Allowed only while a live session is active. Use for cooperative stop. | Live session selected. | Cancels the active session without pretending the task is complete. |
-| Terminate | Allowed only while a live session is active or unhealthy and cooperative cancellation is insufficient. | Live session selected. | Force-terminates the session. |
-| Reattach or inspect console | Allowed whenever session state or console history exists. | Live or historical session selected. | Reconnects the operator to the existing session context or shows its recorded console state. |
-| Change runner assignment | Allowed only as a pre-launch task policy change, not as an in-place mutation of a live session. | Task selected before launch, or after ending a previous session. | Changes which runner will be used for the next session launch of that task. |
+Session commands are live execution controls only.
 
-### Agentrunner Notes
+Launch is not a session command. Launch belongs to the task.
 
-- The runner executes a task. It does not define the workflow.
-- Session success or failure is runtime information that must be translated back into workflow state.
-- A runner must never become the authority for task completion or stage progression.
+## Plain reply input
 
-## Practical Selection Model
+Send freeform operator input to the selected live session.
 
-The command model should feel natural to the operator at each selection depth:
+**Rules**
 
-| Selected layer | Primary commands that should dominate |
-| --- | --- |
-| Mission | Pause, resume, panic stop, clear panic, deliver |
-| Stage | Generate stage tasks, open stage artifact |
-| Task | Start, launch, done, blocked, reopen, launch policy, live session controls |
-| Artifact | Open artifact, inspect owning task, inherited task recovery actions when relevant |
-| Agentrunner or session | Prompt, interrupt, cancel, terminate, inspect console |
+- Available only when a live session is selected or when the selected task has a promptable live session.
+- This is operator text input, not a slash command.
 
-This is the intended experience:
+**Context**
 
-- the mission layer governs
-- the stage layer explains
-- the task layer steers
-- the artifact layer proves
-- the agentrunner layer executes
+- Session selected.
+- Task selected with a live session awaiting or accepting input.
 
-## Current Implementation Notes
+**Model status changes**
 
-The current codebase already aligns with this model in several important ways:
+- No direct mission lifecycle change.
+- No direct task lifecycle change.
+- No direct session lifecycle change.
 
-- mission actions are explicit and separate from task and session actions
-- task actions are richer than stage actions
-- session controls are distinct from task completion semantics
-- artifact routing exists without introducing artifact-owned workflow mutation
+**Result**
 
-There are also two important caveats:
+Operator text is delivered into the live session as runtime input.
 
-1. Stage-centered runtime control should continue to be removed or rewritten in favor of task and mission authority.
-2. Implementation-stage task generation is still a critical product boundary and should remain deterministic rather than depending on free-form manual file creation.
+## `/session cancel`
 
-Those caveats do not weaken the model. They clarify where Mission still needs to tighten the contract so the operator surface remains honest.
+Request a cooperative stop for a live session.
+
+**Rules**
+
+- Available only when session lifecycle is active.
+- In the current action builder this means `starting` or `running`.
+
+**Context**
+
+- Session selected.
+- Task selected with an active session, when the session action is inherited into task context.
+
+**Model status changes**
+
+- Session lifecycle: `starting|running -> cancelled`
+- Owning task lifecycle: `-> cancelled`
+- Owning task `cancelledAt`: set
+
+**Derived model effects**
+
+- Stage and dependency projections are recomputed after the cancelled task state lands.
+
+**Result**
+
+The live session is stopped cooperatively and the workflow records that the associated task was cancelled rather than completed.
+
+## `/session terminate`
+
+Force-stop a live session.
+
+**Rules**
+
+- Available only when session lifecycle is active.
+- Use when cooperative cancellation is insufficient or unhealthy runtime behavior requires a harder stop.
+
+**Context**
+
+- Session selected.
+- Task selected with an active session, when the session action is inherited into task context.
+
+**Model status changes**
+
+- Session lifecycle: `starting|running -> terminated`
+- Owning task lifecycle: `-> cancelled`
+- Owning task `cancelledAt`: set
+
+**Derived model effects**
+
+- Stage and dependency projections are recomputed after the task is marked cancelled.
+
+**Result**
+
+The live session is force-stopped and the workflow records the task as cancelled rather than successful.
+
+## Selection Summary
+
+The practical command surface should now read like this:
+
+### Mission selection
+
+- `/mission pause`
+- `/mission resume`
+- `/mission panic`
+- `/mission clear-panic`
+- `/mission deliver`
+
+### Stage selection
+
+- no stage commands
+
+### Task selection
+
+- `/task start`
+- `/launch`
+- `/task done`
+- `/task blocked`
+- `/task reopen`
+- `/task autostart on`
+- `/task autostart off`
+- `/task launch-mode manual`
+- `/task launch-mode automatic`
+- inherited live-session controls when a session exists in task context
+
+### Artifact selection
+
+- no artifact-owned commands
+- task-relevant commands may still be available because the owning task remains in context
+
+### Session selection
+
+- plain reply input
+- `/session cancel`
+- `/session terminate`
+
+## Local UI Command
+
+The Tower surface still keeps one local non-workflow command:
+
+### `/quit`
+
+Exit the terminal UI.
+
+**Rules**
+
+- Always available locally in Tower.
+
+**Context**
+
+- UI-local command, not part of mission workflow state.
+
+**Model status changes**
+
+- None.
+
+**Result**
+
+Closes the local Tower surface only.

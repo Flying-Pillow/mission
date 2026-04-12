@@ -9,18 +9,29 @@ nav_order: 99
 
 This page records current mismatches between specifications, replay material, older documentation, and the implementation currently in the repository.
 
+<div class="mission-status-grid">
+	<div class="mission-status-card mission-status-card--current">
+		<strong>Current implementation</strong>
+		<p>Use the repository code, routed CLI, and persisted runtime data as the operational authority for what Mission ships right now.</p>
+	</div>
+	<div class="mission-status-card mission-status-card--target">
+		<strong>Target architecture</strong>
+		<p>Use specifications and replay material as intent documents for the cleaner shape Mission is converging on, especially where the current implementation is still mid-transition.</p>
+	</div>
+</div>
+
 ## 1. Spec Documents Often Describe A Clean-Break Future Architecture More Radical Than The Current Code
 
 Several specification files under `specifications/mission/` and `specifications/airport/` are written as from-scratch replacement documents. The current implementation realizes much of that architecture, but not always with the exact naming or decomposition those specs prescribe.
 
 Practical rule: use the current code as the authority for what exists, and use the specs as intent documents.
 
-## 2. There Are Two Distinct Gate Vocabularies
+## 2. Workflow Gates And Airport Panes Use Different Vocabularies
 
 - Workflow gates in `mission.json` use gate ids such as `implement`, `verify`, `audit`, and `deliver`.
-- Airport panes in `packages/airport/src/types.ts` use `tower`, `briefingRoom`, and `runway`.
+- Airport panes in `packages/airport/src/types.ts` use pane ids such as `tower`, `briefingRoom`, and `runway`.
 
-They are both first-class, but they mean different things. One is workflow progression projection. The other is UI layout topology.
+They are both first-class, but they mean different things. One is workflow progression. The other is Airport layout topology.
 
 ## 3. There Are Two Task State Models On Purpose
 

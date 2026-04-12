@@ -13,6 +13,11 @@ has_children: true
 	<p class="mission-section-lead">These pages stay close to the running implementation: public CLI entry points, persisted state boundaries, and the facts that should remain exact even when the product narrative pages stay higher level.</p>
 </section>
 
+<div class="mission-compare-callout">
+	<strong>Reading mode</strong>
+	<p>Reference pages describe current implementation behavior. If you want the intended system shape and the architectural direction behind it, read the architecture section alongside these pages rather than treating them as the same mode of documentation.</p>
+</div>
+
 <div class="mission-section-grid">
 	<a class="mission-section-card" href="{{ '/reference/operator-command-model.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Control Model</span>

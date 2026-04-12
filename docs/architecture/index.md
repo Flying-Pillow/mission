@@ -22,6 +22,17 @@ It documents the system as it exists in the repository today across:
 
 This is not a speculative redesign document. When older specs, older notes, and current code differ, this section resolves against the current implementation while calling out meaningful drift in [discrepancies.md](./discrepancies.html).
 
+<div class="mission-status-grid">
+	<div class="mission-status-card mission-status-card--current">
+		<strong>Current implementation</strong>
+		<p>This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.</p>
+	</div>
+	<div class="mission-status-card mission-status-card--target">
+		<strong>Target architecture</strong>
+		<p>Specifications and replay material still matter because they capture the cleaner end-state Mission is driving toward. Treat them as directional intent unless this section explicitly says the current code already matches.</p>
+	</div>
+</div>
+
 ## How To Read This Section
 
 1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
