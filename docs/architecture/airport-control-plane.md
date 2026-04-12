@@ -66,6 +66,12 @@ flowchart TD
 2. the observed focus does not already match
 3. the bound pane exists in the current substrate observation
 
+Semantic selection is a separate concern from focus intent:
+
+- mission or repository selection updates gate bindings and projections
+- explicit airport focus observations update `focus.intentGateId`
+- selecting an artifact or agent session must not, by itself, move terminal focus away from the dashboard gate
+
 ## Persistence Boundary
 
 Airport intent is persisted inside repository daemon settings, not inside `mission.json`.
@@ -92,5 +98,5 @@ Airport does not own mission execution. It does not own task generation. It does
 ## Relationship To Other Pages
 
 - See [daemon.md](./daemon.html) for the multi-repository registry and daemon integration.
-- See [tower.md](./tower.html) for how Tower attaches to airport gates.
+- See [tower.md](./tower.html) for how the Airport terminal surfaces attach to airport gates.
 - See [semantic-model.md](./semantic-model.html) for the semantic targets referenced by gate bindings.

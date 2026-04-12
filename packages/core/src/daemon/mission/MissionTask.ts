@@ -116,7 +116,11 @@ export class MissionTask {
 			const snapshot = await this.owner.startTaskRuntimeSession(this.state, runner, request);
 			return this.owner.recordStartedTaskSession(snapshot);
 		} catch (error) {
-			await this.owner.recordTaskSessionLaunchFailure(this.state.taskId, error);
+			try {
+				await this.owner.recordTaskSessionLaunchFailure(this.state.taskId, error);
+			} catch {
+				// Preserve the original launch failure when the failure-record side effect cannot be applied.
+			}
 			throw error;
 		}
 	}

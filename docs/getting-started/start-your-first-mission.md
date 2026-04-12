@@ -16,7 +16,7 @@ Mission supports two intake paths in the current codebase:
 - start from a new brief
 - start from an existing GitHub issue
 
-Both paths end in the same place: a mission workspace, a dossier of artifacts, and a staged workflow that the Tower can monitor and steer.
+Both paths end in the same place: a mission workspace, a dossier of artifacts, and a staged workflow that Mission can monitor and steer through the Airport layout.
 
 ## Choose Your Intake Path
 
@@ -64,14 +64,14 @@ At a high level, a prepared mission ends up with:
 
 Those artifacts do not all appear fully populated at once, but that is the dossier shape Mission is steering toward.
 
-## What You See In Tower Next
+## What You See In Mission Next
 
-The Tower changes mode depending on where you launch it:
+The Airport layout changes emphasis depending on where you launch it:
 
 - launching from the repository checkout opens repository mode
 - launching from a mission workspace auto-selects that mission and opens mission mode
 
-Once a mission is selected, the Tower becomes your operator console for:
+Once a mission is selected, the Tower becomes the left-side control surface inside the Airport layout for:
 
 - stage progress
 - task readiness and blockage
@@ -98,7 +98,7 @@ The current implementation has a few honest boundaries:
 
 - issue-backed intake is GitHub-specific today
 - the public CLI does not yet expose a polished top-level `mission start` command
-- the live intake flow exists through the daemon and Tower control surface rather than a broad CLI wizard
+- the live intake flow exists through the daemon and Mission terminal control surfaces rather than a broad CLI wizard
 
 That does not reduce the value of the workflow. It simply means the product direction is ahead of the final operator polish in some areas.
 

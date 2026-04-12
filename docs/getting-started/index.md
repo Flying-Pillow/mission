@@ -17,7 +17,7 @@ has_children: true
 	<a class="mission-section-card" href="{{ '/getting-started/installation.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 1</span>
 		<span class="mission-section-card__title">Installation</span>
-		<span class="mission-section-card__text">Prepare your machine, terminal substrate, editor integration, and Tower runtime.</span>
+		<span class="mission-section-card__text">Prepare your machine, published CLI, terminal substrate, editor integration, and Airport terminal runtime.</span>
 	</a>
 	<a class="mission-section-card" href="{{ '/getting-started/repository-setup.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 2</span>
@@ -27,6 +27,6 @@ has_children: true
 	<a class="mission-section-card" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Step 3</span>
 		<span class="mission-section-card__title">Start Your First Mission</span>
-		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Tower control.</span>
+		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Mission terminal control.</span>
 	</a>
 </div>

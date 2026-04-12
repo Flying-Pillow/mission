@@ -7,18 +7,24 @@ nav_order: 1
 
 # Installation
 
-Mission installation is about preparing your machine to act as an operator console. It is not yet about adopting a specific repository or starting a specific mission.
+Mission installation is about preparing your machine to run the published Mission CLI and operator surfaces. It is not yet about adopting a specific repository or starting a specific mission.
 
 Mission separates setup into two layers:
 
-- user-level setup for the machine that will run Tower
+- user-level setup for the machine that will run the Mission CLI and Airport terminal surfaces
 - repository-level setup for each Git checkout you want Mission to manage
 
 This page covers the first layer only.
 
 ## Install Mission
 
-Install the package globally:
+You can run Mission directly from npm:
+
+```bash
+npx @flying-pillow/mission
+```
+
+If you want persistent `mission` and `missiond` commands, install the package globally:
 
 ```bash
 npm install -g @flying-pillow/mission
@@ -30,7 +36,7 @@ Then run the installer:
 mission install
 ```
 
-That prepares the operator environment without launching the full Tower session.
+That prepares the operator environment without launching the full Airport terminal session.
 
 ## What The Installer Sets Up
 
@@ -51,11 +57,11 @@ These current runtime facts matter:
 
 | Requirement | Why it matters |
 | --- | --- |
-| Bun | Required for the Tower runtime today |
-| Node.js | Still fine for non-Tower commands |
+| Bun | Required for the Airport terminal surfaces today |
+| Node.js | Still fine for CLI-only and daemon-only commands |
 | zellij | Preferred terminal substrate for the airport layout |
 | An editor binary | Needed for the editor gate |
-| The daemon | Auto-started by Tower when needed |
+| The daemon | Auto-started by Mission terminal surfaces when needed |
 
 On Linux, Mission can auto-install some dependencies, including `zellij`, into the local user bin path when they are missing.
 
@@ -72,11 +78,11 @@ mission
 What happens next:
 
 1. Mission validates the operator setup.
-2. Tower launches.
+2. Mission launches the Airport terminal layout.
 3. The daemon starts automatically if it is not already running.
 4. If repository control state is missing, Mission can scaffold it on the way in.
 
-On POSIX shells, Mission also tries to bootstrap the airport-style terminal layout so the Tower, agent session pane, and editor gate open as one coordinated surface.
+On POSIX shells, Mission also tries to bootstrap the airport-style terminal layout so the Tower control surface, runway session surface, and briefing-room editor surface open as one coordinated operator environment.
 
 ## Why The Setup Matters
 
@@ -85,7 +91,7 @@ The goal is not to make installation complicated. The goal is to make operation 
 Once installation is done:
 
 - your mission workspaces have a known home
-- Tower knows which terminal and editor tools to use
+- the Airport terminal surfaces know which terminal and editor tools to use
 - reconnecting to Mission feels consistent across repositories
 
 That is part of the product promise: Mission should feel like a real operations tool, not a pile of one-off scripts.

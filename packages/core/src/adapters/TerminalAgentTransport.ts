@@ -82,7 +82,9 @@ export class TerminalAgentTransport {
 	}
 
 	public async openSession(request: TerminalOpenSessionRequest): Promise<TerminalSessionHandle> {
-		const sharedSessionName = request.sharedSessionName?.trim() || this.sharedSessionName;
+		const sharedSessionName = request.sharedSessionName?.trim()
+			|| this.sharedSessionName
+			|| await this.discoverAirportLayoutSessionName();
 		if (sharedSessionName) {
 			return this.openSharedSession(request, sharedSessionName);
 		}
@@ -219,6 +221,8 @@ export class TerminalAgentTransport {
 		const launchCommand = buildLaunchCommand(request);
 		const agentSessionPane = await this.resolveAgentSessionPane(sharedSessionName);
 		const agentSessionTabId = resolvePaneTabId(agentSessionPane);
+		const panesBeforeLaunch = await this.listSessionPanesFor(sharedSessionName);
+		const paneIdsBeforeLaunch = new Set(panesBeforeLaunch.map((pane) => pane.id));
 		const createPaneResult = await this.runTerminal([
 			'--session',
 			sharedSessionName,
@@ -235,7 +239,34 @@ export class TerminalAgentTransport {
 			'-lc',
 			`exec ${launchCommand}`
 		]);
-		const paneId = parsePaneReference(createPaneResult.stdout);
+		let paneId: string | undefined;
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			const panesAfterLaunch = await this.listSessionPanesFor(sharedSessionName);
+			const createdPane = panesAfterLaunch.find((pane) => {
+				if (paneIdsBeforeLaunch.has(pane.id)) {
+					return false;
+				}
+				if (resolvePaneTabId(pane) !== agentSessionTabId) {
+					return false;
+				}
+				if (pane.is_suppressed || pane.exited) {
+					return false;
+				}
+				return true;
+			});
+			if (createdPane) {
+				paneId = toPaneReference(createdPane.id);
+				break;
+			}
+			await delay(100);
+		}
+
+		if (!paneId) {
+			const createdPane = await this.findPaneByTitle(sessionName, sharedSessionName);
+			paneId = createdPane
+				? toPaneReference(createdPane.id)
+				: parsePaneReference(`${createPaneResult.stdout}\n${createPaneResult.stderr}`);
+		}
 		if (!paneId) {
 			throw new Error(`Unable to resolve created terminal-manager pane for '${sessionName}'.`);
 		}
@@ -248,6 +279,7 @@ export class TerminalAgentTransport {
 			toPaneReference(agentSessionPane.id),
 			paneId
 		]);
+		await this.focusPane(paneId, sharedSessionName);
 
 		return {
 			sessionName,
@@ -294,11 +326,21 @@ export class TerminalAgentTransport {
 	}
 
 	private async resolveAgentSessionPane(sharedSessionName?: string): Promise<TerminalPaneMetadata> {
-		const pane = await this.findPaneByTitle(this.agentSessionPaneTitle, sharedSessionName);
-		if (!pane) {
-			throw new Error(`Unable to locate terminal-manager pane '${this.agentSessionPaneTitle}' in session '${sharedSessionName ?? this.sharedSessionName ?? 'unknown'}'.`);
+		const resolvedSessionName = sharedSessionName ?? this.sharedSessionName;
+		if (!resolvedSessionName) {
+			throw new Error('Shared terminal session name is required to resolve agent session pane.');
 		}
-		return pane;
+
+		const panes = await this.listSessionPanesFor(resolvedSessionName);
+		const livePane = panes.find((pane) => pane.title === this.agentSessionPaneTitle && !pane.is_suppressed && !pane.exited);
+		if (livePane) {
+			return livePane;
+		}
+
+		throw new Error(
+			`Unable to locate terminal-manager pane '${this.agentSessionPaneTitle}' in session '${resolvedSessionName}'.`
+			+ ' Select an agent session in Tower to insert the gate pane, then retry.'
+		);
 	}
 
 	private async findPaneByTitle(title: string, sharedSessionName?: string): Promise<TerminalPaneMetadata | undefined> {
@@ -316,13 +358,21 @@ export class TerminalAgentTransport {
 		if (!sharedSessionName) {
 			throw new Error('Shared terminal session name is required to focus a pane.');
 		}
-		await this.runTerminal([
-			'--session',
-			sharedSessionName,
-			'action',
-			'focus-pane-id',
-			paneId
-		]);
+		try {
+			await this.runTerminal([
+				'--session',
+				sharedSessionName,
+				'action',
+				'focus-pane-id',
+				paneId
+			]);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.toLowerCase().includes('already focused')) {
+				return;
+			}
+			throw error;
+		}
 	}
 
 	private async getFocusedPaneId(sharedSessionName = this.sharedSessionName): Promise<string | undefined> {
@@ -347,6 +397,38 @@ export class TerminalAgentTransport {
 		return parsed.filter((pane) => !pane.is_plugin);
 	}
 
+	private async discoverAirportLayoutSessionName(): Promise<string | undefined> {
+		let sessions: string[];
+		try {
+			sessions = await this.listSessionNames();
+		} catch {
+			return undefined;
+		}
+		for (const sessionName of sessions) {
+			try {
+				const panes = await this.listSessionPanesFor(sessionName);
+				const hasAgentSessionPane = panes.some((pane) => pane.title === this.agentSessionPaneTitle && !pane.is_suppressed);
+				if (hasAgentSessionPane) {
+					return sessionName;
+				}
+			} catch {
+				continue;
+			}
+		}
+		return undefined;
+	}
+
+	private async listSessionNames(): Promise<string[]> {
+		const result = await this.runTerminal(['list-sessions']);
+		const lines = result.stdout
+			.split(/\r?\n/)
+			.map((line) => stripAnsi(line).trim())
+			.filter((line) => line.length > 0);
+		return lines
+			.map((line) => line.split(/\s+/u)[0] ?? '')
+			.filter((sessionName) => sessionName.length > 0);
+	}
+
 	private async withPaneFocus<T>(paneId: string, operation: () => Promise<T>, sharedSessionName = this.sharedSessionName): Promise<T> {
 		const previouslyFocusedPaneId = await this.getFocusedPaneId(sharedSessionName);
 		if (previouslyFocusedPaneId !== paneId) {
@@ -356,7 +438,14 @@ export class TerminalAgentTransport {
 			return await operation();
 		} finally {
 			if (previouslyFocusedPaneId && previouslyFocusedPaneId !== paneId) {
-				await this.focusPane(previouslyFocusedPaneId, sharedSessionName);
+				try {
+					await this.focusPane(previouslyFocusedPaneId, sharedSessionName);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (!message.toLowerCase().includes('not found')) {
+						throw error;
+					}
+				}
 			}
 		}
 	}

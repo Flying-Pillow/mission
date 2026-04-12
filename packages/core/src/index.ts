@@ -3,7 +3,7 @@ export * from './client/DaemonApi.js';
 export * from './client/DaemonAirportApi.js';
 export * from './client/DaemonControlApi.js';
 export * from './client/DaemonMissionApi.js';
-export * from '../../airport/build/index.js';
+export * from '@flying-pillow/mission-airport';
 export * from './runtime/AgentRuntimeTypes.js';
 export * from './runtime/AgentRunner.js';
 export * from './runtime/AgentSession.js';

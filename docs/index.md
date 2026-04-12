@@ -12,7 +12,7 @@ nav_order: 1
 	<div class="mission-home-actions">
 		<a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
 		<a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
-		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Open the Tower Guide</a>
+		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Open the Terminal Guide</a>
 	</div>
 	<div class="mission-home-grid">
 		<div class="mission-home-card">
@@ -40,7 +40,7 @@ Instead of one long chat session working directly on your active branch, Mission
 - start a mission from a new brief or an existing GitHub issue
 - let Mission create an isolated mission workspace
 - move through requirements, specification, implementation, audit, and delivery
-- monitor and steer everything from the Mission Control Tower
+- monitor and steer everything from the Mission terminal surface
 
 The result is a workflow that feels closer to running a flight operation than babysitting a chatbot.
 
@@ -51,7 +51,7 @@ Mission sits above the agent runtime.
 - Mission controls the flow of work.
 - Mission decides which stage comes next.
 - Mission persists the mission state and artifacts.
-- Mission gives the operator a Tower and daemon control surface.
+- Mission gives the operator a published CLI, an Airport terminal layout, and daemon control surfaces.
 - The coding agent is used to execute the current task inside that structure.
 
 That distinction is the whole point of the product. The value is not just "AI that can code." The value is a governed operating layer that keeps coding work bounded, inspectable, recoverable, and steerable.
@@ -74,11 +74,11 @@ If you want the shortest explanation of why that operating model matters, read [
 
 Mission is built around a simple operator journey:
 
-1. Install Mission and open the Tower.
+1. Install Mission and launch the terminal surface.
 2. Register or switch to the repository you want to operate on.
 3. Prepare a mission from a brief or select an existing GitHub issue.
 4. Review the generated dossier and let the workflow advance from `prd` to `spec` to `implementation`, then `audit` and `delivery`.
-5. Watch stages, tasks, artifacts, and live agent sessions in the Tower.
+5. Watch stages, tasks, artifacts, and live agent sessions in the Airport layout, with Tower as the left-side control surface.
 6. Pause, resume, relaunch, interrupt, or panic-stop work whenever you need to.
 7. Deliver from a verified mission workspace instead of hoping an AI chat stayed in bounds.
 
@@ -101,7 +101,7 @@ Mission is attractive when you care about these outcomes:
 
 Mission is not meant to lock you into one giant vendor-specific session.
 
-The workflow engine, runtime contract, and Tower all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
+The workflow engine, runtime contract, and Mission terminal surfaces all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
 
 - the selected runtime
 - the default execution mode
@@ -129,8 +129,9 @@ That staged model is what makes Mission feel safe. It does not ask you to trust 
 
 Mission is already usable, but it is still an alpha product. A few current truths matter for operators:
 
-- the public CLI centers on launching Tower, installing prerequisites, inspecting airport state, and stopping the daemon
-- Tower currently requires Bun at runtime
+- the published CLI package is `@flying-pillow/mission`
+- the public CLI centers on launching the Mission terminal surface, installing prerequisites, inspecting airport state, and stopping the daemon
+- the Airport terminal surfaces currently require Bun at runtime
 - GitHub is the tracking provider used by the implemented mission intake flows
 - repository scaffolding is real, but `mission init` is not currently exposed as a public routed command
 
@@ -143,4 +144,4 @@ Those constraints do not change the product direction. They just define the curr
 - [Repository Setup](getting-started/repository-setup.md) explains how to adopt a repository and keep the control layer separate from delivery work.
 - [Start Your First Mission](getting-started/start-your-first-mission.md) walks through intake from a brief or an existing issue.
 - [Mission Lifecycle](core-workflows/mission-lifecycle.md) explains the five stages, their artifacts, and how work moves forward.
-- [Mission Control Tower](user-manual/workflow-control.md) explains how to monitor and steer live work.
+- [Mission Terminal Control](user-manual/workflow-control.md) explains how to monitor and steer live work.

@@ -58,11 +58,12 @@ export class RepositoryAirportRegistry {
 	public async activateRepository(repositoryId: string, repositoryRootPath: string): Promise<RepositoryAirportRecord> {
 		const airport = await this.ensureAirportForRepository(repositoryId, repositoryRootPath);
 		this.activeRepositoryId = repositoryId;
+		const activeSessionName = airport.control.getState().substrate.sessionName;
 		airport.control.scopeToRepository({
 			repositoryId,
 			repositoryRootPath,
 			airportId: deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath).airportId,
-			sessionName: deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath).sessionName
+			sessionName: activeSessionName
 		});
 		return airport;
 	}
@@ -89,6 +90,26 @@ export class RepositoryAirportRegistry {
 		this.activeRepositoryId = repositoryId;
 		this.clientRepositoryIndex.set(params.clientId, repositoryId);
 		airport.control.connectClient(params);
+	}
+
+	public setTerminalSessionName(repositoryId: string, terminalSessionName: string): void {
+		const airport = this.requireAirport(repositoryId);
+		const normalizedSessionName = terminalSessionName.trim();
+		if (!normalizedSessionName) {
+			return;
+		}
+		if (airport.control.getState().substrate.sessionName === normalizedSessionName) {
+			return;
+		}
+		airport.substrateController = new TerminalManagerSubstrateController({
+			sessionName: normalizedSessionName
+		});
+		airport.control.scopeToRepository({
+			repositoryId: airport.repositoryId,
+			repositoryRootPath: airport.repositoryRootPath,
+			airportId: airport.control.getState().airportId,
+			sessionName: normalizedSessionName
+		});
 	}
 
 	public disconnectClient(clientId: string): string | undefined {

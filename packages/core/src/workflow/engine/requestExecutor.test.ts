@@ -3,6 +3,7 @@ import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import type { AgentRunner } from '../../runtime/AgentRunner.js';
 import type { AgentSession } from '../../runtime/AgentSession.js';
+import type { AgentSessionReference } from '../../runtime/AgentRuntimeTypes.js';
 import type { AgentSessionStartRequest } from '../../runtime/AgentRuntimeTypes.js';
 import {
 	createInitialMissionWorkflowRuntimeState,
@@ -171,5 +172,52 @@ describe('MissionWorkflowRequestExecutor', () => {
 			runnerId: 'fake-runner',
 			transportId: 'terminal'
 		});
+	});
+
+	it('preserves canonical task identity when cancelling an unattached runtime session', async () => {
+		const runner: AgentRunner = {
+			id: 'fake-runner',
+			transportId: 'terminal',
+			displayName: 'Fake Runner',
+			capabilities: {
+				attachableSessions: true,
+				promptSubmission: true,
+				structuredCommands: true,
+				interruptible: true,
+				interactiveInput: false,
+				telemetry: false,
+				mcpClient: false
+			},
+			isAvailable: async () => ({ available: true }),
+			startSession: async () => {
+				throw new Error('unused in this test');
+			},
+			attachSession: async (_reference: AgentSessionReference) => {
+				throw new Error('detached runtime');
+			}
+		};
+
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as FilesystemAdapter,
+			runners: new Map([[runner.id, runner]])
+		});
+
+		await executor.attachSession({
+			runnerId: 'fake-runner',
+			transportId: 'terminal',
+			sessionId: 'session-detached'
+		});
+
+		const events = await executor.cancelRuntimeSession(
+			'session-detached',
+			'cleanup detached runtime',
+			'implementation/03-align-workflow-request-execution-with-unified-runtime'
+		);
+
+		expect(events).toContainEqual(expect.objectContaining({
+			type: 'session.cancelled',
+			sessionId: 'session-detached',
+			taskId: 'implementation/03-align-workflow-request-execution-with-unified-runtime'
+		}));
 	});
 });

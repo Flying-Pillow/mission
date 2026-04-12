@@ -1,29 +1,29 @@
 ---
 layout: default
-title: Tower Overview
+title: Airport Layout Overview
 parent: User Manual
 nav_order: 1
 ---
 
-# Tower Overview
+# Airport Layout Overview
 
-The Tower is the operator's cockpit for Mission.
+The Airport layout is the operator's cockpit for Mission.
 
 It is where you move from “I have work to do” to “I can see the mission, the stage, the tasks, the artifacts, and the live agent session that is doing the work.”
 
 ## What You See When Mission Launches
 
-On a normal POSIX setup, Mission can bootstrap an airport-style layout with three coordinated panes:
+On a normal POSIX setup, Mission can bootstrap an airport-style layout with three coordinated surfaces:
 
 - Mission Tower on the left
-- an agent session pane on the upper right
-- an editor gate on the lower right
+- Runway on the upper right when a live agent session is selected
+- Briefing Room on the lower right
 
 That layout is one of the reasons the product feels usable in practice. You do not have to mentally stitch together a CLI, a text editor, and a random agent terminal. Mission places them into one operating surface.
 
 ## Repository Mode And Mission Mode
 
-Tower has two main operating contexts:
+Tower, as the left-side control surface inside Airport, has two main operating contexts:
 
 | Mode | What it is for |
 | --- | --- |
@@ -34,9 +34,17 @@ Launching from a repository checkout opens repository mode. Launching from an ex
 
 That is a good product detail because it means the surface adapts to where you are in the workflow instead of making every screen feel the same.
 
-## The Main Tower Regions
+## The Main Airport Regions
 
-The current Tower shell is built around four persistent areas:
+The current Airport layout is built around three outer regions, with Tower itself built around four inner regions.
+
+Outer layout:
+
+1. Tower
+2. Runway
+3. Briefing Room
+
+Tower shell:
 
 1. Header
 2. Center panel
@@ -59,6 +67,8 @@ The center panel is the main work surface.
 
 In repository mode, it is where Mission can drive repository and intake flows. In mission mode, it becomes the mission view for stages, tasks, artifacts, and sessions.
 
+Internally, that mission view is being organized so the mission-control feature owns the projection of daemon context into tree rows and session/task displays, instead of keeping those transforms in the top-level Tower shell.
+
 ### Command Panel
 
 The command panel is the stable operator control surface. This is where Mission exposes available actions and confirmation flows instead of forcing you to remember fragile shell commands.
@@ -70,15 +80,17 @@ In Tower, the panel name is historical UI language. The important distinction is
 
 If you type `/mission resume`, you are not creating a new business operation in the terminal. You are selecting the daemon action whose action text is `/mission resume`.
 
+Internally, the command surface is being organized so command-specific view models and interaction rules are owned by the command feature rather than the top-level shell. That keeps the command panel focused on rendering while the command feature owns the local UI logic.
+
 ### Key Hints Row
 
 The bottom hint row keeps interaction discoverable. That matters in a terminal product because the UI has to stay fast without becoming obscure.
 
-## Why Tower Matters
+## Why The Airport Layout Matters
 
 Mission is not only a workflow engine. It is a supervised operations product.
 
-Tower is how that supervision becomes practical:
+The Airport layout is how that supervision becomes practical, with Tower as the control surface and Runway and Briefing Room as the execution companions:
 
 - you can see what stage is active
 - you can inspect which task is ready or blocked

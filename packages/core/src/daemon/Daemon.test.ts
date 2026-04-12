@@ -323,9 +323,7 @@ describe('Daemon', () => {
 							dashboard: {
 								title: 'Dashboard',
 								surfaceMode: 'repository',
-								centerRoute: 'repository-flow',
 								repositoryLabel: path.basename(workspaceRoot),
-								commandContext: {},
 								stageRail: [],
 								treeNodes: [],
 								emptyLabel: 'Repository mode is ready.'
@@ -345,8 +343,7 @@ describe('Daemon', () => {
 							[workspaceRoot]: {
 								dashboard: {
 									title: 'Dashboard',
-									surfaceMode: 'repository',
-									centerRoute: 'repository-flow'
+									surfaceMode: 'repository'
 								}
 							}
 						}
@@ -567,13 +564,8 @@ describe('Daemon', () => {
 					expect(reconnected.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
 					expect(reconnected.airportProjections.dashboard.surfaceMode).toBe('mission');
-					expect(reconnected.airportProjections.dashboard.commandContext.targetKind).toBeDefined();
-					expect(reconnected.airportProjections.dashboard.commandContext.targetLabel).toBeTruthy();
-					expect(reconnected.airportProjections.dashboard.commandContext.targetKind).toBe(
-						reconnected.airportProjections.dashboard.selectedTaskId
-							? 'task'
-							: 'mission'
-					);
+					expect(reconnected.airportProjections.dashboard.treeNodes.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.dashboard.stageRail.length).toBeGreaterThan(0);
 				} finally {
 					firstClient.dispose();
 					secondClient.dispose();
@@ -609,15 +601,145 @@ describe('Daemon', () => {
 					expect(reset.state.domain.selection.repositoryId).toBe(workspaceRoot);
 					expect(reset.state.domain.selection.missionId).toBeUndefined();
 					expect(reset.airportProjections.dashboard.surfaceMode).toBe('repository');
-					expect(reset.airportProjections.dashboard.centerRoute).toBe('repository-flow');
-					expect(reset.airportProjections.dashboard.commandContext).toMatchObject({
-						targetKind: 'repository'
-					});
+					expect(reset.airportProjections.dashboard.stageRail).toEqual([]);
+					expect(reset.airportProjections.dashboard.treeNodes).toEqual([]);
 				} finally {
 					client.dispose();
 					await daemon.close();
 				}
 			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('rebinds the editor via airport gate binding without changing airport focus intent', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 5, 'Keep tree focus on semantic selection');
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
+					await api.control.getStatus();
+					await api.airport.observeClient({
+						focusedGateId: 'dashboard',
+						intentGateId: 'dashboard'
+					});
+
+					const missionId = seededMission.getRecord().id;
+					const selected = await api.mission.getStatus({ missionId });
+					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
+						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
+						&& typeof node.sourcePath === 'string'
+						&& node.sourcePath.length > 0
+					);
+
+					expect(artifactNode?.sourcePath).toBeTruthy();
+
+					const observed = await api.airport.bindGate({
+						gateId: 'editor',
+						binding: {
+							targetKind: 'artifact',
+							targetId: artifactNode!.sourcePath!,
+							mode: 'view'
+						}
+					});
+
+					expect(observed.state.airport.gates.editor).toMatchObject({
+						targetKind: 'artifact',
+						targetId: artifactNode!.sourcePath,
+						mode: 'view'
+					});
+					expect(observed.airportProjections.editor.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(observed.state.airport.focus.intentGateId).toBe('dashboard');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('broadcasts the resolved editor projection to connected editor clients after editor gate binding', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 6, 'Broadcast editor projection after artifact selection');
+
+			try {
+				const daemon = await startDaemon();
+				const dashboardClient = new DaemonClient();
+				const editorClient = new DaemonClient();
+
+				try {
+					await dashboardClient.connect({ surfacePath: workspaceRoot });
+					await editorClient.connect({ surfacePath: workspaceRoot });
+					const dashboardApi = new DaemonApi(dashboardClient);
+					const editorApi = new DaemonApi(editorClient);
+
+					await dashboardApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
+					await editorApi.airport.connectPanel({ gateId: 'editor', label: 'test-editor' });
+					await dashboardApi.control.getStatus();
+
+					const missionId = seededMission.getRecord().id;
+					const selected = await dashboardApi.mission.getStatus({ missionId });
+					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
+						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
+						&& typeof node.sourcePath === 'string'
+						&& node.sourcePath.length > 0
+					);
+
+					expect(artifactNode?.sourcePath).toBeTruthy();
+
+					const editorUpdate = new Promise<Awaited<ReturnType<typeof editorApi.airport.getStatus>>>((resolve) => {
+						const subscription = editorClient.onDidEvent((event) => {
+							if (event.type !== 'airport.state') {
+								return;
+							}
+							if (event.snapshot.airportProjections.editor.artifactPath !== artifactNode!.sourcePath) {
+								return;
+							}
+							subscription.dispose();
+							resolve(event.snapshot);
+						});
+					});
+
+					await dashboardApi.airport.bindGate({
+						gateId: 'editor',
+						binding: {
+							targetKind: 'artifact',
+							targetId: artifactNode!.sourcePath!,
+							mode: 'view'
+						}
+					});
+
+					const snapshot = await editorUpdate;
+					expect(snapshot.state.airport.gates.editor).toMatchObject({
+						targetKind: 'artifact',
+						targetId: artifactNode!.sourcePath,
+						mode: 'view'
+					});
+					expect(snapshot.airportProjections.editor.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(snapshot.airportProjections.editor.launchPath).toBe(artifactNode!.sourcePath);
+				} finally {
+					dashboardClient.dispose();
+					editorClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
 				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}

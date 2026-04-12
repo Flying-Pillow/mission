@@ -252,7 +252,11 @@ export class Mission {
 		}
 
 		let task = await this.requireTask(request.taskId);
-		if (replacedStaleSession && task.toState().status === 'blocked') {
+		const workflowTask = await this.requireWorkflowTask(request.taskId);
+		if (
+			workflowTask.lifecycle === 'cancelled'
+			|| (replacedStaleSession && workflowTask.lifecycle === 'blocked')
+		) {
 			await this.reopenTaskExecution(request.taskId);
 			task = await this.requireTask(request.taskId);
 		}
@@ -734,12 +738,14 @@ export class Mission {
 		const nodes: MissionTowerTreeNode[] = [];
 		for (const stage of stages) {
 			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
+			const stageStatusLabel = this.toStatusLabel(stage.status);
 			nodes.push({
 				id: `tree:stage:${stage.stage}`,
 				label: this.resolveTowerStageLabel(stage.stage, configuration),
 				kind: 'stage',
 				depth: 0,
 				color: this.progressTone(stage.status),
+				statusLabel: stageStatusLabel,
 				collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
 				stageId: stage.stage
 			});
@@ -751,6 +757,7 @@ export class Mission {
 					kind: 'stage-artifact',
 					depth: 1,
 					color: this.progressTone(stage.status),
+						statusLabel: stageStatusLabel,
 					collapsible: false,
 					sourcePath: stageArtifactPath,
 					stageId: stage.stage
@@ -759,12 +766,14 @@ export class Mission {
 
 			for (const task of stage.tasks) {
 				const taskColor = this.progressTone(task.status);
+				const taskStatusLabel = this.toStatusLabel(task.status);
 				nodes.push({
 					id: `tree:task:${task.taskId}`,
 					label: `${String(task.sequence)} ${task.subject}`,
 					kind: 'task',
 					depth: 1,
 					color: taskColor,
+					statusLabel: taskStatusLabel,
 					collapsible: Boolean(task.filePath) || sessions.some((session) => session.taskId === task.taskId),
 					stageId: stage.stage,
 					taskId: task.taskId
@@ -780,6 +789,7 @@ export class Mission {
 						kind: 'session',
 						depth: 2,
 						color: this.sessionTone(session.lifecycleState, taskColor),
+						statusLabel: this.toStatusLabel(session.lifecycleState),
 						collapsible: false,
 						stageId: stage.stage,
 						taskId: task.taskId,
@@ -794,6 +804,7 @@ export class Mission {
 						kind: 'task-artifact',
 						depth: 2,
 						color: taskColor,
+						statusLabel: taskStatusLabel,
 						collapsible: false,
 						sourcePath: task.filePath,
 						stageId: stage.stage,
@@ -869,6 +880,11 @@ export class Mission {
 			return '#f0f6fc';
 		}
 		return fallbackColor;
+	}
+
+	private toStatusLabel(state: string): string {
+		const normalized = state.trim();
+		return normalized.length > 0 ? normalized.replace(/[_-]+/g, ' ') : 'unknown';
 	}
 
 	private toWorkflowProjectedTaskState(
@@ -1111,6 +1127,9 @@ export class Mission {
 				taskId: task.taskId,
 				workingDirectory: request.workingDirectory,
 				transportId: request.transportId ?? runner.transportId,
+				...(request.terminalSessionName?.trim()
+					? { terminalSessionName: request.terminalSessionName.trim() }
+					: {}),
 				initialPrompt: {
 					source: 'operator',
 					text: request.prompt,
@@ -1196,8 +1215,9 @@ export class Mission {
 		sessionId: string,
 		reason?: string
 	): Promise<MissionAgentSessionRecord> {
-		this.requireAgentSessionRecord(sessionId);
-		await this.workflowController.cancelRuntimeSession(sessionId, reason);
+		const record = this.requireAgentSessionRecord(sessionId);
+		await this.ensureRuntimeSessionAttached(sessionId);
+		await this.workflowController.cancelRuntimeSession(sessionId, reason, record.taskId);
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
 	}
@@ -1226,8 +1246,9 @@ export class Mission {
 		sessionId: string,
 		reason?: string
 	): Promise<MissionAgentSessionRecord> {
-		this.requireAgentSessionRecord(sessionId);
-		await this.workflowController.terminateRuntimeSession(sessionId, reason);
+		const record = this.requireAgentSessionRecord(sessionId);
+		await this.ensureRuntimeSessionAttached(sessionId);
+		await this.workflowController.terminateRuntimeSession(sessionId, reason, record.taskId);
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
 	}

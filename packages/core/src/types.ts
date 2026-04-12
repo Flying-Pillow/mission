@@ -477,6 +477,7 @@ export type MissionTowerTreeNode = {
 	kind: MissionTowerTreeNodeKind;
 	depth: number;
 	color: string;
+	statusLabel?: string;
 	collapsible: boolean;
 	sourcePath?: string;
 	stageId?: MissionStageId;

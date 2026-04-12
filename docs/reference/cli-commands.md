@@ -7,7 +7,7 @@ nav_order: 1
 
 # CLI Commands
 
-This page documents the public Mission CLI surface as it is actually routed today. The source of truth is `apps/tower/terminal/src/routeTowerEntry.ts` and the help text emitted by that router.
+This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the terminal entry router in `apps/airport/terminal/src/entry/routeMissionEntry.ts`.
 
 ## Public Commands
 
@@ -15,12 +15,28 @@ The current public command surface is:
 
 | Command | Status | What it does |
 | --- | --- | --- |
-| `mission` | Public | Launches the terminal Tower surface |
+| `mission` | Public | Launches the Mission terminal surface |
 | `mission install` | Public | Runs user-level Mission setup and writes operator config |
 | `mission airport:status` | Public | Prints daemon airport status, or JSON with `--json` |
 | `mission daemon:stop` | Public | Stops the daemon process and reports the result |
 | `mission help` | Public | Prints the supported surface and notes |
-| `missiond` | Related entry | Starts the daemon process entrypoint |
+| `missiond` | Public bin | Starts, stops, inspects, or runs the daemon process |
+
+The package is published as `@flying-pillow/mission`.
+
+One-shot use:
+
+```bash
+npx @flying-pillow/mission
+```
+
+Global install:
+
+```bash
+npm install -g @flying-pillow/mission
+mission
+missiond status
+```
 
 ## `mission`
 
@@ -28,17 +44,17 @@ The current public command surface is:
 mission [--hmr] [--banner] [--no-banner]
 ```
 
-Behavior verified in the current router and Tower bootstrap:
+Behavior verified in the current CLI package and Airport terminal router:
 
-- runs the installation guard before Tower starts
-- launches the Tower surface by default
+- runs the installation guard before the Mission terminal surface starts
+- launches the Airport layout by default, with Tower as the left-side control surface
 - auto-starts the daemon when needed
 - attempts airport layout bootstrap through the terminal manager on POSIX shells when available
 - auto-selects a mission when launched from a mission worktree
 - opens repository mode when launched from the repository checkout
-- requires Bun for the OpenTUI Tower runtime
+- requires Bun for the OpenTUI Airport terminal surfaces
 
-Supported Tower flags are currently limited to:
+Supported terminal flags are currently limited to:
 
 - `--hmr`
 - `--banner`
@@ -82,13 +98,27 @@ mission daemon:stop [--json]
 
 This command stops the daemon process using the current manifest and reports whether a process was killed, which socket was involved, and whether the daemon was already stopped.
 
+## `missiond`
+
+```bash
+missiond [start|stop|restart|status|run] [--json] [--socket <path>]
+```
+
+This bin is shipped by the same `@flying-pillow/mission` package and delegates to the daemon runtime package. It is the direct process-control entry for:
+
+- starting the daemon in the background
+- stopping the daemon
+- restarting it
+- checking status
+- running it in the foreground
+
 ## Internal Bootstrap Hooks
 
-The router also contains internal commands used for airport pane bootstrap:
+The router also contains internal commands used for airport surface bootstrap:
 
 - `__airport-layout-launch__`
-- `__airport-layout-editor-pane`
-- `__airport-layout-agent-session-pane`
+- `__airport-layout-briefing-room-pane`
+- `__airport-layout-runway-pane`
 
 These are implementation hooks for airport layout startup. They are not part of the supported public CLI contract and should not be documented as operator-facing commands.
 

@@ -78,12 +78,12 @@ Mission operates *outside* the agent. It leverages a strict, code-driven state m
 
 **2. State & Recovery**
 - **Spec Kit, BMAD & GSD:** If your IDE crashes or you close your terminal, the state of the "workflow" is lost. To recover, you must open a new chat, point the agent at the generated markdown logs (`.planning/` or spec files), and prompt it to figure out where it left off.
-- **Mission:** The daemon persistently stores every action, artifact, and stage status in a local database (`.mission/`). If you close your laptop, the Mission Control Tower UI hot-reloads instantly exactly where you left off. The workflow state is native data, not a chat history.
+- **Mission:** The daemon persistently stores every action, artifact, and stage status in a local database (`.mission/`). If you close your laptop, the Mission terminal surfaces hot-reload instantly exactly where you left off. The workflow state is native data, not a chat history.
 
 **3. Execution Isolation and Multi-Repo Workspace Hub**
 - **Spec Kit & BMAD:** Function strictly within the boundary of your single currently active development branch. They rewrite your actual, current checkout.
 - **GSD:** Offers some optional worktree capabilities, but highly depends on the host agent's internal configuration and is still scoped to a single active repository.
-- **Mission:** Fundamentally reimagines the workspace. It enforces execution strictly inside bounded, invisible Git worktrees (the sandbox) tied deeply to native GitHub integrations (such as importing directly from GitHub issues). Furthermore, the Mission Control Tower serves as a centralized hub allowing a single operator to spawn, monitor, and merge parallel missions simultaneously across **multiple different repositories** without ever needing to jump between IDE instances or pollute their local branches.
+- **Mission:** Fundamentally reimagines the workspace. It enforces execution strictly inside bounded, invisible Git worktrees (the sandbox) tied deeply to native GitHub integrations (such as importing directly from GitHub issues). Furthermore, the Airport layout with Tower as its control surface serves as a centralized hub allowing a single operator to spawn, monitor, and merge parallel missions simultaneously across **multiple different repositories** without ever needing to jump between IDE instances or pollute their local branches.
 
 ## Why Mission Exists If These Tools Already Exist
 

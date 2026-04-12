@@ -13,9 +13,10 @@ Mission's architecture is split along package boundaries that mirror its runtime
 
 | Package or app | Architectural role | Key exports or modules |
 | --- | --- | --- |
+| `packages/mission` | Published CLI distribution package | `mission`, `missiond`, CLI entry wiring |
 | `packages/core` | Main domain, daemon, workflow, runtime, client, settings, initialization | `Daemon`, `DaemonClient`, `MissionSystemController`, workflow engine, runtime adapters, types |
 | `packages/airport` | Repository-scoped layout control and terminal substrate logic | `AirportControl`, airport types, substrate effects, terminal-manager controller |
-| `apps/tower/terminal` | Operator-facing terminal client | tower entry, daemon connection, OpenTUI UI, mission-control surface |
+| `apps/airport/terminal` | Airport terminal surfaces | airport entry routing, airport control connection, OpenTUI UI, Tower/Runway/Briefing Room surfaces |
 
 ## `packages/core` Internal Architecture
 
@@ -33,8 +34,9 @@ Mission's architecture is split along package boundaries that mirror its runtime
 ## Package Boundary Rules
 
 1. `packages/airport` must not absorb workflow semantics.
-2. `apps/tower/terminal` must consume exported contracts rather than reaching into daemon internals.
+2. `apps/airport/terminal` must consume exported contracts rather than reaching into daemon internals.
 3. `packages/core` is the main integration package that re-exports airport, daemon, runtime, and type surfaces.
+4. `packages/mission` is the public npm distribution boundary for the Mission CLI and must compose publishable packages rather than monorepo-only root scripts.
 
 ## Public Export Surface
 
@@ -48,4 +50,4 @@ The current `packages/core/src/index.ts` re-exports:
 - settings surfaces
 - top-level shared types
 
-That makes `packages/core` the primary buildable/public API surface for other Mission applications.
+That makes `packages/core` the primary reusable runtime API surface for other Mission applications, while `packages/mission` is the public CLI distribution package.

@@ -242,6 +242,100 @@ describe('AgentSessionOrchestrator', () => {
         expect(orchestrator.listSessions()).toEqual([]);
     });
 
+    it('materializes a terminated attachment when the runner is unavailable', async () => {
+        const store = new InMemorySessionStore();
+        const orchestrator = new AgentSessionOrchestrator({
+            runners: [],
+            store
+        });
+
+        const attached = await orchestrator.attachSession({
+            runnerId: 'missing-runner',
+            transportId: 'terminal',
+            sessionId: 'session-missing-runner'
+        });
+
+        const snapshot = attached.getSnapshot();
+        expect(snapshot.phase).toBe('terminated');
+        expect(snapshot.acceptsPrompts).toBe(false);
+        expect(snapshot.failureMessage).toContain('no longer exists');
+        expect(orchestrator.listSessions()).toEqual([]);
+        expect(store.snapshots.get('session-missing-runner')).toBeUndefined();
+    });
+
+    it('terminates detached sessions without throwing', async () => {
+        const store = new InMemorySessionStore();
+
+        const snapshot: AgentSessionSnapshot = {
+            runnerId: 'fake-runner',
+            transportId: 'terminal',
+            sessionId: 'session-detached',
+            missionId: 'mission-1',
+            taskId: 'task-1',
+            phase: 'running',
+            acceptsPrompts: true,
+            acceptedCommands: ['interrupt'],
+            awaitingInput: false,
+            updatedAt: new Date().toISOString()
+        };
+
+        const detachedSession: AgentSession = {
+            runnerId: 'fake-runner',
+            transportId: 'terminal',
+            sessionId: 'session-detached',
+            getSnapshot: () => ({ ...snapshot, acceptedCommands: [...snapshot.acceptedCommands] }),
+            onDidEvent: () => ({ dispose: () => undefined }),
+            submitPrompt: async () => ({ ...snapshot, acceptedCommands: [...snapshot.acceptedCommands] }),
+            submitCommand: async () => ({ ...snapshot, acceptedCommands: [...snapshot.acceptedCommands] }),
+            cancel: async () => {
+                throw new Error("Agent session 'session-detached' is not attached.");
+            },
+            terminate: async () => {
+                throw new Error("Agent session 'session-detached' is not attached.");
+            },
+            dispose: () => undefined
+        };
+
+        const runner: AgentRunner = {
+            id: 'fake-runner',
+            transportId: 'terminal',
+            displayName: 'Fake Runner',
+            capabilities: {
+                attachableSessions: true,
+                promptSubmission: true,
+                structuredCommands: true,
+                interruptible: true,
+                interactiveInput: false,
+                telemetry: false,
+                mcpClient: false
+            },
+            isAvailable: async () => ({ available: true }),
+            startSession: async () => {
+                throw new Error('unused in this test');
+            },
+            attachSession: async () => detachedSession
+        };
+
+        const orchestrator = new AgentSessionOrchestrator({
+            runners: [runner],
+            store
+        });
+
+        await orchestrator.attachSession({
+            runnerId: 'fake-runner',
+            transportId: 'terminal',
+            sessionId: 'session-detached'
+        });
+
+        const terminated = await orchestrator.terminateSession('session-detached', 'cleanup detached runtime');
+        expect(terminated.phase).toBe('terminated');
+        expect(terminated.acceptsPrompts).toBe(false);
+        expect(terminated.awaitingInput).toBe(false);
+        expect(terminated.failureMessage).toBe('cleanup detached runtime');
+        expect(orchestrator.listSessions()).toEqual([]);
+        expect(store.snapshots.get('session-detached')).toBeUndefined();
+    });
+
     it('releases terminal sessions after completion events', async () => {
         const store = new InMemorySessionStore();
         let fakeSession: FakeSession | undefined;

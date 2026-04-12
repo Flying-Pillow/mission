@@ -39,7 +39,7 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 
 ### Surface Recovery
 
-1. `connectSurfaceDaemon(...)` attempts to connect to the daemon.
+1. `connectAirportControl(...)` attempts to connect to the daemon.
 2. If protocol versions differ, it stops the incompatible daemon and starts a compatible one.
 3. Tower reconnects, claims its gate, and receives fresh airport and mission projections.
 

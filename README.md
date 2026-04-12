@@ -43,8 +43,8 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
     AI agents suffer from "context rot" after 10-12 turns. Mission's workflow engine solves this by provisioning a completely fresh, stateless session for every single atomic task. Task 12 gets the exact same high-quality execution environment as Task 1.
 *   📜 **Architectural Governance** 
     Define your repository's specific engineering standards in a `.agents/constitution.md` file. Mission injects these laws into every task session, ensuring the AI respects your tech stack, formatting, and structural boundaries.
-*   🎛️ **The Interactive Tower & Persistent Daemon** 
-    Steer missions through a powerful Terminal User Interface (TUI). Because Mission runs as a persistent background daemon, you can safely detach from the tower, close your terminal, or reboot your machine. Mission's pure reducer-based state machine (`mission.json`) ensures you can reconnect later and resume exactly where you left off.
+*   🎛️ **The Airport Layout, Tower Surface, & Persistent Daemon** 
+    Steer missions through a coordinated terminal surface. Mission launches an Airport layout that can host the Tower control surface, the briefing-room artifact surface, and live runway sessions side by side. Because Mission runs as a persistent background daemon, you can safely detach, close your terminal, or reboot your machine. Mission's pure reducer-based state machine (`mission.json`) ensures you can reconnect later and resume exactly where you left off.
 *   🛑 **Deterministic CI Gating & Human Checklists** 
     Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates progress behind your actual CI pipeline, and allows you to inject `manual` verification tasks where the human Principal Architect must explicitly check off deliverables before the workflow proceeds.
 *   🚨 **First-Class Panic & Governance Controls**
@@ -56,7 +56,13 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
 
 Mission is designed to be lightweight and frictionless to install in any existing repository.
 
-**1. Install globally:**
+**1. Run the published CLI package:**
+```bash
+npx @flying-pillow/mission
+```
+
+Or install it globally if you want persistent `mission` and `missiond` commands:
+
 ```bash
 npm install -g @flying-pillow/mission
 mission

@@ -154,10 +154,10 @@ At that point, the bootstrap is finished and Airport becomes the layout authorit
 
 Diagram key:
 
-- `Entry`: the operator-facing Tower entry concept. In the current terminal implementation this entry path resolves through the `mission` shell command plus `apps/tower/terminal/src/index.ts` and `apps/tower/terminal/src/routeTowerEntry.ts`.
-- `Bootstrap`: `apps/tower/terminal/src/commands/airport-layout.ts`
+- `Entry`: the operator-facing Tower entry concept. In the current terminal implementation this entry path resolves through the `mission` shell command plus `apps/airport/terminal/src/index.ts` and `apps/airport/terminal/src/entry/routeMissionEntry.ts`.
+- `Bootstrap`: `apps/airport/terminal/src/airport/bootstrapAirportLayout.ts`
 - `Session`: terminal-manager or zellij session that hosts the outer airport layout
-- `Panes`: Tower pane from `apps/tower/terminal/src/tower/bootstrapTowerPane.ts`, agent session pane from `apps/tower/terminal/src/commands/airport-layout.ts`, plus the editor pane program
+- `Panes`: Tower pane from `apps/airport/terminal/src/tower/bootstrapTowerPane.ts`, runway pane from `apps/airport/terminal/src/runway/bootstrapRunwayPane.ts`, plus the briefing-room pane program
 - `Control`: the mission daemon RPC surface plus `packages/airport/src/AirportControl.ts` and `packages/airport/src/terminal-manager.ts`
 
 Reading guide:
@@ -307,7 +307,7 @@ The architectural code shape is:
 
 - `packages/core`
 - `packages/airport`
-- `apps/tower/terminal` and other surfaces as thin runtime clients or bootstraps
+- `apps/airport/terminal` and other surfaces as thin runtime clients or bootstraps
 - `missiond` as the single daemon host process
 
 ### packages/core
@@ -360,7 +360,7 @@ It is a bounded-context application controller, not a competing business-logic r
 
 `missiond` is the only authority process.
 
-### apps/tower/terminal and other surfaces
+### apps/airport/terminal and other surfaces
 
 Surfaces own:
 

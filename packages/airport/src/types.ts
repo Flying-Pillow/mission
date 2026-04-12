@@ -102,6 +102,7 @@ export interface DashboardTreeNode {
 	kind: DashboardTreeNodeKind;
 	depth: number;
 	color: string;
+	statusLabel?: string;
 	collapsible: boolean;
 	sourcePath?: string;
 	stageId?: string;
@@ -109,27 +110,12 @@ export interface DashboardTreeNode {
 	sessionId?: string;
 }
 
-export type DashboardCommandTargetKind = DashboardTreeNodeKind | 'repository' | 'mission';
-
-export interface DashboardCommandContext {
-	stageId?: string;
-	taskId?: string;
-	sessionId?: string;
-	targetLabel?: string;
-	targetKind?: DashboardCommandTargetKind;
-}
-
 export interface DashboardProjection extends AirportGateProjectionBase {
 	surfaceMode: 'repository' | 'mission';
-	centerRoute: 'repository-flow' | 'mission-control';
 	repositoryId?: string;
 	repositoryLabel: string;
 	missionId?: string;
 	missionLabel?: string;
-	selectedStageId?: string;
-	selectedTaskId?: string;
-	selectedSessionId?: string;
-	commandContext: DashboardCommandContext;
 	stageRail: DashboardStageRailItem[];
 	treeNodes: DashboardTreeNode[];
 	emptyLabel: string;
@@ -266,11 +252,9 @@ function createDashboardProjection(state: AirportState): DashboardProjection {
 	return {
 		...base,
 		surfaceMode: missionId ? 'mission' : 'repository',
-		centerRoute: missionId ? 'mission-control' : 'repository-flow',
 		...(repositoryId ? { repositoryId } : {}),
 		repositoryLabel,
 		...(missionId ? { missionId, missionLabel: missionId } : {}),
-		commandContext: {},
 		stageRail: [],
 		treeNodes: [],
 		emptyLabel: missionId

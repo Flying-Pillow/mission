@@ -56,6 +56,7 @@ export class MissionWorkflowRequestExecutor {
 	private readonly defaultMode: MissionDefaultAgentMode | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 	private readonly runtimeEvents: MissionWorkflowEvent[] = [];
+	private readonly sessionTaskIds = new Map<AgentSessionId, string>();
 	private readonly runtimeEventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
 	private readonly orchestratorSubscription: { dispose(): void };
 
@@ -350,7 +351,9 @@ export class MissionWorkflowRequestExecutor {
 		request: AgentSessionStartRequest;
 	}): Promise<AgentSessionSnapshot> {
 		const session = await this.orchestrator.startSession(input.runnerId, input.request);
-		return session.getSnapshot();
+		const snapshot = session.getSnapshot();
+		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
+		return snapshot;
 	}
 
 	public listRuntimeSessions(): AgentSessionSnapshot[] {
@@ -359,14 +362,21 @@ export class MissionWorkflowRequestExecutor {
 
 	public async attachSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
 		const session = await this.orchestrator.attachSession(reference);
-		return session.getSnapshot();
+		const snapshot = session.getSnapshot();
+		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
+		return snapshot;
 	}
 
 	public getRuntimeSession(sessionId: AgentSessionId): AgentSessionSnapshot | undefined {
 		return this.orchestrator.listSessions().find((session) => session.sessionId === sessionId);
 	}
 
-	public async cancelRuntimeSession(sessionId: AgentSessionId, reason?: string): Promise<MissionWorkflowEvent[]> {
+	public async cancelRuntimeSession(
+		sessionId: AgentSessionId,
+		reason?: string,
+		fallbackTaskId?: string
+	): Promise<MissionWorkflowEvent[]> {
+		this.rememberSessionTaskId(sessionId, fallbackTaskId);
 		await this.orchestrator.cancelSession(sessionId, reason);
 		return this.drainRuntimeEvents();
 	}
@@ -381,7 +391,12 @@ export class MissionWorkflowRequestExecutor {
 		return this.drainRuntimeEvents();
 	}
 
-	public async terminateRuntimeSession(sessionId: AgentSessionId, reason?: string): Promise<MissionWorkflowEvent[]> {
+	public async terminateRuntimeSession(
+		sessionId: AgentSessionId,
+		reason?: string,
+		fallbackTaskId?: string
+	): Promise<MissionWorkflowEvent[]> {
+		this.rememberSessionTaskId(sessionId, fallbackTaskId);
 		await this.orchestrator.terminateSession(sessionId, reason);
 		return this.drainRuntimeEvents();
 	}
@@ -428,15 +443,39 @@ export class MissionWorkflowRequestExecutor {
 	private createSessionLifecycleEvent(
 		type: 'session.completed' | 'session.failed' | 'session.cancelled' | 'session.terminated',
 		snapshot: AgentSessionSnapshot
-	): MissionWorkflowEvent {
+	): MissionWorkflowEvent | undefined {
+		const taskId = this.resolveSessionTaskId(snapshot);
+		if (!taskId) {
+			return undefined;
+		}
+		if (isTerminalPhase(snapshot.phase)) {
+			this.sessionTaskIds.delete(snapshot.sessionId);
+		}
 		return {
 			eventId: `runtime:${snapshot.sessionId}:${type}:${snapshot.updatedAt}`,
 			type,
 			occurredAt: snapshot.updatedAt,
 			source: 'daemon',
 			sessionId: snapshot.sessionId,
-			taskId: snapshot.taskId
+			taskId
 		};
+	}
+
+	private resolveSessionTaskId(snapshot: AgentSessionSnapshot): string | undefined {
+		const directTaskId = normalizeTaskId(snapshot.taskId);
+		if (directTaskId) {
+			this.sessionTaskIds.set(snapshot.sessionId, directTaskId);
+			return directTaskId;
+		}
+		return this.sessionTaskIds.get(snapshot.sessionId);
+	}
+
+	private rememberSessionTaskId(sessionId: AgentSessionId, taskId: string | undefined): void {
+		const normalizedTaskId = normalizeTaskId(taskId);
+		if (!normalizedTaskId) {
+			return;
+		}
+		this.sessionTaskIds.set(sessionId, normalizedTaskId);
 	}
 
 	private createTasksGeneratedEvent(
@@ -526,4 +565,22 @@ function hasMatchingTerminalLifecycle(
 		default:
 			return false;
 	}
+}
+
+function normalizeTaskId(taskId: string | undefined): string | undefined {
+	if (typeof taskId !== 'string') {
+		return undefined;
+	}
+	const normalizedTaskId = taskId.trim();
+	if (!normalizedTaskId || normalizedTaskId === 'unknown') {
+		return undefined;
+	}
+	return normalizedTaskId;
+}
+
+function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
+	return phase === 'completed'
+		|| phase === 'failed'
+		|| phase === 'cancelled'
+		|| phase === 'terminated';
 }

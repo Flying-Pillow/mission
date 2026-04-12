@@ -16,7 +16,8 @@ It documents the system as it exists in the repository today across:
 - the mission-local workflow engine and runtime record
 - the provider-neutral agent runtime contract
 - the repository-scoped airport layout authority
-- the Tower terminal surface and its client relationship to the daemon
+- the Airport terminal surfaces and their client relationship to the daemon
+- the published Mission CLI package and its distribution boundary
 - the public IPC and package export surfaces
 
 This is not a speculative redesign document. When older specs, older notes, and current code differ, this section resolves against the current implementation while calling out meaningful drift in [discrepancies.md](./discrepancies.html).
@@ -26,15 +27,16 @@ This is not a speculative redesign document. When older specs, older notes, and 
 1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
 2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
 3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
-4. Read [tower.md](./tower.html) and [contracts.md](./contracts.html) for surface and protocol boundaries.
+4. Read [tower.md](./tower.html) and [contracts.md](./contracts.html) for Airport terminal surface and protocol boundaries.
 5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
 
 ## System Context
 
 ```mermaid
 flowchart LR
-	Operator[Operator] --> Tower[Tower terminal surface]
-	Tower -->|IPC requests and subscriptions| Daemon[Mission daemon]
+	Operator[Operator] --> CLI[Mission CLI package]
+	CLI --> AirportSurface[Airport terminal surface]
+	AirportSurface -->|IPC requests and subscriptions| Daemon[Mission daemon]
 	Daemon --> System[MissionSystemController]
 	System --> Airport[Repository airport registry\nAirportControl]
 	System --> Domain[MissionControl\nContextGraph]
@@ -55,13 +57,13 @@ flowchart LR
 
 | Concern | Authority | Non-authorities |
 | --- | --- | --- |
-| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json` | Tower, Airport, task markdown |
-| Mission execution truth | `MissionWorkflowController` + `mission.json` | Tower local state, airport state |
+| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json` | Airport terminal surfaces, Airport control, task markdown |
+| Mission execution truth | `MissionWorkflowController` + `mission.json` | Terminal local state, airport state |
 | Semantic selection graph | `MissionControl` inside `MissionSystemController` | `mission.json`, zellij |
-| Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | Tower routing, workflow engine |
+| Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | surface-local routing, workflow engine |
 | Live terminal panes | `TerminalManagerSubstrateController` observing and driving zellij | Workflow reducer |
-| Agent execution | `AgentSessionOrchestrator` + `AgentRunner` implementations | Tower, Airport |
-| Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from Tower |
+| Agent execution | `AgentSessionOrchestrator` + `AgentRunner` implementations | Airport terminal surfaces, Airport control |
+| Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from local surfaces |
 
 ## Replay Anchors
 
@@ -79,7 +81,7 @@ The architecture coverage in this section reflects the five replayed architectur
 
 Use this order when reconciling architectural questions:
 
-1. Current implementation in `packages/core`, `packages/airport`, and `apps/tower/terminal`
+1. Current implementation in `packages/mission`, `packages/core`, `packages/airport`, and `apps/airport/terminal`
 2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/missions/<mission-id>/mission.json`, user config, daemon runtime files
 3. Current reference docs such as `docs/reference/state-schema.md`
 4. Source specifications under `specifications/`

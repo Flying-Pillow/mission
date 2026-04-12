@@ -11,7 +11,7 @@ Mission is a local-first engineering control system with three distinct runtime 
 
 1. The repository plane, where durable Mission control files live under `.mission/`.
 2. The daemon plane, where the system composes repository state, mission state, airport state, and client connections into a live `MissionSystemSnapshot`.
-3. The surface plane, where Tower and other clients render daemon projections and submit intent.
+3. The surface plane, where Airport terminal surfaces and other clients render daemon projections and submit intent.
 
 ## Runtime Environments
 
@@ -22,7 +22,8 @@ Mission is a local-first engineering control system with three distinct runtime 
 | Daemon process | `Daemon`, `WorkspaceManager`, `MissionSystemController` | IPC, orchestration, live control-plane state |
 | Agent runtime provider process | `CopilotCliAgentRunner`, `CopilotSdkAgentRunner`, transport | Session execution and provider translation |
 | Terminal substrate | zellij session and panes | Physical pane focus and visibility |
-| Tower process | `bootstrapTowerPane`, `TowerController`, OpenTUI renderer | Ephemeral UI state only |
+| Published CLI package | `mission`, `missiond` launcher bins | Distribution and process entry only |
+| Airport terminal process | `bootstrapTowerPane`, `bootstrapRunwayPane`, `bootstrapBriefingRoomPane`, OpenTUI renderer | Ephemeral surface state only |
 
 ## End-To-End Control Flow
 
@@ -30,7 +31,7 @@ Mission is a local-first engineering control system with three distinct runtime 
 sequenceDiagram
     autonumber
     actor Operator
-    participant Tower
+    participant Surface as Airport terminal surface
     participant Daemon
     participant Workspace as WorkspaceManager
     participant Mission as Mission aggregate
@@ -38,15 +39,15 @@ sequenceDiagram
     participant Runtime as Agent runtime
     participant Airport as Airport control
 
-    Operator->>Tower: choose repository or mission action
-    Tower->>Daemon: IPC request
+    Operator->>Surface: choose repository or mission action
+    Surface->>Daemon: IPC request
     Daemon->>Workspace: route by surface path or mission id
     Workspace->>Mission: execute control or mission method
     Mission->>Workflow: refresh, apply event, or reconcile
     Workflow->>Runtime: execute workflow requests when needed
     Daemon->>Airport: synchronize repository airport and projections
-    Daemon-->>Tower: OperatorStatus or MissionSystemSnapshot
-    Tower-->>Operator: render projection
+    Daemon-->>Surface: OperatorStatus or MissionSystemSnapshot
+    Surface-->>Operator: render projection
 ```
 
 ## Source Of Truth Boundaries

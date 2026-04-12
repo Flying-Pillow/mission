@@ -28,7 +28,7 @@ type MissionSystemCommand =
 	}
 	| {
 		kind: 'airport.client.connected';
-		params: ConnectAirportClientParams & { surfacePath?: string };
+		params: ConnectAirportClientParams & { surfacePath?: string; terminalSessionName?: string };
 	}
 	| {
 		kind: 'airport.client.disconnected';
@@ -43,6 +43,7 @@ type MissionSystemCommand =
 			repositoryId?: string;
 			surfacePath?: string;
 			paneId?: number;
+			terminalSessionName?: string;
 		};
 	}
 	| {
@@ -96,6 +97,7 @@ export class MissionSystemController {
 		gateId: GateId;
 		panelProcessId?: string;
 		paneId?: number;
+		terminalSessionName?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.connected', params });
 	}
@@ -114,6 +116,7 @@ export class MissionSystemController {
 		repositoryId?: string;
 		surfacePath?: string;
 		paneId?: number;
+		terminalSessionName?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.observed', params });
 	}
@@ -180,16 +183,18 @@ export class MissionSystemController {
 		const domain = this.missionControl.synchronize(source, command.selectionHint);
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
-			deriveGateBindings(domain, airportRecord.control.getState().gates.agentSession, domain.agentSessions),
-			{ focusIntent: deriveFocusIntent(domain) }
+			deriveGateBindings(domain, airportRecord.control.getState().gates.agentSession, domain.agentSessions)
 		);
 		return [source.repositoryId];
 	}
 
 	private async reduceAirportClientConnected(
-		params: ConnectAirportClientParams & { surfacePath?: string }
+		params: ConnectAirportClientParams & { surfacePath?: string; terminalSessionName?: string }
 	): Promise<string[]> {
 		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath);
+		if (params.terminalSessionName?.trim()) {
+			this.airportRegistry.setTerminalSessionName(repositoryId, params.terminalSessionName.trim());
+		}
 		this.airportRegistry.connectClient(repositoryId, params);
 		return [repositoryId];
 	}
@@ -203,6 +208,9 @@ export class MissionSystemController {
 		params: Extract<MissionSystemCommand, { kind: 'airport.client.observed' }>['params']
 	): Promise<string[]> {
 		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath);
+		if (params.terminalSessionName?.trim()) {
+			this.airportRegistry.setTerminalSessionName(repositoryId, params.terminalSessionName.trim());
+		}
 		this.airportRegistry.observeClient(repositoryId, {
 			clientId: params.clientId,
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
@@ -212,11 +220,18 @@ export class MissionSystemController {
 		});
 		const airportRecord = this.airportRegistry.getActiveAirport();
 		const domain = this.missionControl.getState();
-		this.airportRegistry.applyDefaultBindings(
-			repositoryId,
-			deriveGateBindings(domain, airportRecord.control.getState().gates.agentSession, domain.agentSessions),
-			{ focusIntent: params.intentGateId ?? deriveFocusIntent(domain) }
+		const nextBindings = deriveGateBindings(
+			domain,
+			airportRecord.control.getState().gates.agentSession,
+			domain.agentSessions
 		);
+		if (params.intentGateId) {
+			this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings, {
+				focusIntent: params.intentGateId
+			});
+			return [repositoryId];
+		}
+		this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings);
 		return [repositoryId];
 	}
 
@@ -346,7 +361,7 @@ function deriveGateBindings(
 					: { targetKind: 'empty' }
 	};
 
-	if (agentSessionId && agentSessionId in agentSessions) {
+	if (agentSessionId) {
 		nextBindings.agentSession = {
 			targetKind: 'agentSession',
 			targetId: agentSessionId,
@@ -366,6 +381,3 @@ function deriveGateBindings(
 	return nextBindings;
 }
 
-function deriveFocusIntent(graph: ContextGraph): GateId {
-	return graph.selection.agentSessionId ? 'agentSession' : 'dashboard';
-}

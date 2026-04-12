@@ -34,7 +34,7 @@ In the current control surface, repository discovery includes actions for:
 
 That means the operator journey is roughly:
 
-1. Open Tower.
+1. Launch Mission and open the Airport layout.
 2. Add or switch to the target repository.
 3. Confirm repository setup and workflow defaults.
 4. Start a mission when intake is ready; if this checkout is not initialized yet, Mission can bootstrap repository control in the first mission worktree.
@@ -100,4 +100,4 @@ The product direction here is strong: Mission wants repository adoption to feel 
 
 ## Current Alpha Note
 
-There is a `mission init` implementation in source, but it is not currently part of the public routed CLI surface. For operators, repository adoption should be understood through the Mission startup and Tower control flows, not through a documented `mission init` command.
+There is a `mission init` implementation in source, but it is not currently part of the public routed CLI surface. For operators, repository adoption should be understood through the published Mission CLI and the Airport/Tower control flows, not through a documented `mission init` command.

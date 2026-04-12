@@ -81,7 +81,12 @@ export class AgentSessionOrchestrator {
             return inMemory.session;
         }
 
-        const runner = this.requireRunner(reference.runnerId);
+        let runner: AgentRunner;
+        try {
+            runner = this.requireRunner(reference.runnerId);
+        } catch {
+            return this.createTerminatedAttachedSession(reference);
+        }
         if (!runner.attachSession) {
             return this.createTerminatedAttachedSession(reference);
         }
@@ -126,17 +131,37 @@ export class AgentSessionOrchestrator {
     }
 
     public async cancelSession(sessionId: AgentSessionId, reason?: string): Promise<AgentSessionSnapshot> {
-        const record = this.requireSession(sessionId);
-        const snapshot = await record.session.cancel(reason);
-        await this.updateSnapshot(sessionId, snapshot);
-        return snapshot;
+        const record = this.sessions.get(sessionId);
+        if (!record) {
+            return this.handleUnattachedTerminalSession(sessionId, 'cancel', reason);
+        }
+        try {
+            const snapshot = await record.session.cancel(reason);
+            await this.updateSnapshot(sessionId, snapshot);
+            return snapshot;
+        } catch (error) {
+            if (!isDetachedSessionError(error)) {
+                throw error;
+            }
+            return this.terminateDetachedSession(record, 'cancel', reason);
+        }
     }
 
     public async terminateSession(sessionId: AgentSessionId, reason?: string): Promise<AgentSessionSnapshot> {
-        const record = this.requireSession(sessionId);
-        const snapshot = await record.session.terminate(reason);
-        await this.updateSnapshot(sessionId, snapshot);
-        return snapshot;
+        const record = this.sessions.get(sessionId);
+        if (!record) {
+            return this.handleUnattachedTerminalSession(sessionId, 'terminate', reason);
+        }
+        try {
+            const snapshot = await record.session.terminate(reason);
+            await this.updateSnapshot(sessionId, snapshot);
+            return snapshot;
+        } catch (error) {
+            if (!isDetachedSessionError(error)) {
+                throw error;
+            }
+            return this.terminateDetachedSession(record, 'terminate', reason);
+        }
     }
 
     private requireRunner(runnerId: AgentRunnerId): AgentRunner {
@@ -212,6 +237,73 @@ export class AgentSessionOrchestrator {
         this.sessions.delete(sessionId);
     }
 
+    private async terminateDetachedSession(
+        record: OrchestratorSessionRecord,
+        action: 'cancel' | 'terminate',
+        reason?: string
+    ): Promise<AgentSessionSnapshot> {
+        const snapshot: AgentSessionSnapshot = {
+            ...record.snapshot,
+            phase: action === 'cancel' ? 'cancelled' : 'terminated',
+            acceptsPrompts: false,
+            awaitingInput: false,
+            updatedAt: new Date().toISOString(),
+            ...(reason ? { failureMessage: reason } : {})
+        };
+
+        record.snapshot = snapshot;
+        await this.store?.save(snapshot);
+        this.eventEmitter.fire({
+            type: action === 'cancel' ? 'session.cancelled' : 'session.terminated',
+            ...(reason ? { reason } : {}),
+            snapshot: { ...snapshot }
+        });
+        await this.store?.delete(record.reference);
+        this.releaseSession(record.reference.sessionId);
+        return { ...snapshot };
+    }
+
+    private async handleUnattachedTerminalSession(
+        sessionId: AgentSessionId,
+        action: 'cancel' | 'terminate',
+        reason?: string
+    ): Promise<AgentSessionSnapshot> {
+        const persisted = await this.store?.list();
+        const reference = persisted?.find((candidate) => candidate.sessionId === sessionId);
+        const persistedSnapshot = reference
+            ? await this.store?.load(reference)
+            : undefined;
+        const snapshot: AgentSessionSnapshot = {
+            runnerId: persistedSnapshot?.runnerId ?? reference?.runnerId ?? 'unknown',
+            ...(persistedSnapshot?.transportId
+                ? { transportId: persistedSnapshot.transportId }
+                : reference?.transportId
+                    ? { transportId: reference.transportId }
+                    : {}),
+            sessionId,
+            phase: action === 'cancel' ? 'cancelled' : 'terminated',
+            missionId: persistedSnapshot?.missionId ?? 'unknown',
+            taskId: persistedSnapshot?.taskId ?? 'unknown',
+            acceptsPrompts: false,
+            acceptedCommands: [],
+            awaitingInput: false,
+            updatedAt: new Date().toISOString(),
+            ...(reason ? { failureMessage: reason } : {})
+        };
+
+        this.eventEmitter.fire({
+            type: action === 'cancel' ? 'session.cancelled' : 'session.terminated',
+            ...(reason ? { reason } : {}),
+            snapshot: { ...snapshot }
+        });
+
+        if (reference) {
+            await this.store?.delete(reference);
+        }
+
+        return { ...snapshot };
+    }
+
     private normalizeSnapshot(
         snapshot: AgentSessionSnapshot,
         fallback: Pick<AgentSessionSnapshot, 'missionId' | 'taskId'>
@@ -239,14 +331,19 @@ export class AgentSessionOrchestrator {
         return merged;
     }
 
-    private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
+    private async createTerminatedAttachedSession(reference: AgentSessionReference): Promise<AgentSession> {
+        const persistedSnapshot = await this.store?.load(reference);
         const terminatedSnapshot: AgentSessionSnapshot = {
-            runnerId: reference.runnerId,
-            ...(reference.transportId ? { transportId: reference.transportId } : {}),
+            runnerId: persistedSnapshot?.runnerId ?? reference.runnerId,
+            ...(persistedSnapshot?.transportId
+                ? { transportId: persistedSnapshot.transportId }
+                : reference.transportId
+                    ? { transportId: reference.transportId }
+                    : {}),
             sessionId: reference.sessionId,
             phase: 'terminated',
-            missionId: 'unknown',
-            taskId: 'unknown',
+            missionId: persistedSnapshot?.missionId ?? 'unknown',
+            taskId: persistedSnapshot?.taskId ?? 'unknown',
             acceptsPrompts: false,
             acceptedCommands: [],
             awaitingInput: false,
@@ -293,4 +390,8 @@ function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
         || phase === 'failed'
         || phase === 'cancelled'
         || phase === 'terminated';
+}
+
+function isDetachedSessionError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes('is not attached');
 }

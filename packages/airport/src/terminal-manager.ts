@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { AirportSubstrateEffect } from './effects.js';
 import type { AirportPaneState, AirportState, AirportSubstrateState, GateId } from './types.js';
@@ -67,29 +68,130 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		const now = new Date().toISOString();
 		const panes = await this.listPanes().catch(() => undefined);
 		this.state = panes
-			? buildObservedState(state.substrate, panes, now)
-			: buildDetachedState(state.substrate, now);
+			? buildObservedState(state, panes, now)
+			: buildDetachedState(state, now);
 		return this.getState();
 	}
 
 	public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
 		for (const effect of effects) {
-			if (effect.kind !== 'focus-gate') {
-				continue;
+			switch (effect.kind) {
+				case 'focus-gate': {
+					try {
+						await this.executor([
+							'--session',
+							this.state.sessionName,
+							'action',
+							'focus-pane-id',
+							toTerminalPaneReference(effect.paneId)
+						]);
+					} catch (error) {
+						if (isAlreadyFocusedPaneError(error)) {
+							continue;
+						}
+						throw error;
+					}
+					break;
+				}
+				case 'ensure-gate-pane': {
+					await this.ensureAgentSessionPane();
+					break;
+				}
+				case 'remove-gate-pane': {
+					await this.removePane(toTerminalPaneReference(effect.paneId));
+					break;
+				}
 			}
-			await this.executor([
-				'--session',
-				this.state.sessionName,
-				'action',
-				'focus-pane-id',
-				toTerminalPaneReference(effect.paneId)
-			]);
 		}
 		this.state = {
 			...this.state,
 			lastAppliedAt: new Date().toISOString()
 		};
 		return this.getState();
+	}
+
+	private async ensureAgentSessionPane(): Promise<void> {
+		const panes = await this.listPanes();
+		const existingAgentPane = panes.find((pane) => pane.title === GATE_DISPLAY_TITLES.agentSession && !pane.is_suppressed);
+		if (existingAgentPane) {
+			return;
+		}
+
+		const editorPane = panes.find((pane) => pane.title === GATE_DISPLAY_TITLES.editor && !pane.is_suppressed)
+			?? panes.find((pane) => !pane.is_suppressed)
+			?? panes[0];
+		if (!editorPane) {
+			throw new Error(`Unable to locate a target pane to create '${GATE_DISPLAY_TITLES.agentSession}'.`);
+		}
+
+		const controlRoot = process.env['MISSION_CONTROL_ROOT']?.trim()
+			|| process.env['MISSION_SURFACE_PATH']?.trim()
+			|| process.cwd();
+		const missionEntry = path.join(controlRoot, 'mission');
+		const launchCommand = [
+			'env',
+			'\'MISSION_GATE_ID=agentSession\'',
+			shellEscape(`MISSION_TERMINAL_SESSION=${this.state.sessionName}`),
+			shellEscape(missionEntry),
+			'\'__airport-layout-runway-pane\''
+		].join(' ');
+
+		await this.executor([
+			'--session',
+			this.state.sessionName,
+			'action',
+			'new-pane',
+			'--in-place',
+			toTerminalPaneReference(editorPane.id),
+			'--name',
+			GATE_DISPLAY_TITLES.agentSession,
+			'--cwd',
+			controlRoot,
+			'--',
+			'sh',
+			'-lc',
+			`exec ${launchCommand}`
+		]);
+	}
+
+	private async removePane(paneId: string): Promise<void> {
+		const previouslyFocusedPane = await this.getFocusedPaneId();
+		if (previouslyFocusedPane !== paneId) {
+			await this.executor([
+				'--session',
+				this.state.sessionName,
+				'action',
+				'focus-pane-id',
+				paneId
+			]);
+		}
+
+		try {
+			await this.executor([
+				'--session',
+				this.state.sessionName,
+				'action',
+				'close-pane'
+			]);
+		} finally {
+			if (previouslyFocusedPane && previouslyFocusedPane !== paneId) {
+				await this.executor([
+					'--session',
+					this.state.sessionName,
+					'action',
+					'focus-pane-id',
+					previouslyFocusedPane
+				]).catch(() => {
+					// Best effort focus restoration.
+				});
+			}
+		}
+	}
+
+	private async getFocusedPaneId(): Promise<string | undefined> {
+		const panes = await this.listPanes();
+		const focusedPane = panes.find((pane) => pane.is_focused);
+		return focusedPane ? toTerminalPaneReference(focusedPane.id) : undefined;
 	}
 
 	private async listPanes(): Promise<TerminalManagerPaneMetadata[]> {
@@ -154,29 +256,31 @@ export function createDefaultTerminalManagerSubstrateState(options: { sessionNam
 }
 
 function buildObservedState(
-	currentState: AirportSubstrateState,
+	state: AirportState,
 	panes: TerminalManagerPaneMetadata[],
 	now: string
 ): AirportSubstrateState {
+	const currentState = state.substrate;
 	const focusedPaneId = panes.find((pane) => pane.is_focused)?.id;
 	const panesByGate = Object.fromEntries(
 		(Object.keys(GATE_DISPLAY_TITLES) as GateId[]).map((gateId) => {
+			const expected = isGatePaneExpected(state, gateId);
 			const currentPane = currentState.panesByGate[gateId];
 			const pane = currentPane?.paneId !== undefined && currentPane.paneId >= 0
 				? panes.find((candidate) => candidate.id === currentPane.paneId)
-				: undefined;
+				: panes.find((candidate) => candidate.title === GATE_DISPLAY_TITLES[gateId]);
 			return [
 				gateId,
 				pane
 					? {
 						paneId: pane.id,
-						expected: currentPane?.expected ?? true,
+						expected,
 						exists: true,
 						title: pane.title
 					}
 					: {
 						paneId: currentPane?.paneId ?? -1,
-						expected: currentPane?.expected ?? true,
+						expected,
 						exists: false,
 						title: currentPane?.title ?? GATE_DISPLAY_TITLES[gateId]
 					}
@@ -196,7 +300,8 @@ function buildObservedState(
 	};
 }
 
-function buildDetachedState(currentState: AirportSubstrateState, now: string): AirportSubstrateState {
+function buildDetachedState(state: AirportState, now: string): AirportSubstrateState {
+	const currentState = state.substrate;
 	return {
 		kind: currentState.kind,
 		sessionName: currentState.sessionName,
@@ -207,7 +312,7 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 				gateId,
 				{
 					paneId: currentState.panesByGate[gateId]?.paneId ?? -1,
-					expected: currentState.panesByGate[gateId]?.expected ?? true,
+					expected: isGatePaneExpected(state, gateId),
 					exists: false,
 					title: currentState.panesByGate[gateId]?.title ?? GATE_DISPLAY_TITLES[gateId]
 				}
@@ -220,4 +325,20 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 
 function toTerminalPaneReference(paneId: number): string {
 	return `terminal_${String(paneId)}`;
+}
+
+function isAlreadyFocusedPaneError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes('already focused');
+}
+
+function isGatePaneExpected(state: AirportState, gateId: GateId): boolean {
+	if (gateId === 'agentSession') {
+		return state.gates.agentSession.targetKind === 'agentSession';
+	}
+	return true;
+}
+
+function shellEscape(value: string): string {
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }

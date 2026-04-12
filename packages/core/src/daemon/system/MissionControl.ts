@@ -36,19 +36,6 @@ export class MissionControl {
 		this.missionOperatorViews = nextState.missionOperatorViews;
 		return this.getState();
 	}
-
-	public observeSelection(observed: {
-		repositoryId?: string;
-		missionId?: string;
-		stageId?: string;
-		taskId?: string;
-		artifactId?: string;
-		agentSessionId?: string;
-		fallbackRepositoryId?: string;
-	}): ContextGraph {
-		this.domain = applyObservedSelection(this.domain, observed);
-		return this.getState();
-	}
 }
 
 function createEmptyContextGraph(): ContextGraph {
@@ -439,74 +426,4 @@ function pickSelectedSessionId(missionStatus: MissionControlSource['missionStatu
 		|| session.lifecycleState === 'awaiting-input'
 	);
 	return preferred?.sessionId || missionStatus?.agentSessions?.[0]?.sessionId;
-}
-
-function applyObservedSelection(input: ContextGraph, observed: {
-	repositoryId?: string;
-	missionId?: string;
-	stageId?: string;
-	taskId?: string;
-	artifactId?: string;
-	agentSessionId?: string;
-	fallbackRepositoryId?: string;
-}): ContextGraph {
-	const repositoryId = observed.repositoryId?.trim() || observed.fallbackRepositoryId || input.selection.repositoryId;
-	const missionId = observed.missionId?.trim();
-	const taskId = observed.taskId?.trim();
-	const artifactId = observed.artifactId?.trim();
-	const agentSessionId = observed.agentSessionId?.trim();
-	const hasExplicitRepositoryReset = Boolean(
-		observed.repositoryId?.trim()
-		&& !missionId
-		&& !taskId
-		&& !artifactId
-		&& !agentSessionId
-		&& !observed.stageId?.trim()
-	);
-	const selectedMissionId = missionId && isMissionSelectionValid(missionId, input.missions)
-		? missionId
-		: taskId && input.tasks[taskId]?.missionId
-			? input.tasks[taskId]?.missionId
-			: artifactId && input.artifacts[artifactId]?.missionId
-				? input.artifacts[artifactId]?.missionId
-				: agentSessionId && input.agentSessions[agentSessionId]?.missionId
-					? input.agentSessions[agentSessionId]?.missionId
-					: hasExplicitRepositoryReset
-						? undefined
-						: input.selection.missionId;
-	const selectedTaskId = taskId && isTaskSelectionValid(taskId, selectedMissionId, input.tasks) ? taskId : undefined;
-	const selectedArtifactId = artifactId && isArtifactSelectionValid(artifactId, selectedMissionId, input.artifacts) ? artifactId : undefined;
-	const selectedSessionId = agentSessionId && isSessionSelectionValid(agentSessionId, selectedMissionId, input.agentSessions)
-		? agentSessionId
-		: undefined;
-	const taskStageId = selectedTaskId ? input.tasks[selectedTaskId]?.stageId : undefined;
-	const sessionTaskId = selectedSessionId ? input.agentSessions[selectedSessionId]?.taskId : undefined;
-	const sessionStageId = sessionTaskId ? input.tasks[sessionTaskId]?.stageId : undefined;
-	const selectedStageId = taskStageId
-		|| sessionStageId
-		|| (observed.stageId?.trim() && selectedMissionId && isObservedStageValid(observed.stageId.trim(), selectedMissionId, input)
-			? observed.stageId.trim() as MissionStageId
-			: undefined);
-	return {
-		...input,
-		selection: {
-			...(repositoryId ? { repositoryId } : {}),
-			...(selectedMissionId ? { missionId: selectedMissionId } : {}),
-			...(selectedStageId ? { stageId: selectedStageId } : {}),
-			...(selectedTaskId ? { taskId: selectedTaskId } : {}),
-			...(selectedArtifactId ? { artifactId: selectedArtifactId } : {}),
-			...(selectedSessionId ? { agentSessionId: selectedSessionId } : {})
-		}
-	};
-}
-
-function isObservedStageValid(stageId: string, missionId: string, input: ContextGraph): boolean {
-	const mission = input.missions[missionId];
-	if (!mission) {
-		return false;
-	}
-	if (mission.currentStage === stageId) {
-		return true;
-	}
-	return Object.values(input.tasks).some((task) => task.missionId === missionId && task.stageId === stageId);
 }

@@ -1,0 +1,38 @@
+{
+  "name": "@flying-pillow/mission",
+  "version": "0.1.0-beta.0",
+  "description": "Mission CLI for ultimately controlled AI Coding development.",
+  "type": "module",
+  "bin": {
+    "mission": "./build/mission.js",
+    "missiond": "./build/missiond.js"
+  },
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "typescript": "./src/index.ts",
+      "types": "./build/index.d.ts",
+      "import": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@flying-pillow/mission-airport-terminal": "workspace:*",
+    "@flying-pillow/mission-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  },
+  "packageManager": "pnpm@10.30.3"
+}

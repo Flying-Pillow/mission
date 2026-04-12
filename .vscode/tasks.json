@@ -10,7 +10,7 @@
 				"turbo",
 				"run",
 				"build",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -36,7 +36,7 @@
 				"turbo",
 				"run",
 				"build",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -51,7 +51,7 @@
 				"turbo",
 				"run",
 				"build",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -63,7 +63,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"rm -rf apps/tower/terminal/node_modules && pnpm install"
+				"rm -rf apps/airport/terminal/node_modules && pnpm install"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -78,7 +78,7 @@
 				"turbo",
 				"run",
 				"build",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -93,7 +93,7 @@
 				"turbo",
 				"run",
 				"test",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -108,7 +108,7 @@
 				"turbo",
 				"run",
 				"build",
-				"--filter=@flying-pillow/tower-terminal"
+				"--filter=@flying-pillow/mission-airport-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],

@@ -1,13 +1,13 @@
 ---
 layout: default
-title: Mission Control Tower
+title: Tower Control Surface
 parent: User Manual
 nav_order: 2
 ---
 
-# Mission Control Tower
+# Tower Control Surface
 
-Mission Control Tower is where the product becomes operational.
+Tower is the left-side control surface inside the Airport layout where the product becomes operational.
 
 It is the place where you watch a mission advance, decide what should happen next, and intervene when the workflow needs human judgment.
 
@@ -94,7 +94,7 @@ The important nuance is that stages are projections. Tasks are the executable un
 
 ## A Good Mental Model For Operators
 
-Think about Mission Control Tower like this:
+Think about Tower inside the Airport layout like this:
 
 - the stage rail tells you where the mission is
 - the task tree tells you what concrete work exists

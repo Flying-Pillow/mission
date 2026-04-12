@@ -255,7 +255,8 @@ export class Daemon {
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {}),
 			gateId: params.gateId,
 			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {}),
-			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {})
+			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
+			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);
 		return snapshot;
@@ -272,6 +273,7 @@ export class Daemon {
 			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
 			...(params.repositoryId?.trim() ? { repositoryId: params.repositoryId.trim() } : {}),
 			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
+			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);
@@ -421,7 +423,18 @@ function readSelectionHintFromResult(value: unknown): Partial<import('../types.j
 	}
 
 	const missionId = readMissionIdFromResult(value);
-	return missionId ? { missionId } : undefined;
+	const taskId = readTaskIdFromResult(value);
+	const artifactId = readArtifactIdFromResult(value);
+	const agentSessionId = readAgentSessionIdFromResult(value);
+	if (!missionId && !taskId && !artifactId && !agentSessionId) {
+		return undefined;
+	}
+	return {
+		...(missionId ? { missionId } : {}),
+		...(taskId ? { taskId } : {}),
+		...(artifactId ? { artifactId } : {}),
+		...(agentSessionId ? { agentSessionId } : {})
+	};
 }
 
 function readMissionIdFromResult(value: unknown): string | undefined {
@@ -435,6 +448,60 @@ function readMissionIdFromResult(value: unknown): string | undefined {
 		const status = value.status as { missionId?: string };
 		if (typeof status.missionId === 'string' && status.missionId.trim()) {
 			return status.missionId;
+		}
+	}
+	return undefined;
+}
+
+function readTaskIdFromResult(value: unknown): string | undefined {
+	if (!value || typeof value !== 'object') {
+		return undefined;
+	}
+	if ('taskId' in value && typeof value.taskId === 'string' && value.taskId.trim()) {
+		return value.taskId;
+	}
+	if ('status' in value && value.status && typeof value.status === 'object') {
+		const status = value.status as { taskId?: string };
+		if (typeof status.taskId === 'string' && status.taskId.trim()) {
+			return status.taskId;
+		}
+	}
+	return undefined;
+}
+
+function readArtifactIdFromResult(value: unknown): string | undefined {
+	if (!value || typeof value !== 'object') {
+		return undefined;
+	}
+	if ('artifactId' in value && typeof value.artifactId === 'string' && value.artifactId.trim()) {
+		return value.artifactId;
+	}
+	if ('status' in value && value.status && typeof value.status === 'object') {
+		const status = value.status as { artifactId?: string };
+		if (typeof status.artifactId === 'string' && status.artifactId.trim()) {
+			return status.artifactId;
+		}
+	}
+	return undefined;
+}
+
+function readAgentSessionIdFromResult(value: unknown): string | undefined {
+	if (!value || typeof value !== 'object') {
+		return undefined;
+	}
+	if ('sessionId' in value && typeof value.sessionId === 'string' && value.sessionId.trim()) {
+		return value.sessionId;
+	}
+	if ('agentSessionId' in value && typeof value.agentSessionId === 'string' && value.agentSessionId.trim()) {
+		return value.agentSessionId;
+	}
+	if ('status' in value && value.status && typeof value.status === 'object') {
+		const status = value.status as { sessionId?: string; agentSessionId?: string };
+		if (typeof status.sessionId === 'string' && status.sessionId.trim()) {
+			return status.sessionId;
+		}
+		if (typeof status.agentSessionId === 'string' && status.agentSessionId.trim()) {
+			return status.agentSessionId;
 		}
 	}
 	return undefined;

@@ -279,7 +279,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 17;
 
 export type Method =
 	| 'ping'
@@ -450,6 +450,7 @@ export type AirportClientConnect = {
 	label?: string;
 	panelProcessId?: string;
 	paneId?: number;
+	terminalSessionName?: string;
 };
 
 export type AirportClientObserve = {
@@ -457,6 +458,7 @@ export type AirportClientObserve = {
 	intentGateId?: 'dashboard' | 'editor' | 'agentSession';
 	repositoryId?: string;
 	paneId?: number;
+	terminalSessionName?: string;
 };
 
 export type AirportGateBind = {

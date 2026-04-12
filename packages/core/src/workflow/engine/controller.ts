@@ -128,8 +128,14 @@ export class MissionWorkflowController {
         return this.requestExecutor.startSession(input);
     }
 
-    public async cancelRuntimeSession(sessionId: string, reason?: string): Promise<MissionRuntimeRecord> {
-        return this.ingestEmittedEvents(await this.requestExecutor.cancelRuntimeSession(sessionId, reason));
+    public async cancelRuntimeSession(
+        sessionId: string,
+        reason?: string,
+        fallbackTaskId?: string
+    ): Promise<MissionRuntimeRecord> {
+        return this.ingestEmittedEvents(
+            await this.requestExecutor.cancelRuntimeSession(sessionId, reason, fallbackTaskId)
+        );
     }
 
     public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionRuntimeRecord> {
@@ -140,8 +146,14 @@ export class MissionWorkflowController {
 		return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
 	}
 
-    public async terminateRuntimeSession(sessionId: string, reason?: string): Promise<MissionRuntimeRecord> {
-        return this.ingestEmittedEvents(await this.requestExecutor.terminateRuntimeSession(sessionId, reason));
+    public async terminateRuntimeSession(
+        sessionId: string,
+        reason?: string,
+        fallbackTaskId?: string
+    ): Promise<MissionRuntimeRecord> {
+        return this.ingestEmittedEvents(
+            await this.requestExecutor.terminateRuntimeSession(sessionId, reason, fallbackTaskId)
+        );
     }
 
     public async startFromDraft(input?: {
