@@ -18,6 +18,19 @@ It is deliberately written around command cards instead of wide tables because t
 
 Mission stays coherent only if commands respect the semantic layers of the system.
 
+## Protocol Rules
+
+These rules close the command contract under retries, invalid input, and asynchronous side effects.
+
+1. Every accepted command must result in one or more domain or airport events, and only those events may change authoritative state through the relevant reducer. Command handlers must not mutate state directly.
+2. Commands must be idempotent or carry a client-generated `requestId` so duplicate submissions can be ignored or coalesced safely.
+3. Invalid commands must not mutate state. They must return an explicit error response and must not be translated into workflow or airport events.
+4. Commands are routed to exactly one authority boundary: mission-domain authority or Airport authority. Cross-boundary consequences must happen through emitted events and reconciliation, not direct mutation across both boundaries in one handler.
+5. A command is considered accepted when Mission validates it and converts it into authoritative state changes and-or side-effect requests. Completion of asynchronous side effects is reported later through emitted events, not through the command response itself.
+6. Observations are facts, not commands. When an observation conflicts with prior intent for the same observed field, the observed state wins. Intent may be asserted again only through a new command, not by replaying stale intent.
+
+When the command cards below describe model changes, they describe the authoritative state after those accepted commands have been translated into events and reduced.
+
 ## Command Ownership
 
 Mission uses five user-visible layers, but not all of them own commands.

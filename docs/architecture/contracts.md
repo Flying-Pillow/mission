@@ -116,3 +116,19 @@ The intended architecture is:
 - session commands remain a separate runtime contract
 
 If a behavior only exists as Tower-side command handling and not as a daemon action, that is a layering bug.
+
+## Command Acceptance Semantics
+
+The daemon-side contract for operator commands is intentionally narrow:
+
+1. A validated command is accepted at one authority boundary only: mission-domain authority or Airport authority.
+2. Accepted commands do not mutate authoritative state directly. They are translated into workflow or airport events, and only those events change state through the relevant reducer.
+3. Command completion is split in two parts: acceptance happens at validation and event-request creation time, while asynchronous side effects complete later and are reported through subsequent emitted events.
+4. Invalid commands must return explicit error responses and must not emit state-changing events.
+5. Commands must be idempotent or carry a client-generated `requestId` so retries and duplicate submissions can be ignored or coalesced safely.
+
+This keeps the request-response layer small while preserving reducer authority over all durable state.
+
+## Observation Reconciliation Rule
+
+Airport observations are authoritative for observed substrate state. If an observation conflicts with previously recorded intent for the same observed field, the observed state wins until a new explicit command asserts new intent.
