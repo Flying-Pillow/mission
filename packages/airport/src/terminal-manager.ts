@@ -74,24 +74,19 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 
 	public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
 		for (const effect of effects) {
-			switch (effect.kind) {
-				case 'focus-pane': {
-					try {
-						await this.executor([
-							'--session',
-							this.state.sessionName,
-							'action',
-							'focus-pane-id',
-							toTerminalPaneReference(effect.terminalPaneId)
-						]);
-					} catch (error) {
-							if (isAlreadyFocusedPaneError(error) || isMissingPaneError(error)) {
-							continue;
-						}
-						throw error;
-					}
-					break;
+			try {
+				await this.executor([
+					'--session',
+					this.state.sessionName,
+					'action',
+					'focus-pane-id',
+					toTerminalPaneReference(effect.terminalPaneId)
+				]);
+			} catch (error) {
+				if (isAlreadyFocusedPaneError(error) || isMissingPaneError(error)) {
+					continue;
 				}
+				throw error;
 			}
 		}
 		this.state = {
@@ -136,7 +131,7 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 	}
 
 	public applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
-		const focusEffect = effects.find((effect) => effect.kind === 'focus-pane');
+		const focusEffect = effects[0];
 		this.state = {
 			...this.state,
 			...(focusEffect ? { observedFocusedTerminalPaneId: focusEffect.terminalPaneId } : {}),

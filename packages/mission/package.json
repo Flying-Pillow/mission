@@ -20,6 +20,9 @@
   "files": [
     "build"
   ],
+  "publishConfig": {
+    "access": "restricted"
+  },
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",

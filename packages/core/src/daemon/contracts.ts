@@ -283,7 +283,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 18;
+export const PROTOCOL_VERSION = 19;
 
 export type Method =
 	| 'ping'
@@ -309,7 +309,6 @@ export type Method =
 	| 'mission.action.list'
 	| 'mission.action.execute'
 	| 'mission.gate.evaluate'
-	| 'task.launch'
 	| 'session.list'
 	| 'session.console.state'
 	| 'session.prompt'
@@ -413,12 +412,6 @@ export type MissionActionExecute = MissionSelect & {
 
 export type TaskSelect = MissionSelect & {
 	taskId: string;
-};
-
-export type TaskLaunch = TaskSelect & {
-	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runnerId' | 'taskId'>> & {
-		runnerId?: string;
-	};
 };
 
 export type SessionSelect = MissionSelect & {

@@ -3,9 +3,9 @@
 import { createCliRenderer } from '@opentui/core';
 import { render } from '@opentui/solid';
 import {
-	AirportShell,
+	AirportApp,
 	type AirportUiOptions
-} from '../AirportShell.js';
+} from '../AirportApp.js';
 
 export async function mountTowerUi(options: AirportUiOptions): Promise<void> {
 	const renderer = await createCliRenderer({
@@ -21,7 +21,7 @@ export async function mountTowerUi(options: AirportUiOptions): Promise<void> {
 	for (const signalName of signalNames) {
 		process.once(signalName, teardownOnSignal);
 	}
-	await render(() => <AirportShell {...options} />, renderer);
+	await render(() => <AirportApp {...options} />, renderer);
 	await new Promise<void>((resolve) => {
 		renderer.once('destroy', () => {
 			for (const signalName of signalNames) {

@@ -119,14 +119,13 @@ describe('TerminalManagerSubstrateController', () => {
 		]);
 	});
 
-	it('does not plan runway substrate effects from runway bindings', async () => {
+	it('does not plan runway substrate effects from runway bindings', () => {
 		const airportState = createAirportState({
 			runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
 		expect(planAirportSubstrateEffects(airportState)).toEqual([]);
 	});
-
 
 	it('reports a detached substrate when pane listing fails', async () => {
 		const calls: string[][] = [];

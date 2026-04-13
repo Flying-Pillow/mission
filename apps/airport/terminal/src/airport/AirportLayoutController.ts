@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readMissionUserConfig } from '@flying-pillow/mission-core';
+import { resolveAirportCompanionPaneDirection } from './airportLayoutDefinition.js';
 
 const execFileAsync = promisify(execFile);
 const RUNWAY_PANE_TITLE = 'RUNWAY';
@@ -16,14 +17,21 @@ type TerminalPaneMetadata = {
 	is_plugin: boolean;
 	is_focused?: boolean;
 	is_suppressed?: boolean;
+	tab_id?: number;
 };
 
-type RunwayPaneControllerOptions = {
+type TabInfoSnapshot = {
+	tab_id?: number;
+	viewport_columns?: number;
+	display_area_columns?: number;
+};
+
+type AirportLayoutControllerOptions = {
 	controlRoot: () => string;
 	onError: (message: string) => void;
 };
 
-export function createRunwayPaneController(options: RunwayPaneControllerOptions) {
+export function createAirportLayoutController(options: AirportLayoutControllerOptions) {
 	const terminalSessionName = process.env['AIRPORT_TERMINAL_SESSION']?.trim()
 		|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim();
 	const terminalBinary = process.env['AIRPORT_TERMINAL_BINARY']?.trim()
@@ -36,27 +44,37 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 
 	function sync(target: RunwayTarget | undefined): void {
 		const nextKey = serializeTarget(target);
-		if (nextKey === lastRequestedKey) {
+		if (nextKey === lastRequestedKey && target === undefined) {
 			return;
 		}
 		lastRequestedKey = nextKey;
-		serial = serial
-			.then(() => reconcile(target, nextKey))
-			.catch((error: unknown) => {
-				options.onError(error instanceof Error ? error.message : String(error));
-			});
+		queueReconcile(target, nextKey);
 	}
 
 	function dispose(): void {
 		disposed = true;
 	}
 
+	function queueReconcile(target: RunwayTarget | undefined, requestKey: string): void {
+		serial = serial
+			.then(() => reconcile(target, requestKey))
+			.catch((error: unknown) => {
+				options.onError(error instanceof Error ? error.message : String(error));
+			});
+	}
+
 	async function reconcile(target: RunwayTarget | undefined, requestKey: string): Promise<void> {
-		if (disposed || !terminalSessionName || requestKey !== lastRequestedKey) {
+		if (disposed || requestKey !== lastRequestedKey) {
 			return;
 		}
 
-		const existingPane = await findRunwayPane();
+		const tabInfo = await getCurrentTabInfo();
+		const currentTabId = typeof tabInfo?.tab_id === 'number' ? tabInfo.tab_id : undefined;
+		const runwayPaneDirection = resolveAirportCompanionPaneDirection(
+			tabInfo?.viewport_columns ?? tabInfo?.display_area_columns
+		);
+		let panes = await listPanes(currentTabId);
+		let existingPane = panes.find((pane) => pane.title === RUNWAY_PANE_TITLE && !pane.is_suppressed);
 		if (!target) {
 			if (existingPane) {
 				await removePane(existingPane.id);
@@ -65,31 +83,54 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 			return;
 		}
 
-		if (existingPane && currentTargetKey === requestKey) {
-			return;
-		}
-
-		if (existingPane) {
-			await removePane(existingPane.id);
-		}
-
-		if (disposed || requestKey !== lastRequestedKey) {
-			return;
-		}
-
-		await createPane(target);
-		currentTargetKey = requestKey;
-	}
-
-	async function createPane(target: RunwayTarget): Promise<void> {
-		const panes = await listPanes();
-		const previouslyFocusedPane = panes.find((pane) => pane.is_focused);
-		const briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
+		let briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
 			?? panes.find((pane) => !pane.is_suppressed)
 			?? panes[0];
 		if (!briefingRoomPane) {
 			return;
 		}
+		const needsRunwayRestart = currentTargetKey !== requestKey;
+		if (needsRunwayRestart && existingPane) {
+			await removePane(existingPane.id);
+			existingPane = undefined;
+			panes = await listPanes(currentTabId);
+			briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
+				?? panes.find((pane) => !pane.is_suppressed)
+				?? panes[0];
+			if (!briefingRoomPane) {
+				return;
+			}
+		}
+
+		if (!existingPane) {
+			await createRunwayPane(target, briefingRoomPane, runwayPaneDirection);
+			currentTargetKey = requestKey;
+			return;
+		}
+
+		if (currentTargetKey === requestKey) {
+			return;
+		}
+
+		await removePane(existingPane.id);
+		const refreshedPanes = await listPanes(currentTabId);
+		const refreshedBriefingRoomPane = refreshedPanes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
+			?? refreshedPanes.find((pane) => !pane.is_suppressed)
+			?? refreshedPanes[0];
+		if (!refreshedBriefingRoomPane) {
+			return;
+		}
+		await createRunwayPane(target, refreshedBriefingRoomPane, runwayPaneDirection);
+		currentTargetKey = requestKey;
+	}
+
+	async function createRunwayPane(
+		target: RunwayTarget,
+		briefingRoomPane: TerminalPaneMetadata,
+		direction: 'down' | 'right'
+	): Promise<void> {
+		const panes = await listPanes();
+		const previouslyFocusedPane = panes.find((pane) => pane.is_focused);
 
 		if (!briefingRoomPane.is_focused) {
 			try {
@@ -101,19 +142,16 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 			}
 		}
 
-		const launchCommand = buildLaunchCommand(target);
+		const launchCommand = buildRunwayLaunchCommand(target);
 		const hostSessionName = terminalSessionName;
 		if (!hostSessionName) {
 			return;
 		}
 		try {
-			const result = await execTerminal([
-				'--session',
-				hostSessionName,
-				'action',
+			const result = await execTerminalAction([
 				'new-pane',
 				'--direction',
-				'down',
+				direction,
 				'--name',
 				RUNWAY_PANE_TITLE,
 				'--cwd',
@@ -125,11 +163,7 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 			]);
 			const createdPaneReference = parseCreatedPaneReference(result.stdout);
 			if (createdPaneReference) {
-				await execTerminalAction(['set-pane-borderless', '--pane-id', createdPaneReference, '--borderless']).catch(() => undefined);
-				await execTerminalAction(['move-pane', '--pane-id', createdPaneReference, 'up']).catch(() => undefined);
-				for (let attempt = 0; attempt < 4; attempt += 1) {
-					await execTerminalAction(['resize', '--pane-id', createdPaneReference, 'increase', 'down']).catch(() => undefined);
-				}
+				await execTerminalAction(['set-pane-borderless', '--pane-id', createdPaneReference, '--borderless', 'true']).catch(() => undefined);
 			}
 		} finally {
 			if (previouslyFocusedPane && previouslyFocusedPane.id !== briefingRoomPane.id) {
@@ -167,18 +201,24 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 		return focusedPane ? toTerminalPaneReference(focusedPane.id) : undefined;
 	}
 
-	async function findRunwayPane(): Promise<TerminalPaneMetadata | undefined> {
-		return (await listPanes()).find((pane) => pane.title === RUNWAY_PANE_TITLE && !pane.is_suppressed);
+	async function getCurrentTabInfo(): Promise<TabInfoSnapshot | undefined> {
+		const result = await execTerminalAction([
+			'current-tab-info',
+			'--json'
+		]);
+		const normalized = result.stdout.trim();
+		if (!normalized || !normalized.startsWith('{')) {
+			return undefined;
+		}
+		try {
+			return JSON.parse(normalized) as TabInfoSnapshot;
+		} catch {
+			return undefined;
+		}
 	}
 
-	async function listPanes(): Promise<TerminalPaneMetadata[]> {
-		if (!terminalSessionName) {
-			return [];
-		}
-		const result = await execTerminal([
-			'--session',
-			terminalSessionName,
-			'action',
+	async function listPanes(tabId?: number): Promise<TerminalPaneMetadata[]> {
+		const result = await execTerminalAction([
 			'list-panes',
 			'--json',
 			'--all'
@@ -188,15 +228,19 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 			return [];
 		}
 		try {
-			return (JSON.parse(normalized) as TerminalPaneMetadata[]).filter((pane) => !pane.is_plugin);
+			return (JSON.parse(normalized) as TerminalPaneMetadata[])
+				.filter((pane) => !pane.is_plugin)
+				.filter((pane) => tabId === undefined || pane.tab_id === tabId);
 		} catch {
 			return [];
 		}
 	}
 
-	function buildLaunchCommand(target: RunwayTarget): string {
+	function buildRunwayLaunchCommand(target: RunwayTarget): string {
 		const entryPath = resolveEntryPath();
-		const runtimeCommand = process.versions['bun'] ? [process.execPath, entryPath] : ['bun', entryPath];
+		const runtimeCommand = process.versions['bun']
+			? [process.execPath, entryPath]
+			: [readMissionUserConfig()?.bunBinary?.trim() || 'bun', entryPath];
 		const shellParts = [
 			'env',
 			'\'AIRPORT_PANE_ID=runway\'',
@@ -222,11 +266,12 @@ export function createRunwayPaneController(options: RunwayPaneControllerOptions)
 		return argvPath;
 	}
 
-	async function execTerminalAction(actionArgs: string[]): Promise<void> {
-		if (!terminalSessionName) {
-			return;
-		}
-		await execTerminal(['--session', terminalSessionName, 'action', ...actionArgs]);
+	async function execTerminalAction(actionArgs: string[]): Promise<{ stdout: string; stderr: string }> {
+		return execTerminal([
+			...(!terminalSessionName ? [] : ['--session', terminalSessionName]),
+			'action',
+			...actionArgs
+		]);
 	}
 
 	async function execTerminal(args: string[]): Promise<{ stdout: string; stderr: string }> {

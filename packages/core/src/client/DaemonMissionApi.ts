@@ -1,7 +1,6 @@
 import type {
 	MissionActionList,
 	MissionAgentConsoleState,
-	MissionAgentSessionLaunchRequest,
 	MissionAgentSessionRecord,
 	MissionActionExecute,
 	MissionFromBriefRequest,
@@ -81,20 +80,6 @@ export class DaemonMissionApi {
 		return this.client.request<MissionGateResult>('mission.gate.evaluate', {
 			selector: DaemonMissionApi.requireSelector(selector, 'Mission gate evaluation'),
 			intent
-		});
-	}
-
-	public async launchTaskSession(
-		selector: MissionSelector,
-		taskId: string,
-		request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runnerId' | 'taskId'>> & {
-			runnerId?: string;
-		}
-	): Promise<MissionAgentSessionRecord> {
-		return this.client.request<MissionAgentSessionRecord>('task.launch', {
-			selector: DaemonMissionApi.requireSelector(selector, 'Mission task launch'),
-			taskId,
-			...(request ? { request } : {})
 		});
 	}
 

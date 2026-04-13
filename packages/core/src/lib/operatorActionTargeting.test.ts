@@ -20,8 +20,8 @@ describe('orderAvailableActions', () => {
 				presentationTargets: [{ scope: 'mission' }]
 			}),
 			createAction({
-				id: 'task.launch.t1',
-				action: '/launch',
+				id: 'task.start.t1',
+				action: '/task start',
 				scope: 'task',
 				targetId: 't1',
 				presentationTargets: [{ scope: 'task', targetId: 't1' }]
@@ -33,7 +33,7 @@ describe('orderAvailableActions', () => {
 		expect(ordered.map((action) => action.id)).toEqual([
 			'mission.resume',
 			'session.cancel.s1',
-			'task.launch.t1'
+			'task.start.t1'
 		]);
 	});
 
@@ -53,8 +53,8 @@ describe('orderAvailableActions', () => {
 				presentationTargets: [{ scope: 'stage', targetId: 'prd' }]
 			}),
 			createAction({
-				id: 'task.launch.t1',
-				action: '/launch',
+				id: 'task.start.t1',
+				action: '/task start',
 				scope: 'task',
 				targetId: 't1',
 				presentationTargets: [{ scope: 'task', targetId: 't1' }]
@@ -72,7 +72,7 @@ describe('orderAvailableActions', () => {
 
 		expect(ordered.map((action) => action.id)).toEqual([
 			'session.cancel.s1',
-			'task.launch.t1',
+			'task.start.t1',
 			'stage.generate',
 			'mission.pause'
 		]);

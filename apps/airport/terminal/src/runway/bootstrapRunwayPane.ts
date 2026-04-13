@@ -18,7 +18,7 @@ export async function bootstrapRunwayPane(context: AirportTerminalContext): Prom
 		|| 'zellij';
 
 	await new Promise<void>((resolve, reject) => {
-		const child = spawn(terminalBinary, ['attach', targetSessionName], {
+		const child = spawn(terminalBinary, buildRunwayAttachArgs(targetSessionName), {
 			stdio: 'inherit',
 			env: { ...process.env, ZELLIJ: undefined }
 		});
@@ -48,4 +48,8 @@ export async function bootstrapRunwayPane(context: AirportTerminalContext): Prom
 			reject(new Error(`Runway session attach exited with code ${String(code)}.`));
 		});
 	});
+}
+
+export function buildRunwayAttachArgs(targetSessionName: string): string[] {
+	return ['attach', targetSessionName, 'options', '--pane-frames', 'false'];
 }

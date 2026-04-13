@@ -14,7 +14,6 @@ import {
 	type MissionStageDerivedState,
 	MissionStageRuntimeProjection,
 	type MissionTaskLifecycleState,
-	type MissionTaskLaunchMode,
 	type MissionTaskRuntimeState,
 	type MissionWorkflowConfigurationSnapshot
 } from './workflow/engine/types.js';
@@ -160,7 +159,6 @@ export type OperatorActionQueryContext = OperatorActionTargetContext;
 
 export type OperatorActionExecutionMetadata = {
 	stageId?: MissionStageId;
-	launchMode?: MissionTaskLaunchMode;
 	autostart?: boolean;
 	batchTargetIds?: string[];
 };
@@ -178,7 +176,7 @@ export type OperatorActionDescriptor = {
 	id: string;
 	label: string;
 	// Human-entered slash text that maps to this action when typed in Tower,
-	// for example `/mission resume` or `/launch`.
+	// for example `/mission resume` or `/task start`.
 	// This is a presentation string, not the canonical identity.
 	action: string;
 	scope: OperatorActionScope;

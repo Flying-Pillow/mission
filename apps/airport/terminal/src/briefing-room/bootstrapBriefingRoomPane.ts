@@ -127,7 +127,16 @@ export function buildBriefingRoomCommand(repoRoot: string, launchPath?: string):
 		].find((candidate) => existsSync(candidate));
 
 	const editorBinary = configuredEditorBinary || 'micro';
-	return editorTarget ? buildShellCommand([editorBinary, editorTarget]) : buildShellCommand([editorBinary]);
+	const editorArgs = isMicroEditorBinary(editorBinary)
+		? [editorBinary, '-softwrap', 'true', '-wordwrap', 'true', '-autosave', '8']
+		: [editorBinary];
+	return editorTarget
+		? buildShellCommand([...editorArgs, editorTarget])
+		: buildShellCommand(editorArgs);
+}
+
+function isMicroEditorBinary(editorBinary: string): boolean {
+	return path.basename(editorBinary).toLowerCase() === 'micro';
 }
 
 function resolveBriefingRoomLaunchPath(

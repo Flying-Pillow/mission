@@ -1,61 +1,108 @@
 export type AgentRunnerId = string;
-export type AgentTransportId = string;
 export type AgentSessionId = string;
+export type AgentRuntimePrimitive = string | number | boolean | null;
 
-export type AgentSessionPhase =
+export type AgentRuntimeErrorCode =
+    | 'runner-not-available'
+    | 'session-not-found'
+    | 'prompt-not-accepted'
+    | 'action-not-supported'
+    | 'invalid-session-state'
+    | 'launch-failed'
+    | 'attach-failed';
+
+export type AgentSessionStatus =
     | 'starting'
     | 'running'
+    | 'paused'
     | 'awaiting-input'
     | 'completed'
     | 'failed'
     | 'cancelled'
     | 'terminated';
 
+export type AgentProgressState =
+    | 'unknown'
+    | 'working'
+    | 'paused'
+    | 'waiting-input'
+    | 'blocked'
+    | 'done'
+    | 'failed';
+
+export type AgentAttentionState =
+    | 'none'
+    | 'autonomous'
+    | 'awaiting-operator'
+    | 'awaiting-system'
+    | 'paused';
+
 export type AgentPromptSource = 'engine' | 'operator' | 'system';
 
-export type AgentCommandKind =
-    | 'interrupt'
-    | 'continue'
+export type AgentSteerAction =
+    | 'pause'
+    | 'resume'
     | 'checkpoint'
+    | 'nudge'
     | 'finish';
 
-export type AgentRuntimePrimitive = string | number | boolean | null;
-
-export interface AgentRunnerCapabilities {
-    attachableSessions: boolean;
-    promptSubmission: boolean;
-    structuredCommands: boolean;
-    interruptible: boolean;
-    interactiveInput: boolean;
-    telemetry: boolean;
-    mcpClient: boolean;
-}
-
-export interface McpServerReference {
-    name: string;
-    transport: 'stdio' | 'sse';
-    command?: string;
-    args?: string[];
-    url?: string;
-    env?: Record<string, string>;
+export interface AgentProgressSnapshot {
+    state: AgentProgressState;
+    summary?: string;
+    detail?: string;
+    units?: {
+        completed?: number;
+        total?: number;
+        unit?: string;
+    };
+    updatedAt: string;
 }
 
 export interface AgentSessionReference {
     runnerId: AgentRunnerId;
-    transportId?: AgentTransportId;
     sessionId: AgentSessionId;
-    terminalSessionName?: string;
-    terminalPaneId?: string;
+    transport?: {
+        kind: 'terminal';
+        terminalSessionName: string;
+        paneId?: string;
+    };
 }
 
-export interface AgentSessionStartRequest {
-    missionId: string;
+export interface AgentTaskContext {
     taskId: string;
+    stageId: string;
+    title: string;
+    description: string;
+    instruction: string;
+    acceptanceCriteria?: string[];
+}
+
+export interface AgentContextDocument {
+    documentId: string;
+    kind: 'spec' | 'brief' | 'artifact' | 'note';
+    title: string;
+    path?: string;
+    summary?: string;
+}
+
+export interface AgentSpecificationContext {
+    summary: string;
+    documents: AgentContextDocument[];
+}
+
+export interface AgentResumePolicy {
+    mode: 'new' | 'attach-or-create' | 'attach-only';
+    previousSessionId?: AgentSessionId;
+}
+
+export interface AgentLaunchRequest {
+    missionId: string;
     workingDirectory: string;
-    terminalSessionName?: string;
-    transportId?: AgentTransportId;
+    task: AgentTaskContext;
+    specification: AgentSpecificationContext;
+    requestedRunnerId?: AgentRunnerId;
+    resume: AgentResumePolicy;
     initialPrompt?: AgentPrompt;
-    mcpServers?: McpServerReference[];
     metadata?: Record<string, AgentRuntimePrimitive>;
 }
 
@@ -66,26 +113,34 @@ export interface AgentPrompt {
     metadata?: Record<string, AgentRuntimePrimitive>;
 }
 
-export interface AgentCommand {
-    kind: AgentCommandKind;
-    metadata?: Record<string, AgentRuntimePrimitive>;
-}
-
 export interface AgentSessionSnapshot {
     runnerId: AgentRunnerId;
-    transportId?: AgentTransportId;
     sessionId: AgentSessionId;
-    terminalSessionName?: string;
-    terminalPaneId?: string;
-    phase: AgentSessionPhase;
-    workingDirectory?: string;
+    workingDirectory: string;
     taskId: string;
     missionId: string;
+    stageId: string;
+    status: AgentSessionStatus;
+    attention: AgentAttentionState;
+    progress: AgentProgressSnapshot;
+    waitingForInput: boolean;
     acceptsPrompts: boolean;
-    acceptedCommands: AgentCommandKind[];
-    awaitingInput: boolean;
+    acceptedActions: AgentSteerAction[];
+    transport?: {
+        kind: 'terminal';
+        terminalSessionName: string;
+        paneId?: string;
+    };
     failureMessage?: string;
+    startedAt: string;
     updatedAt: string;
+    endedAt?: string;
+}
+
+export interface AgentRuntimeError extends Error {
+    readonly code: AgentRuntimeErrorCode;
+    readonly runnerId?: AgentRunnerId;
+    readonly sessionId?: AgentSessionId;
 }
 
 export type AgentSessionEvent =
@@ -98,7 +153,7 @@ export type AgentSessionEvent =
         snapshot: AgentSessionSnapshot;
     }
     | {
-        type: 'session.state-changed';
+        type: 'session.updated';
         snapshot: AgentSessionSnapshot;
     }
     | {
@@ -109,28 +164,6 @@ export type AgentSessionEvent =
     }
     | {
         type: 'session.awaiting-input';
-        snapshot: AgentSessionSnapshot;
-    }
-    | {
-        type: 'prompt.accepted';
-        prompt: AgentPrompt;
-        snapshot: AgentSessionSnapshot;
-    }
-    | {
-        type: 'prompt.rejected';
-        prompt: AgentPrompt;
-        reason: string;
-        snapshot: AgentSessionSnapshot;
-    }
-    | {
-        type: 'command.accepted';
-        command: AgentCommand;
-        snapshot: AgentSessionSnapshot;
-    }
-    | {
-        type: 'command.rejected';
-        command: AgentCommand;
-        reason: string;
         snapshot: AgentSessionSnapshot;
     }
     | {

@@ -8,12 +8,29 @@ import { reduceMissionWorkflowEvent } from './reducer.js';
 import { validateMissionWorkflowEvent } from './validation.js';
 import type { MissionWorkflowEvent } from './types.js';
 
+function createWorkflowSettingsWithoutTaskAutostart() {
+    const workflow = createDefaultWorkflowSettings();
+    workflow.stages = Object.fromEntries(
+        Object.entries(workflow.stages).map(([stageId, stage]) => [
+            stageId,
+            {
+                ...stage,
+                taskLaunchPolicy: {
+                    ...stage.taskLaunchPolicy,
+                    defaultAutostart: false
+                }
+            }
+        ])
+    ) as typeof workflow.stages;
+    return workflow;
+}
+
 describe('workflow reducer delivery completion', () => {
     it('persists terminal attachment metadata on started sessions', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
-            workflow: createDefaultWorkflowSettings()
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
         let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
@@ -25,7 +42,7 @@ describe('workflow reducer delivery completion', () => {
             dependsOn: [],
             lifecycle: 'queued',
             blockedByTaskIds: [],
-            runtime: { autostart: false, launchMode: 'manual' },
+            runtime: { autostart: false },
             retries: 0,
             createdAt: '2026-04-10T15:51:25.000Z',
             updatedAt: '2026-04-10T15:51:25.000Z'
@@ -51,6 +68,38 @@ describe('workflow reducer delivery completion', () => {
             sessionId: 'session-1',
             terminalSessionName: 'airport-terminal-session',
             terminalPaneId: 'terminal_44'
+        }));
+    });
+
+    it('queues and emits session launch requests for ready autostart tasks', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceMissionWorkflowEvent(runtime, {
+            eventId: 'mission.created',
+            type: 'mission.created',
+            occurredAt: '2026-04-10T15:51:25.000Z',
+            source: 'human'
+        }, configuration).nextState;
+        runtime = reduceMissionWorkflowEvent(runtime, {
+            eventId: 'mission.started',
+            type: 'mission.started',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'human'
+        }, configuration).nextState;
+
+        const result = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+            { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' }
+        ]), configuration);
+
+        expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('queued');
+        expect(result.requests).toContainEqual(expect.objectContaining({
+            type: 'session.launch',
+            payload: { taskId: 'prd/01' }
         }));
     });
 
@@ -128,7 +177,7 @@ describe('workflow reducer delivery completion', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
-            workflow: createDefaultWorkflowSettings()
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
         let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
@@ -188,7 +237,7 @@ describe('workflow reducer delivery completion', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
-            workflow: createDefaultWorkflowSettings()
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
         let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);

@@ -75,8 +75,7 @@ function disableWorkflowAutostart(workflow: ReturnType<typeof createDefaultWorkf
 					...stage,
 					taskLaunchPolicy: {
 						...stage.taskLaunchPolicy,
-						defaultAutostart: false,
-						launchMode: 'manual' as const
+						defaultAutostart: false
 					}
 				}
 			])

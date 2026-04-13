@@ -13,8 +13,6 @@ It is normative.
 
 This document is aligned to the workflow engine specification.
 
-It does not change that specification.
-
 Its job is to reconcile the workflow-engine terminology with the rest of the core domain model so that core code and documentation use one unambiguous naming system.
 
 ## Scope Boundary

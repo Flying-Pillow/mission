@@ -175,7 +175,6 @@ export function describeExecutedActionMessage(
 		|| command.id.startsWith('task.done.')
 		|| command.id.startsWith('task.block.')
 		|| command.id.startsWith('task.reopen.')
-		|| command.id.startsWith('task.launch.')
 	) {
 		return `${command.label}${command.targetId ? `: ${command.targetId}` : '.'}`;
 	}

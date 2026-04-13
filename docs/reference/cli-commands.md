@@ -52,7 +52,7 @@ Behavior verified in the current CLI package and Airport layout router:
 - attempts airport layout bootstrap through the terminal manager on POSIX shells when available
 - auto-selects a mission when opened from a mission worktree
 - opens repository mode when opened from the repository checkout
-- requires Bun for the OpenTUI Airport terminal surfaces
+- provisions or validates the Mission-managed Bun runtime envelope before opening the OpenTUI Airport terminal surfaces when defaults are in use
 
 Supported terminal flags are currently limited to:
 
@@ -70,10 +70,11 @@ This command performs user-level setup:
 
 - ensures Mission user config exists
 - ensures the mission workspace root exists
-- resolves or installs the terminal manager binary
-- resolves or installs the editor binary
+- provisions or validates the pinned Bun runtime
+- provisions or validates the pinned terminal manager runtime
+- provisions or validates the pinned editor runtime
 
-With `--json`, it prints the config path, the effective config object, and the resolved missions path.
+With `--json`, it prints the config path, the effective config object, the resolved missions path, and the managed runtime path.
 
 ## `mission airport:status`
 

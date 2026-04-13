@@ -162,7 +162,9 @@ export class AirportControl {
 			connected: false,
 			lastSeenAt: new Date().toISOString()
 		};
-		const { claimedPaneId: _claimedPaneId, focusedPaneId: _focusedPaneId, ...releasedClient } = disconnectedClient;
+		const { claimedPaneId, focusedPaneId, ...releasedClient } = disconnectedClient;
+		void claimedPaneId;
+		void focusedPaneId;
 		const clients = {
 			...this.state.clients,
 			[clientId]: releasedClient
@@ -252,7 +254,8 @@ function releaseClaimedPane(
 		if (candidateClientId === clientId || !client.connected || client.claimedPaneId !== paneId) {
 			continue;
 		}
-		const { claimedPaneId: _claimedPaneId, ...releasedClient } = client;
+		const { claimedPaneId, ...releasedClient } = client;
+		void claimedPaneId;
 		nextClients[candidateClientId] = releasedClient;
 	}
 	return nextClients;

@@ -9,6 +9,7 @@ import {
 	resolveAirportControlRuntimeMode
 } from '@flying-pillow/mission-core';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
+import { buildAirportBootstrapLayout } from './airportLayoutDefinition.js';
 
 const execFileAsync = promisify(execFile);
 const defaultAirportTerminalSessionName = 'flying-pillow-mission | AIRPORT';
@@ -45,7 +46,7 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 	await mkdir(terminalManagerConfigDir, { recursive: true });
 	await mkdir(path.dirname(layoutFile), { recursive: true });
 	await writeFile(path.join(terminalManagerConfigDir, 'config.kdl'), buildTerminalManagerConfig(), 'utf8');
-	await writeFile(layoutFile, buildAirportLayout({
+	await writeFile(layoutFile, buildAirportBootstrapLayout({
 		repoRoot,
 		towerCommand,
 		briefingRoomCommand
@@ -104,10 +105,14 @@ function resolveMissionEntryCommand(): string[] {
 	if (!entryScriptPath) {
 		throw new Error('Airport terminal entry path is unavailable for airport layout bootstrap.');
 	}
+	return resolveAirportRuntimeCommand(entryScriptPath);
+}
+
+export function resolveAirportRuntimeCommand(entryScriptPath: string): string[] {
 	if (process.versions['bun']) {
 		return [process.execPath, entryScriptPath];
 	}
-	return ['bun', entryScriptPath];
+	return [readMissionUserConfig()?.bunBinary?.trim() || 'bun', entryScriptPath];
 }
 
 async function resetTerminalManagerSession(terminalManagerBinary: string, sessionName: string): Promise<void> {
@@ -157,7 +162,7 @@ function shellEscape(value: string): string {
 	return `'${value.replace(/'/gu, `'\\''`)}'`;
 }
 
-function buildTerminalManagerConfig(): string {
+export function buildTerminalManagerConfig(): string {
 	return `themes {
     tower {
         bg "#0F1419"
@@ -177,39 +182,19 @@ function buildTerminalManagerConfig(): string {
 theme "tower"
 show_startup_tips false
 
+keybinds {
+	shared_except "locked" {
+		bind "Alt Right" "Alt l" { FocusNextPane; }
+		bind "Alt Left" "Alt h" { FocusPreviousPane; }
+	}
+}
+
 ui {
     pane_frames {
         rounded_corners true
     }
 }
 `;
-}
-
-export function buildAirportLayout(input: {
-	repoRoot: string;
-	towerCommand: string;
-	briefingRoomCommand: string;
-}): string {
-	return `layout {
-	default_tab_template {
-		children
-	}
-	tab name="TOWER" {
-		pane split_direction="vertical" {
-			pane name="TOWER" focus=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
-				args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
-			}
-			pane name="BRIEFING ROOM" size="50%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
-				args "-lc" "${kdlEscape(`exec ${input.briefingRoomCommand}`)}"
-			}
-		}
-	}
-}
-`;
-}
-
-function kdlEscape(value: string): string {
-	return value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"');
 }
 
 function resolveTerminalManagerBinary(): string {

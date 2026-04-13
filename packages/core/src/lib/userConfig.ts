@@ -18,6 +18,7 @@ export type MissionUserConfig = {
 	missionWorkspaceRoot?: string;
 	terminalBinary?: string;
 	editorBinary?: string;
+	bunBinary?: string;
 	registeredRepositories?: MissionUserRegisteredRepository[];
 };
 
@@ -32,16 +33,22 @@ export function getMissionUserConfigPath(): string {
 	return path.join(getMissionUserConfigDirectory(), MISSION_USER_CONFIG_FILE);
 }
 
+export function getMissionRuntimeDirectory(): string {
+	return path.join(getMissionUserConfigDirectory(), 'runtime');
+}
+
 export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig> = {}): MissionUserConfig {
 	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
 	const terminalBinary = normalizeOptionalString(overrides.terminalBinary);
 	const editorBinary = normalizeOptionalString(overrides.editorBinary);
+	const bunBinary = normalizeOptionalString(overrides.bunBinary);
 	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
 	return {
 		version: 1,
 		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
 		terminalBinary: terminalBinary ?? 'zellij',
 		editorBinary: editorBinary ?? 'micro',
+		bunBinary: bunBinary ?? 'bun',
 		...(registeredRepositories ? { registeredRepositories } : {})
 	};
 }
@@ -136,6 +143,9 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefi
 			: {}),
 		...(typeof candidate['editorBinary'] === 'string'
 			? { editorBinary: candidate['editorBinary'] }
+			: {}),
+		...(typeof candidate['bunBinary'] === 'string'
+			? { bunBinary: candidate['bunBinary'] }
 			: {}),
 		...(Array.isArray(candidate['registeredRepositories'])
 			? { registeredRepositories: candidate['registeredRepositories'] as MissionUserRegisteredRepository[] }

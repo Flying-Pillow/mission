@@ -84,6 +84,7 @@ Use it to sequence delivery without expanding the spec.
 
 - Expose mission pause, resume, panic, and clear-panic actions.
 - Expose task done, blocked, reopen, autostart toggle, and manual start actions.
+- Do not expose a separate task or agent `/launch` action once manual task start is modeled through `task.queued`.
 - Remove or rewrite commands centered on stage runtime control.
 - Drive command availability from the same workflow rules used by reducer validation.
 - Ensure any daemon-exposed MCP tools translate agent intents into normal workflow events rather than direct workflow state mutation.

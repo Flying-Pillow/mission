@@ -101,8 +101,7 @@ function createTask(task: Partial<MissionTaskRuntimeState> = {}): MissionTaskRun
 		lifecycle: 'queued',
 		blockedByTaskIds: [],
 		runtime: {
-			autostart: false,
-			launchMode: 'manual'
+			autostart: false
 		},
 		retries: 0,
 		createdAt: '2026-04-10T21:12:10.000Z',

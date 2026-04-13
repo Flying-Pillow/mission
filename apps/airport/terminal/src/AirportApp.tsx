@@ -56,7 +56,7 @@ import {
 } from './tower/components/flow/flowDomain.js';
 import { TowerPanel } from './tower/components/tower/TowerPanel.js';
 import { createAirportController } from './airportController.js';
-import { createRunwayPaneController } from './runway/RunwayPaneController.js';
+import { createAirportLayoutController } from './airport/AirportLayoutController.js';
 import {
 	asMissionStatusNotification,
 	buildFocusOrder,
@@ -83,7 +83,7 @@ export type AirportUiOptions = {
 	connect: (request?: TowerConnectRequest) => Promise<AirportConnection>;
 };
 
-type AirportShellProps = AirportUiOptions;
+type AirportAppProps = AirportUiOptions;
 type TowerMode = 'repository' | 'mission';
 type ShellOverlay =
 	| { kind: 'none' }
@@ -91,7 +91,7 @@ type ShellOverlay =
 const repositoryFocusOrder: FocusArea[] = ['header', 'flow', 'command'];
 const missionFocusOrder: FocusArea[] = ['header', 'tree', 'command'];
 
-export function AirportShell({
+export function AirportApp({
 	workspaceContext,
 	initialSelector,
 	initialTheme,
@@ -99,7 +99,7 @@ export function AirportShell({
 	initialConnection,
 	initialConnectionError,
 	connect
-}: AirportShellProps) {
+}: AirportAppProps) {
 	const renderer = useRenderer();
 	const [, setActivityLog] = createSignal<string[]>([
 		createInitialStatusMessage(initialConnectionError)
@@ -118,7 +118,7 @@ export function AirportShell({
 	const systemSnapshot = runtimeController.systemSnapshot;
 	const daemonState = runtimeController.daemonState;
 	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
-	const runwayPaneController = createRunwayPaneController({
+	const airportLayoutController = createAirportLayoutController({
 		controlRoot: currentControlRoot,
 		onError: (message) => appendLog(`Failed to sync runway pane: ${message}`)
 	});
@@ -150,7 +150,7 @@ export function AirportShell({
 	);
 	const currentMissionId = createMemo(() =>
 		selector().missionId
-			?? status().missionId
+		?? status().missionId
 	);
 	const headerTabs = createMemo<HeaderTab[]>(() =>
 		buildHeaderTabs(status(), projectedAvailableMissions())
@@ -220,18 +220,17 @@ export function AirportShell({
 	const selectedTreeContext = createMemo(() =>
 		resolveTreeSelectionContext(selectedTreeTarget(), systemDomain())
 	);
-	const resolvedMissionSelection = createMemo<MissionResolvedSelection | undefined>(() =>
-		{
-			if (towerMode() !== 'mission') {
-				return undefined;
-			}
-			const missionId = currentMissionId()?.trim();
-			return resolveMissionSelection({
-				target: selectedTreeTarget(),
-				domain: systemDomain(),
-				...(missionId ? { missionId } : {})
-			});
+	const resolvedMissionSelection = createMemo<MissionResolvedSelection | undefined>(() => {
+		if (towerMode() !== 'mission') {
+			return undefined;
 		}
+		const missionId = currentMissionId()?.trim();
+		return resolveMissionSelection({
+			target: selectedTreeTarget(),
+			domain: systemDomain(),
+			...(missionId ? { missionId } : {})
+		});
+	}
 	);
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
 		(towerProjection()?.stageRail ?? []).map((item: { id: string; label: string; state: ProgressRailItem['state']; subtitle?: string }) => ({
@@ -243,7 +242,7 @@ export function AirportShell({
 		}))
 	);
 	const headerPanelTitle = createMemo(() => {
-			const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
+		const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		if (status().operationalMode === 'setup') {
 			return `SETUP ${workspaceLabel}`;
 		}
@@ -253,7 +252,7 @@ export function AirportShell({
 	const headerStatusLines = createMemo(() =>
 		buildHeaderStatusLines(
 			status(),
-					currentControlRoot(),
+			currentControlRoot(),
 			selectedHeaderTab(),
 			projectedAvailableMissions()
 		)
@@ -439,7 +438,7 @@ export function AirportShell({
 
 	createEffect(() => {
 		if (towerMode() !== 'mission') {
-			runwayPaneController.sync(undefined);
+			airportLayoutController.sync(undefined);
 			return;
 		}
 		const bindings = resolvePanelBindingsFromSelection(resolvedMissionSelection(), currentMissionId());
@@ -483,17 +482,17 @@ export function AirportShell({
 
 	createEffect(() => {
 		if (towerMode() !== 'mission') {
-			runwayPaneController.sync(undefined);
+			airportLayoutController.sync(undefined);
 			return;
 		}
 		const resolvedSessionId = resolvedMissionSelection()?.activeAgentSessionId?.trim();
 		const session = resolvedSessionId ? systemDomain()?.agentSessions[resolvedSessionId] : undefined;
 		const terminalSessionName = session?.terminalSessionName?.trim();
 		if (!terminalSessionName || session?.transportId !== 'terminal') {
-			runwayPaneController.sync(undefined);
+			airportLayoutController.sync(undefined);
 			return;
 		}
-		runwayPaneController.sync({
+		airportLayoutController.sync({
 			terminalSessionName,
 			...(session?.terminalPaneId?.trim() ? { terminalPaneId: session.terminalPaneId.trim() } : {})
 		});
@@ -547,7 +546,7 @@ export function AirportShell({
 								text: towerProjection()?.emptyLabel ?? 'Repository mode is ready.'
 							}
 						}
-					: {})}
+						: {})}
 			/>
 		);
 	});
@@ -725,7 +724,7 @@ export function AirportShell({
 	});
 
 	onCleanup(() => {
-		runwayPaneController.dispose();
+		airportLayoutController.dispose();
 		runtimeController.dispose();
 	});
 
@@ -1003,7 +1002,7 @@ export function AirportShell({
 						commandController.handleCommandPickerKeyDown(event);
 					}}
 				/>
-		</Show>
+			</Show>
 		</Show>
 	);
 

@@ -144,13 +144,6 @@ export function validateWorkflowSettings(settings: WorkflowGlobalSettings): Work
 				message: `Stage '${stageId}' must declare a matching stageId.`
 			});
 		}
-		if (definition.taskLaunchPolicy.launchMode !== 'automatic' && definition.taskLaunchPolicy.launchMode !== 'manual') {
-			errors.push({
-				code: 'INVALID_LAUNCH_MODE',
-				path: `/stages/${escapeJsonPointerToken(stageId)}/taskLaunchPolicy/launchMode`,
-				message: `Stage '${stageId}' has an invalid launchMode '${String(definition.taskLaunchPolicy.launchMode)}'.`
-			});
-		}
 	}
 
 	for (const [index, gate] of settings.gates.entries()) {
@@ -204,10 +197,7 @@ function normalizeStages(
 			stageId: typeof candidate?.stageId === 'string' ? candidate.stageId : defaultStage.stageId,
 			displayName: typeof candidate?.displayName === 'string' ? candidate.displayName : defaultStage.displayName,
 			taskLaunchPolicy: {
-				defaultAutostart: asBoolean(candidate?.taskLaunchPolicy?.defaultAutostart, defaultStage.taskLaunchPolicy.defaultAutostart),
-				launchMode: isLaunchMode(candidate?.taskLaunchPolicy?.launchMode)
-					? candidate.taskLaunchPolicy.launchMode
-					: defaultStage.taskLaunchPolicy.launchMode
+				defaultAutostart: asBoolean(candidate?.taskLaunchPolicy?.defaultAutostart, defaultStage.taskLaunchPolicy.defaultAutostart)
 			},
 			completionPolicy: {
 				requireAllTasksCompleted: asBoolean(
@@ -230,10 +220,7 @@ function normalizeStages(
 			stageId: typeof candidateStage.stageId === 'string' ? candidateStage.stageId : stageId,
 			displayName: typeof candidateStage.displayName === 'string' ? candidateStage.displayName : stageId,
 			taskLaunchPolicy: {
-				defaultAutostart: asBoolean(candidateStage.taskLaunchPolicy?.defaultAutostart, false),
-				launchMode: isLaunchMode(candidateStage.taskLaunchPolicy?.launchMode)
-					? candidateStage.taskLaunchPolicy.launchMode
-					: 'manual'
+				defaultAutostart: asBoolean(candidateStage.taskLaunchPolicy?.defaultAutostart, false)
 			},
 			completionPolicy: {
 				requireAllTasksCompleted: asBoolean(candidateStage.completionPolicy?.requireAllTasksCompleted, true)
@@ -254,10 +241,6 @@ function asNumber(value: unknown, fallback: number): number {
 
 function isGateIntent(value: unknown): value is WorkflowGlobalSettings['gates'][number]['intent'] {
 	return value === 'implement' || value === 'verify' || value === 'audit' || value === 'deliver';
-}
-
-function isLaunchMode(value: unknown): value is WorkflowStageDefinition['taskLaunchPolicy']['launchMode'] {
-	return value === 'automatic' || value === 'manual';
 }
 
 function escapeJsonPointerToken(value: string): string {

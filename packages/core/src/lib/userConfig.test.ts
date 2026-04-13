@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	ensureMissionUserConfig,
+	getMissionRuntimeDirectory,
 	getMissionUserConfigPath,
 	listRegisteredMissionUserRepos,
 	registerMissionUserRepo,
@@ -31,8 +32,15 @@ describe('userConfig', () => {
 			version: 1,
 			missionWorkspaceRoot: 'missions',
 			terminalBinary: 'zellij',
-			editorBinary: 'micro'
+			editorBinary: 'micro',
+			bunBinary: 'bun'
 		});
+	});
+
+	it('derives a Mission-managed runtime directory next to the user config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+
+		expect(getMissionRuntimeDirectory()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'runtime'));
 	});
 
 	it('persists user-level overrides', async () => {
@@ -41,13 +49,15 @@ describe('userConfig', () => {
 		await writeMissionUserConfig({
 			missionWorkspaceRoot: '/tmp/missions',
 			terminalBinary: '/usr/local/bin/zellij',
-			editorBinary: 'nano'
+			editorBinary: 'nano',
+			bunBinary: '/opt/bun/bin/bun'
 		});
 
 		expect(readMissionUserConfig()).toMatchObject({
 			missionWorkspaceRoot: '/tmp/missions',
 			terminalBinary: '/usr/local/bin/zellij',
-			editorBinary: 'nano'
+			editorBinary: 'nano',
+			bunBinary: '/opt/bun/bin/bun'
 		});
 	});
 
@@ -71,7 +81,8 @@ describe('userConfig', () => {
 			version: 1,
 			missionWorkspaceRoot: 'missions',
 			terminalBinary: 'zellij',
-			editorBinary: 'micro'
+			editorBinary: 'micro',
+			bunBinary: 'bun'
 		});
 	});
 
@@ -174,6 +185,7 @@ describe('userConfig', () => {
 				missionWorkspaceRoot: 'missions',
 				terminalBinary: 'zellij',
 				editorBinary: 'micro',
+				bunBinary: 'bun',
 				registeredRepositories: [
 					{
 						checkoutPath: '/tmp/mission-stale-repository'
@@ -189,7 +201,8 @@ describe('userConfig', () => {
 			version: 1,
 			missionWorkspaceRoot: 'missions',
 			terminalBinary: 'zellij',
-			editorBinary: 'micro'
+			editorBinary: 'micro',
+			bunBinary: 'bun'
 		});
 		expect(readMissionUserConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('mission-stale-repository');

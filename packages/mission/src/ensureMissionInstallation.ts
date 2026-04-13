@@ -9,6 +9,7 @@ import {
 	text
 } from '@clack/prompts';
 import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { accessSync, constants } from 'node:fs';
 import { chmod, copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -16,6 +17,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import {
 	ensureMissionUserConfig,
+	getMissionRuntimeDirectory,
 	getMissionUserConfigPath,
 	readMissionUserConfig,
 	resolveMissionWorkspaceRoot,
@@ -25,14 +27,17 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-type ManagedDependencyId = 'zellij' | 'micro';
+type ManagedDependencyId = 'zellij' | 'micro' | 'bun';
+type ManagedDependencyArchiveType = 'tar.gz' | 'zip';
 
 type ManagedDependency = {
 	id: ManagedDependencyId;
 	label: string;
 	owner: string;
 	repo: string;
+	releaseTag: string;
 	executableName: string;
+	archiveType: ManagedDependencyArchiveType;
 	resolveAssetPattern(): RegExp;
 };
 
@@ -51,6 +56,19 @@ export async function ensureMissionInstallation(options: {
 	const missionWorkspaceRoot = await ensureWorkspaceRoot(config, options.interactive);
 	if (missionWorkspaceRoot !== config.missionWorkspaceRoot) {
 		config = { ...config, missionWorkspaceRoot };
+		changed = true;
+	}
+
+	const bunBinary = await ensureBinary({
+		label: 'Bun runtime',
+		defaultValue: 'bun',
+		interactive: options.interactive,
+		...(config.bunBinary ? { currentValue: config.bunBinary } : {}),
+		managedDependencyId: 'bun',
+		fallbacks: ['bun']
+	});
+	if (bunBinary !== config.bunBinary) {
+		config = { ...config, bunBinary };
 		changed = true;
 	}
 
@@ -89,6 +107,8 @@ export async function ensureMissionInstallation(options: {
 			[
 				`config: ${getMissionUserConfigPath()}`,
 				`missions: ${resolveMissionWorkspaceRoot(config.missionWorkspaceRoot)}`,
+				`runtime: ${getMissionRuntimeDirectory()}`,
+				`bun: ${config.bunBinary ?? 'bun'}`,
 				`terminal: ${config.terminalBinary ?? 'zellij'}`,
 				`editor: ${config.editorBinary ?? 'micro'}`
 			].join('\n'),
@@ -104,7 +124,8 @@ export function getMissionInstallationOutput(config: MissionUserConfig) {
 	return {
 		configPath: getMissionUserConfigPath(),
 		config,
-		missionsPath: resolveMissionWorkspaceRoot(config.missionWorkspaceRoot)
+		missionsPath: resolveMissionWorkspaceRoot(config.missionWorkspaceRoot),
+		runtimePath: getMissionRuntimeDirectory()
 	};
 }
 
@@ -159,7 +180,13 @@ async function ensureBinary(input: {
 	fallbacks: string[];
 }): Promise<string> {
 	const configuredBinary = input.currentValue?.trim() || input.defaultValue;
-	if (isExecutableAvailable(configuredBinary)) {
+	const usesManagedRuntimePath = input.managedDependencyId && input.currentValue?.trim()
+		? isManagedDependencyPath(input.currentValue.trim(), input.managedDependencyId)
+		: false;
+	const hasExplicitOverride = typeof input.currentValue === 'string'
+		&& input.currentValue.trim().length > 0
+		&& input.currentValue.trim() !== input.defaultValue;
+	if (hasExplicitOverride && !usesManagedRuntimePath && isExecutableAvailable(configuredBinary)) {
 		return configuredBinary;
 	}
 	if (input.managedDependencyId) {
@@ -174,6 +201,9 @@ async function ensureBinary(input: {
 				`Automatic ${input.label} installation failed`
 			);
 		}
+	}
+	if (isExecutableAvailable(configuredBinary)) {
+		return configuredBinary;
 	}
 	const fallbackBinary = input.fallbacks.find((candidate) => isExecutableAvailable(candidate));
 	if (fallbackBinary) {
@@ -213,6 +243,12 @@ async function ensureBinary(input: {
 	return String(answer).trim();
 }
 
+function isManagedDependencyPath(candidatePath: string, id: ManagedDependencyId): boolean {
+	const normalizedCandidate = path.resolve(candidatePath);
+	const dependencyRoot = path.resolve(path.join(getMissionRuntimeDirectory(), id));
+	return normalizedCandidate === dependencyRoot || normalizedCandidate.startsWith(`${dependencyRoot}${path.sep}`);
+}
+
 function isExecutableAvailable(command: string): boolean {
 	const trimmed = command.trim();
 	if (!trimmed) {
@@ -238,20 +274,21 @@ async function installManagedDependency(
 	interactive: boolean
 ): Promise<string> {
 	const dependency = getManagedDependency(id);
-	const localBinDirectory = path.join(os.homedir(), '.local', 'bin');
-	const targetPath = path.join(localBinDirectory, dependency.executableName);
-	if (isExecutableAvailable(targetPath)) {
+	const runtimeRoot = resolveManagedDependencyRoot(dependency);
+	const targetPath = path.join(runtimeRoot, dependency.executableName);
+	if (isExecutableAvailable(targetPath) && isManagedDependencyUsable(targetPath)) {
 		return targetPath;
 	}
-	if (!isExecutableAvailable('tar')) {
-		throw new Error(`Mission could not install ${dependency.label} automatically because 'tar' is not available on this machine.`);
+	const extractorBinary = dependency.archiveType === 'tar.gz' ? 'tar' : 'unzip';
+	if (!isExecutableAvailable(extractorBinary)) {
+		throw new Error(`Mission could not install ${dependency.label} automatically because '${extractorBinary}' is not available on this machine.`);
 	}
 	const installSpinner = interactive ? spinner() : undefined;
-	installSpinner?.start(`Installing ${dependency.label} into ${localBinDirectory}`);
+	installSpinner?.start(`Installing ${dependency.label} ${dependency.releaseTag} into ${runtimeRoot}`);
 	const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), `mission-install-${id}-`));
 	try {
-		await mkdir(localBinDirectory, { recursive: true });
-		const release = await fetchLatestRelease(dependency);
+		await mkdir(runtimeRoot, { recursive: true });
+		const release = await fetchPinnedRelease(dependency);
 		const asset = release.assets.find((candidate) => dependency.resolveAssetPattern().test(candidate.name));
 		if (!asset) {
 			throw new Error(
@@ -261,16 +298,19 @@ async function installManagedDependency(
 		const archivePath = path.join(temporaryRoot, asset.name);
 		const extractDirectory = path.join(temporaryRoot, 'extract');
 		await mkdir(extractDirectory, { recursive: true });
-		await downloadFile(asset.browser_download_url, archivePath);
-		await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDirectory], {
-			encoding: 'utf8'
-		});
+		const archiveContent = await downloadFile(asset.browser_download_url, archivePath);
+		verifyDownloadedAsset(asset.digest, archiveContent, dependency.label);
+		await extractArchive(archivePath, extractDirectory, dependency.archiveType);
 		const executablePath = await findExecutable(extractDirectory, dependency.executableName);
 		if (!executablePath) {
 			throw new Error(`Mission downloaded ${dependency.label} but could not find '${dependency.executableName}' in the archive.`);
 		}
+		await rm(targetPath, { force: true });
 		await copyFile(executablePath, targetPath);
 		await chmod(targetPath, 0o755);
+		if (!isManagedDependencyUsable(targetPath)) {
+			throw new Error(`Mission installed ${dependency.label} at ${targetPath} but it could not be executed on this machine.`);
+		}
 		installSpinner?.stop(`${dependency.label} installed at ${targetPath}`);
 		return targetPath;
 	} catch (error) {
@@ -287,13 +327,40 @@ function getManagedDependency(id: ManagedDependencyId): ManagedDependency {
 	if (process.platform !== 'linux') {
 		throw new Error(`Mission can only auto-install ${id} on Linux right now. Configure it manually on ${process.platform}.`);
 	}
+	if (id === 'bun') {
+		return {
+			id,
+			label: 'Bun runtime',
+			owner: 'oven-sh',
+			repo: 'bun',
+			releaseTag: 'bun-v1.3.12',
+			executableName: 'bun',
+			archiveType: 'zip',
+			resolveAssetPattern() {
+				const libcFamily = resolveLinuxLibcFamily();
+				if (process.arch === 'x64') {
+					return libcFamily === 'musl'
+						? /^bun-linux-x64-musl-baseline\.zip$/u
+						: /^bun-linux-x64-baseline\.zip$/u;
+				}
+				if (process.arch === 'arm64') {
+					return libcFamily === 'musl'
+						? /^bun-linux-aarch64-musl\.zip$/u
+						: /^bun-linux-aarch64\.zip$/u;
+				}
+				throw new Error(`Mission cannot auto-install Bun for Linux architecture '${process.arch}'.`);
+			}
+		};
+	}
 	if (id === 'zellij') {
 		return {
 			id,
 			label: 'zellij terminal manager',
 			owner: 'zellij-org',
 			repo: 'zellij',
+			releaseTag: 'v0.44.1',
 			executableName: 'zellij',
+			archiveType: 'tar.gz',
 			resolveAssetPattern() {
 				if (process.arch === 'x64') {
 					return /^zellij-x86_64-unknown-linux-musl\.tar\.gz$/u;
@@ -310,7 +377,9 @@ function getManagedDependency(id: ManagedDependencyId): ManagedDependency {
 		label: 'micro editor',
 		owner: 'micro-editor',
 		repo: 'micro',
+		releaseTag: 'v2.0.15',
 		executableName: 'micro',
+		archiveType: 'tar.gz',
 		resolveAssetPattern() {
 			if (process.arch === 'x64') {
 				return /^micro-.*-linux64-static\.tar\.gz$/u;
@@ -323,10 +392,28 @@ function getManagedDependency(id: ManagedDependencyId): ManagedDependency {
 	};
 }
 
-async function fetchLatestRelease(dependency: ManagedDependency): Promise<{
-	assets: Array<{ name: string; browser_download_url: string }>;
+function resolveManagedDependencyRoot(dependency: ManagedDependency): string {
+	return path.join(getMissionRuntimeDirectory(), dependency.id, dependency.releaseTag);
+}
+
+function resolveLinuxLibcFamily(): 'glibc' | 'musl' {
+	const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
+	const glibcVersion = report?.header?.glibcVersionRuntime;
+	return typeof glibcVersion === 'string' && glibcVersion.trim().length > 0 ? 'glibc' : 'musl';
+}
+
+function isManagedDependencyUsable(executablePath: string): boolean {
+	const result = spawnSync(executablePath, ['--version'], {
+		encoding: 'utf8',
+		stdio: 'ignore'
+	});
+	return result.status === 0;
+}
+
+async function fetchPinnedRelease(dependency: ManagedDependency): Promise<{
+	assets: Array<{ name: string; browser_download_url: string; digest?: string }>;
 }> {
-	const response = await fetch(`https://api.github.com/repos/${dependency.owner}/${dependency.repo}/releases/latest`, {
+	const response = await fetch(`https://api.github.com/repos/${dependency.owner}/${dependency.repo}/releases/tags/${encodeURIComponent(dependency.releaseTag)}`, {
 		headers: {
 			'Accept': 'application/vnd.github+json',
 			'User-Agent': 'mission-installer'
@@ -334,21 +421,21 @@ async function fetchLatestRelease(dependency: ManagedDependency): Promise<{
 	});
 	if (!response.ok) {
 		throw new Error(
-			`Mission could not resolve the latest ${dependency.label} release from GitHub (${response.status} ${response.statusText}).`
+			`Mission could not resolve ${dependency.label} ${dependency.releaseTag} from GitHub (${response.status} ${response.statusText}).`
 		);
 	}
 	const payload = await response.json() as {
-		assets?: Array<{ name?: string; browser_download_url?: string }>;
+		assets?: Array<{ name?: string; browser_download_url?: string; digest?: string }>;
 	};
 	return {
 		assets: (payload.assets ?? [])
-			.filter((asset): asset is { name: string; browser_download_url: string } =>
+			.filter((asset): asset is { name: string; browser_download_url: string; digest?: string } =>
 				typeof asset.name === 'string' && typeof asset.browser_download_url === 'string'
 			)
 	};
 }
 
-async function downloadFile(url: string, destinationPath: string): Promise<void> {
+async function downloadFile(url: string, destinationPath: string): Promise<Buffer> {
 	const response = await fetch(url, {
 		headers: {
 			'Accept': 'application/octet-stream',
@@ -360,6 +447,34 @@ async function downloadFile(url: string, destinationPath: string): Promise<void>
 	}
 	const content = Buffer.from(await response.arrayBuffer());
 	await writeFile(destinationPath, content);
+	return content;
+}
+
+function verifyDownloadedAsset(expectedDigest: string | undefined, content: Buffer, label: string): void {
+	if (!expectedDigest?.startsWith('sha256:')) {
+		return;
+	}
+	const expectedHash = expectedDigest.slice('sha256:'.length);
+	const observedHash = createHash('sha256').update(content).digest('hex');
+	if (observedHash !== expectedHash) {
+		throw new Error(`Mission downloaded ${label} but the SHA-256 digest did not match the pinned release asset.`);
+	}
+}
+
+async function extractArchive(
+	archivePath: string,
+	extractDirectory: string,
+	archiveType: ManagedDependencyArchiveType
+): Promise<void> {
+	if (archiveType === 'tar.gz') {
+		await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDirectory], {
+			encoding: 'utf8'
+		});
+		return;
+	}
+	await execFileAsync('unzip', ['-q', archivePath, '-d', extractDirectory], {
+		encoding: 'utf8'
+	});
 }
 
 async function findExecutable(rootPath: string, executableName: string): Promise<string | undefined> {

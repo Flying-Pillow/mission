@@ -1,6 +1,5 @@
 import type { AgentRunner } from '../../runtime/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../runtime/AgentRuntimeTypes.js';
-import type { MissionTaskLaunchMode } from '../../workflow/engine/types.js';
 import {
 	evaluateMissionTaskStatusIntent,
 	type MissionTaskState,
@@ -11,15 +10,12 @@ import { MissionSession } from './MissionSession.js';
 
 export type MissionTaskLaunchPolicy = {
 	autostart: boolean;
-	launchMode: MissionTaskLaunchMode;
 };
 
 export type MissionTaskOwner = {
 	isMissionDelivered(): boolean;
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
-	readTaskLaunchPolicy(taskId: string): Promise<MissionTaskLaunchPolicy>;
-	queueTask(taskId: string): Promise<void>;
-	startTaskExecution(taskId: string): Promise<void>;
+	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string }): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
 	blockTask(taskId: string, reason?: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
@@ -48,12 +44,11 @@ export class MissionTask {
 		return structuredClone(this.state);
 	}
 
-	public async start(): Promise<MissionTaskState> {
+	public async start(options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('start');
 		if (this.state.status === 'ready') {
-			await this.owner.queueTask(this.state.taskId);
-			await this.owner.startTaskExecution(this.state.taskId);
+			await this.owner.queueTask(this.state.taskId, options);
 		}
 		await this.refresh();
 		return this.toState();
@@ -84,20 +79,8 @@ export class MissionTask {
 	}
 
 	public async setAutostart(autostart: boolean): Promise<MissionTaskState> {
-		const launchPolicy = await this.owner.readTaskLaunchPolicy(this.state.taskId);
 		await this.owner.updateTaskLaunchPolicy(this.state.taskId, {
-			...launchPolicy,
 			autostart
-		});
-		await this.refresh();
-		return this.toState();
-	}
-
-	public async setLaunchMode(launchMode: MissionTaskLaunchMode): Promise<MissionTaskState> {
-		const launchPolicy = await this.owner.readTaskLaunchPolicy(this.state.taskId);
-		await this.owner.updateTaskLaunchPolicy(this.state.taskId, {
-			...launchPolicy,
-			launchMode
 		});
 		await this.refresh();
 		return this.toState();
@@ -148,8 +131,6 @@ export class MissionTask {
 		}
 
 		this.assertCanTransition('start');
-		await this.owner.queueTask(this.state.taskId);
-		await this.refresh();
 	}
 
 	private async refresh(): Promise<void> {

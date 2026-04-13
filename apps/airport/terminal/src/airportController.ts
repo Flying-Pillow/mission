@@ -9,7 +9,7 @@ import type {
 import { DaemonApi } from '@flying-pillow/mission-core';
 import { createMemo, createSignal } from 'solid-js';
 import type { TowerConnectRequest } from './tower/bootstrapTowerPane.js';
-import type { AirportConnection } from './AirportShell.js';
+import type { AirportConnection } from './AirportApp.js';
 import {
 	describeControlConnection,
 	isRecoverableDaemonDisconnect,

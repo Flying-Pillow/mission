@@ -62,7 +62,6 @@ import {
 	type MissionGateEvaluate,
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
-	type MissionAgentSessionLaunchRequest,
 	type MissionAgentSessionRecord,
 	type MissionSelect,
 	type Notification,
@@ -70,8 +69,7 @@ import {
 	type SessionCommand,
 	type SessionConsoleState,
 	type SessionControl,
-	type SessionPrompt,
-	type TaskLaunch
+	type SessionPrompt
 } from './contracts.js';
 import type {
 	AgentCommand,
@@ -152,8 +150,6 @@ export class MissionWorkspace {
 				return this.executeMissionAction((request.params ?? {}) as MissionActionExecute);
 			case 'mission.gate.evaluate':
 				return this.evaluateGate((request.params ?? {}) as MissionGateEvaluate);
-			case 'task.launch':
-				return this.launchTaskSession((request.params ?? {}) as TaskLaunch);
 			case 'session.list':
 				return this.listAgentSessions((request.params ?? {}) as MissionSelect);
 			case 'session.console.state':
@@ -499,72 +495,6 @@ export class MissionWorkspace {
 		return loadedMission.mission.getAgentSessions();
 	}
 
-	private async launchTaskSession(params: TaskLaunch) {
-		const loadedMission = await this.requireMissionContext(params.selector);
-		const request = await this.buildTaskLaunchRequest(loadedMission, params.taskId, params.request);
-		const runtime = this.requireRunner(this.resolveRunnerId(request.runnerId));
-		const session = await loadedMission.mission.launchAgentSession({
-			...request,
-			taskId: params.taskId,
-			runnerId: runtime.id,
-			transportId: runtime.transportId
-		});
-		void this.broadcastMissionStatusSnapshot(loadedMission);
-		return session;
-	}
-
-	private async buildTaskLaunchRequest(
-		loadedMission: LoadedMission,
-		taskId: string,
-		overrides: TaskLaunch['request'] = {}
-	): Promise<Omit<MissionAgentSessionLaunchRequest, 'taskId' | 'runnerId'> & { runnerId?: string }> {
-		const status = await loadedMission.mission.status();
-		const task = [...(status.activeTasks ?? []), ...(status.readyTasks ?? []), ...(status.stages ?? []).flatMap((stage) => stage.tasks)]
-			.find((candidate) => candidate.taskId === taskId);
-		if (!task) {
-			throw new Error(`Mission task '${taskId}' could not be resolved.`);
-		}
-		const workingDirectory = overrides['workingDirectory'] ?? status.missionDir ?? this.workspaceRoot;
-		const workingDirectoryExists = await fs.access(workingDirectory).then(
-			() => true,
-			() => false
-		);
-		if (!workingDirectoryExists) {
-			throw new Error(
-				`Mission task '${taskId}' cannot launch because working directory '${workingDirectory}' does not exist.`
-			);
-		}
-		return {
-			...(overrides.runnerId ? { runnerId: overrides.runnerId } : {}),
-			...(overrides.terminalSessionName ? { terminalSessionName: overrides.terminalSessionName } : {}),
-			...(overrides.transportId ? { transportId: overrides.transportId } : {}),
-			workingDirectory,
-			prompt: overrides['prompt']
-				?? buildMissionTaskLaunchPrompt(
-					task,
-					workingDirectory
-				),
-			title: overrides['title'] ?? task.subject,
-			assignmentLabel: overrides['assignmentLabel'] ?? task.relativePath,
-			scope: overrides['scope'] ?? {
-				kind: 'slice',
-				sliceTitle: task.subject,
-				verificationTargets: [],
-				requiredSkills: [],
-				dependsOn: [...task.dependsOn],
-				...(status.missionId ? { missionId: status.missionId } : {}),
-				...(status.missionDir ? { missionDir: status.missionDir } : {}),
-				...(task.stage ? { stage: task.stage } : {}),
-				...(task.taskId ? { taskId: task.taskId } : {}),
-				...(task.subject ? { taskTitle: task.subject } : {}),
-				...(task.subject ? { taskSummary: task.subject } : {}),
-				...(task.instruction ? { taskInstruction: task.instruction } : {})
-			},
-			...(overrides['operatorIntent'] ? { operatorIntent: overrides['operatorIntent'] } : {}),
-			startFreshSession: overrides['startFreshSession'] ?? true
-		};
-	}
-
 	private async getAgentConsoleState(
 		params: SessionConsoleState
 	): Promise<MissionAgentConsoleState | null> {
@@ -678,8 +608,7 @@ export class MissionWorkspace {
 						...stage,
 						taskLaunchPolicy: {
 							...stage.taskLaunchPolicy,
-							defaultAutostart: false,
-							launchMode: 'manual'
+							defaultAutostart: false
 						}
 					}
 				])

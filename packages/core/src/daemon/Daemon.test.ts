@@ -1458,6 +1458,18 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
 	const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
 	const workflow = createDefaultWorkflowSettings();
+	workflow.stages = Object.fromEntries(
+		Object.entries(workflow.stages).map(([stageId, stage]) => [
+			stageId,
+			{
+				...stage,
+				taskLaunchPolicy: {
+					...stage.taskLaunchPolicy,
+					defaultAutostart: false
+				}
+			}
+		])
+	) as typeof workflow.stages;
 	await adapter.materializeMissionWorktree(missionWorktreePath, adapter.deriveMissionBranchName(issueId, title));
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 	const mission = Mission.hydrate(

@@ -26,9 +26,10 @@ import { AgentSessionEventEmitter } from '../../runtime/AgentSessionEventEmitter
 import type { PersistedAgentSessionStore } from '../../runtime/PersistedAgentSessionStore.js';
 import type {
 	AgentCommand,
-	AgentCommandKind,
+	AgentControlKind,
 	AgentPrompt,
 	AgentSessionEvent,
+	AgentSessionLaunchRequest,
 	AgentSessionReference,
 	AgentSessionId,
 	AgentPromptSource,
@@ -70,7 +71,7 @@ export class MissionWorkflowRequestExecutor {
 			runners: this.runners.values(),
 			...(this.sessionStore ? { store: this.sessionStore } : {})
 		});
-		this.orchestratorSubscription = this.orchestrator.onDidEvent((event) => {
+		this.orchestratorSubscription = this.orchestrator.subscribe((event: AgentSessionEvent) => {
 			this.runtimeEventEmitter.fire(event);
 			const translated = this.translateRuntimeEvent(event);
 			if (translated) {
@@ -152,9 +153,16 @@ export class MissionWorkflowRequestExecutor {
 						break;
 					}
 
+					const requestedRunnerId =
+						typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'] : undefined;
+					const taskRunnerId = normalizeLegacyAgentRunnerId(task.agentRunner);
 					const runnerId =
-						normalizeLegacyAgentRunnerId(task.agentRunner) ??
-						(typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'] : undefined);
+						(requestedRunnerId && this.runners.has(requestedRunnerId) ? requestedRunnerId : undefined) ??
+						(taskRunnerId && this.runners.has(taskRunnerId) ? taskRunnerId : undefined) ??
+						(this.runners.size === 1 ? this.runners.keys().next().value : undefined) ??
+						(this.runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined) ??
+						requestedRunnerId ??
+						taskRunnerId;
 					if (!runnerId) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
@@ -170,25 +178,54 @@ export class MissionWorkflowRequestExecutor {
 
 					try {
 						const transportId = this.runners.get(runnerId)?.transportId;
-						const session = await this.orchestrator.startSession(runnerId, {
+						const promptText =
+							typeof request.payload['prompt'] === 'string' && request.payload['prompt'].trim()
+								? request.payload['prompt'].trim()
+								: task.instruction;
+						const launchRequest: AgentSessionLaunchRequest = {
 							missionId: input.missionId,
-							taskId: task.taskId,
-							workingDirectory: this.workingDirectoryResolver(task, input.descriptor),
-							...(transportId
-								? { transportId }
-								: {}),
+							workingDirectory:
+								typeof request.payload['workingDirectory'] === 'string' && request.payload['workingDirectory'].trim()
+									? request.payload['workingDirectory'].trim()
+									: this.workingDirectoryResolver(task, input.descriptor),
+							task: {
+								taskId: task.taskId,
+								stageId: task.stageId,
+								title: task.title,
+								description: task.title || task.instruction,
+								instruction: task.instruction
+							},
+							specification: {
+								summary: typeof request.payload['specificationSummary'] === 'string'
+									? request.payload['specificationSummary']
+									: '',
+								documents: []
+							},
+							runner: {
+								runnerId
+							},
+							transport: {
+								transportId: 'runway-terminal',
+								visibleInRunway: transportId === 'terminal'
+							},
+							resume: {
+								mode: 'new'
+							},
 							initialPrompt: {
 								source: 'engine',
-								text: task.instruction,
+								text: promptText,
 								...(task.title ? { title: task.title } : {}),
 								metadata: {
 									stageId: task.stageId,
 									...(this.defaultModel ? { defaultModel: this.defaultModel } : {}),
 									...(this.defaultMode ? { defaultMode: this.defaultMode } : {})
 								}
-							}
-						});
-						const snapshot = session.getSnapshot();
+							},
+							...(typeof request.payload['terminalSessionName'] === 'string' && request.payload['terminalSessionName'].trim()
+								? { metadata: { terminalSessionName: request.payload['terminalSessionName'].trim() } }
+								: {})
+						};
+						const snapshot = await this.orchestrator.launch(launchRequest);
 						events.push({
 							eventId: `${request.requestId}:session-started`,
 							type: 'session.started',
@@ -232,7 +269,7 @@ export class MissionWorkflowRequestExecutor {
 							? request.payload['title'].trim()
 							: undefined;
 
-					await this.orchestrator.submitPrompt(sessionId, {
+					await this.orchestrator.prompt(sessionId, {
 						source,
 						text,
 						...(title ? { title } : {})
@@ -242,11 +279,11 @@ export class MissionWorkflowRequestExecutor {
 				case 'session.command': {
 					const sessionId = String(request.payload['sessionId'] ?? '');
 					const kindValue = String(request.payload['kind'] ?? '').trim();
-					if (!sessionId || !isAgentCommandKind(kindValue)) {
+					if (!sessionId || !isAgentControlKind(kindValue)) {
 						break;
 					}
 
-					await this.orchestrator.submitCommand(sessionId, {
+					await this.orchestrator.control(sessionId, {
 						kind: kindValue
 					});
 					break;
@@ -256,7 +293,7 @@ export class MissionWorkflowRequestExecutor {
 					if (!sessionId) {
 						break;
 					}
-					await this.orchestrator.cancelSession(
+					await this.orchestrator.cancel(
 						sessionId,
 						'cancelled by workflow engine'
 					);
@@ -267,7 +304,7 @@ export class MissionWorkflowRequestExecutor {
 					if (!sessionId) {
 						break;
 					}
-					await this.orchestrator.terminateSession(
+					await this.orchestrator.terminate(
 						sessionId,
 						'terminated by workflow engine'
 					);
@@ -352,25 +389,49 @@ export class MissionWorkflowRequestExecutor {
 		runnerId: string;
 		request: AgentSessionStartRequest;
 	}): Promise<AgentSessionSnapshot> {
-		const session = await this.orchestrator.startSession(input.runnerId, input.request);
-		const snapshot = session.getSnapshot();
+		const snapshot = await this.orchestrator.launch({
+			missionId: input.request.missionId,
+			workingDirectory: input.request.workingDirectory,
+			task: {
+				taskId: input.request.taskId,
+				stageId: String(input.request.initialPrompt?.metadata?.['stageId'] ?? ''),
+				title: input.request.initialPrompt?.title ?? input.request.taskId,
+				description: input.request.initialPrompt?.title ?? input.request.initialPrompt?.text ?? input.request.taskId,
+				instruction: input.request.initialPrompt?.text ?? ''
+			},
+			specification: {
+				summary: '',
+				documents: []
+			},
+			runner: {
+				runnerId: input.runnerId
+			},
+			transport: {
+				transportId: 'runway-terminal'
+			},
+			resume: {
+				mode: 'new'
+			},
+			...(input.request.initialPrompt ? { initialPrompt: input.request.initialPrompt } : {}),
+			...(input.request.metadata ? { metadata: input.request.metadata } : {})
+		});
 		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
 		return snapshot;
 	}
 
 	public listRuntimeSessions(): AgentSessionSnapshot[] {
-		return this.orchestrator.listSessions();
+		return (this.orchestrator as AgentSessionOrchestrator).listSessions();
 	}
 
 	public async attachSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-		const session = await this.orchestrator.attachSession(reference);
+		const session = await (this.orchestrator as AgentSessionOrchestrator).attachSession(reference);
 		const snapshot = session.getSnapshot();
 		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
 		return snapshot;
 	}
 
 	public getRuntimeSession(sessionId: AgentSessionId): AgentSessionSnapshot | undefined {
-		return this.orchestrator.listSessions().find((session) => session.sessionId === sessionId);
+		return this.orchestrator.getSnapshot(sessionId);
 	}
 
 	public async cancelRuntimeSession(
@@ -379,17 +440,20 @@ export class MissionWorkflowRequestExecutor {
 		fallbackTaskId?: string
 	): Promise<MissionWorkflowEvent[]> {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
-		await this.orchestrator.cancelSession(sessionId, reason);
+		await this.orchestrator.cancel(sessionId, reason);
 		return this.drainRuntimeEvents();
 	}
 
 	public async promptRuntimeSession(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<MissionWorkflowEvent[]> {
-		await this.orchestrator.submitPrompt(sessionId, prompt);
+		await this.orchestrator.prompt(sessionId, prompt);
 		return this.drainRuntimeEvents();
 	}
 
 	public async commandRuntimeSession(sessionId: AgentSessionId, command: AgentCommand): Promise<MissionWorkflowEvent[]> {
-		await this.orchestrator.submitCommand(sessionId, command);
+		await this.orchestrator.control(sessionId, {
+			kind: mapCommandKindToControlKind(command.kind),
+			...(command.metadata ? { metadata: command.metadata } : {})
+		});
 		return this.drainRuntimeEvents();
 	}
 
@@ -399,7 +463,7 @@ export class MissionWorkflowRequestExecutor {
 		fallbackTaskId?: string
 	): Promise<MissionWorkflowEvent[]> {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
-		await this.orchestrator.terminateSession(sessionId, reason);
+		await this.orchestrator.terminate(sessionId, reason);
 		return this.drainRuntimeEvents();
 	}
 
@@ -537,11 +601,25 @@ export class MissionWorkflowRequestExecutor {
 	}
 }
 
-function isAgentCommandKind(value: string): value is AgentCommandKind {
-	return value === 'interrupt'
-		|| value === 'continue'
+function isAgentControlKind(value: string): value is AgentControlKind {
+	return value === 'pause'
+		|| value === 'resume'
 		|| value === 'checkpoint'
+		|| value === 'nudge'
 		|| value === 'finish';
+}
+
+function mapCommandKindToControlKind(kind: AgentCommand['kind']): AgentControlKind {
+	switch (kind) {
+		case 'interrupt':
+			return 'pause';
+		case 'continue':
+			return 'resume';
+		case 'checkpoint':
+			return 'checkpoint';
+		case 'finish':
+			return 'finish';
+	}
 }
 
 function hasMatchingTerminalLifecycle(

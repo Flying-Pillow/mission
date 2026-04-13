@@ -18,6 +18,12 @@ afterEach(() => {
 });
 
 describe('buildBriefingRoomCommand', () => {
+	it('enables soft word wrapping for the default micro editor', () => {
+		expect(buildBriefingRoomCommand('/repo', '/repo/docs/brief.md')).toMatch(
+			/^'.*micro' '-softwrap' 'true' '-wordwrap' 'true' '-autosave' '8' '\/repo\/docs\/brief\.md'$/u
+		);
+	});
+
 	it('appends the artifact path to explicit editor commands', () => {
 		process.env['MISSION_EDITOR_COMMAND'] = 'code -r';
 

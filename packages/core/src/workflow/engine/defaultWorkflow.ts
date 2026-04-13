@@ -28,8 +28,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 stageId: 'prd',
                 displayName: 'PRD',
                 taskLaunchPolicy: {
-                    defaultAutostart: true,
-                    launchMode: 'automatic'
+                    defaultAutostart: true
                 },
                 completionPolicy: {
                     requireAllTasksCompleted: true
@@ -39,8 +38,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 stageId: 'spec',
                 displayName: 'Spec',
                 taskLaunchPolicy: {
-                    defaultAutostart: true,
-                    launchMode: 'automatic'
+                    defaultAutostart: true
                 },
                 completionPolicy: {
                     requireAllTasksCompleted: true
@@ -50,8 +48,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 stageId: 'implementation',
                 displayName: 'Implement',
                 taskLaunchPolicy: {
-                    defaultAutostart: false,
-                    launchMode: 'manual'
+                    defaultAutostart: false
                 },
                 completionPolicy: {
                     requireAllTasksCompleted: true
@@ -61,8 +58,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 stageId: 'audit',
                 displayName: 'Audit',
                 taskLaunchPolicy: {
-                    defaultAutostart: true,
-                    launchMode: 'automatic'
+                    defaultAutostart: true
                 },
                 completionPolicy: {
                     requireAllTasksCompleted: true
@@ -72,8 +68,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 stageId: 'delivery',
                 displayName: 'Delivery',
                 taskLaunchPolicy: {
-                    defaultAutostart: false,
-                    launchMode: 'manual'
+                    defaultAutostart: false
                 },
                 completionPolicy: {
                     requireAllTasksCompleted: true

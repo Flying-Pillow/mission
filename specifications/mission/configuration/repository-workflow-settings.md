@@ -170,7 +170,7 @@ Example operations:
 
 - replace `stageOrder` with a reordered array
 - remove a gate from `/gates/1`
-- replace `/stages/implementation/taskLaunchPolicy/launchMode`
+- replace `/stages/implementation/taskLaunchPolicy/defaultAutostart`
 
 The daemon must not accept ambiguous deep-partial object merges for workflow settings updates.
 
@@ -199,7 +199,7 @@ Minimum required validations:
 - each `stages[stageId]` has matching `stageId`
 - each gate references a valid stage when `stageId` is present
 - task generation rules reference known stages
-- task launch policy enums are valid
+- task launch policy booleans are valid
 
 Validation failures must be deterministic and surface-safe.
 

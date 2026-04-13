@@ -56,6 +56,8 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
 
 Mission is designed to be lightweight and frictionless to install in any existing repository.
 
+On supported Linux systems, Mission provisions a pinned runtime envelope for Bun, zellij, and micro under its own config directory so the Airport surface does not depend on whatever happens to be installed in your general user bin path.
+
 **1. Run the published CLI package:**
 ```bash
 npx @flying-pillow/mission

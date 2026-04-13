@@ -66,43 +66,44 @@ export function buildKeyHintsText(input: {
 	commandPanelMode: 'input' | 'toolbar';
 	confirmingToolbarCommand: boolean;
 }): string {
+	const globalPaneCycleHint = ' | Alt+Left/Right pane';
 	if (input.activePicker === 'command-select') {
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | Enter choose | Backspace filter | Esc close | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | ↑/↓ navigate | Enter choose | Backspace filter | Esc close${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
 	if (input.focusArea === 'header') {
-		return 'Tab/Shift+Tab focus | ←/→ tabs | Enter open | ↑/↓ move focus | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | ←/→ tabs | Enter open | ↑/↓ move focus${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
 	if (input.focusArea === 'command') {
 		if (input.commandPanelMode === 'toolbar') {
 			if (input.confirmingToolbarCommand) {
-				return 'Tab/Shift+Tab focus | ←/→ choose confirm/cancel | Enter apply | Esc cancel | Ctrl+Q quit';
+				return `Tab/Shift+Tab focus | ←/→ choose confirm/cancel | Enter apply | Esc cancel${globalPaneCycleHint} | Ctrl+Q quit`;
 			}
-			return 'Tab/Shift+Tab focus | ←/→ command | Enter run | Ctrl+Q quit';
+			return `Tab/Shift+Tab focus | ←/→ command | Enter run${globalPaneCycleHint} | Ctrl+Q quit`;
 		}
 		if (input.currentFlowStep?.kind === 'text') {
-			return 'Tab/Shift+Tab focus | Enter continue | Esc cancel | Ctrl+Q quit';
+			return `Tab/Shift+Tab focus | Enter continue | Esc cancel${globalPaneCycleHint} | Ctrl+Q quit`;
 		}
 		if (input.currentFlowStep) {
-			return 'Tab/Shift+Tab focus | Enter continue | Ctrl+Q quit';
+			return `Tab/Shift+Tab focus | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 		}
-		return 'Tab/Shift+Tab focus | Enter submit | Esc clear | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | Enter submit | Esc clear${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
 	if (input.focusArea === 'flow' && input.currentFlowStep?.kind === 'selection') {
 		if (input.currentFlowStep.selectionMode === 'multiple') {
-			return 'Tab/Shift+Tab focus | ↑/↓ navigate | Space toggle | ←/→ step | Enter continue | Ctrl+Q quit';
+			return `Tab/Shift+Tab focus | ↑/↓ navigate | Space toggle | ←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 		}
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
 	if (input.focusArea === 'flow' && input.towerMode === 'repository') {
 		if (input.currentFlowStep?.kind === 'text') {
-			return 'Tab/Shift+Tab focus | Ctrl+←/→ step | Enter continue | Ctrl+Q quit';
+			return `Tab/Shift+Tab focus | Ctrl+←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 		}
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
 	if (input.focusArea === 'tree') {
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ move | PgUp/PgDn scroll | Enter select | Ctrl+Q quit';
+		return `Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ move | PgUp/PgDn scroll | Enter select${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
-	return 'Tab/Shift+Tab focus | Ctrl+Q quit';
+	return `Tab/Shift+Tab focus${globalPaneCycleHint} | Ctrl+Q quit`;
 }
 
 export function selectorFromTowerState(

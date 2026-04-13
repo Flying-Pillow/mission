@@ -35,8 +35,6 @@ export const MISSION_TASK_LIFECYCLE_STATES = [
 
 export type MissionTaskLifecycleState = (typeof MISSION_TASK_LIFECYCLE_STATES)[number];
 
-export type MissionTaskLaunchMode = 'automatic' | 'manual';
-
 export type MissionPauseReason =
     | 'human-requested'
     | 'panic'
@@ -60,7 +58,6 @@ export type MissionGateState = 'blocked' | 'passed';
 
 export interface MissionTaskRuntimeSettings {
     autostart: boolean;
-    launchMode: MissionTaskLaunchMode;
 }
 
 export interface MissionTaskRuntimeState {
@@ -104,6 +101,11 @@ export interface MissionTaskLaunchRequest {
     requestedAt: string;
     requestedBy: 'system' | 'human' | 'daemon';
     causedByEventId?: string;
+    runnerId?: string;
+    prompt?: string;
+    workingDirectory?: string;
+    terminalSessionName?: string;
+    dispatchedAt?: string;
 }
 
 export interface MissionStageRuntimeProjection {
@@ -168,7 +170,6 @@ export interface WorkflowExecutionSettings {
 
 export interface WorkflowStageTaskLaunchPolicy {
     defaultAutostart: boolean;
-    launchMode: MissionTaskLaunchMode;
 }
 
 export interface WorkflowStageDefinition {
@@ -293,12 +294,15 @@ export interface TaskLaunchPolicyChangedEvent extends MissionWorkflowEventBase {
     type: 'task.launch-policy.changed';
     taskId: string;
     autostart: boolean;
-    launchMode: MissionTaskLaunchMode;
 }
 
 export interface TaskQueuedEvent extends MissionWorkflowEventBase {
     type: 'task.queued';
     taskId: string;
+    runnerId?: string;
+    prompt?: string;
+    workingDirectory?: string;
+    terminalSessionName?: string;
 }
 
 export interface TaskStartedEvent extends MissionWorkflowEventBase {

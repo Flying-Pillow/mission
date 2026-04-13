@@ -17,6 +17,7 @@ import type {
 } from '../../runtime/AgentRuntimeTypes.js';
 
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
+import { DEFAULT_AGENT_RUNNER_ID, normalizeLegacyAgentRunnerId } from '../../lib/agentRuntimes.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
 import { buildMissionTaskLaunchPrompt } from './taskLaunchPrompt.js';
@@ -48,7 +49,6 @@ import {
 	DEFAULT_WORKFLOW_VERSION,
 	createDraftMissionWorkflowRuntimeState,
 	createMissionWorkflowConfigurationSnapshot,
-	type MissionTaskLaunchMode,
 	type MissionWorkflowEvent,
 	type MissionRuntimeRecord,
 	type WorkflowGlobalSettings
@@ -405,11 +405,7 @@ export class Mission {
 			return this.status();
 		}
 		if (actionId.startsWith('task.start.')) {
-			await this.startTask(actionId.slice('task.start.'.length));
-			return this.status();
-		}
-		if (actionId.startsWith('task.launch.')) {
-			await this.launchTaskAction(actionId.slice('task.launch.'.length), options);
+			await this.startTask(actionId.slice('task.start.'.length), options);
 			return this.status();
 		}
 		if (actionId.startsWith('task.done.')) {
@@ -430,14 +426,6 @@ export class Mission {
 		}
 		if (actionId.startsWith('task.autostart.disable.')) {
 			await this.setTaskAutostart(actionId.slice('task.autostart.disable.'.length), false);
-			return this.status();
-		}
-		if (actionId.startsWith('task.launch-mode.automatic.')) {
-			await this.setTaskLaunchMode(actionId.slice('task.launch-mode.automatic.'.length), 'automatic');
-			return this.status();
-		}
-		if (actionId.startsWith('task.launch-mode.manual.')) {
-			await this.setTaskLaunchMode(actionId.slice('task.launch-mode.manual.'.length), 'manual');
 			return this.status();
 		}
 		if (actionId.startsWith('session.cancel.')) {
@@ -491,8 +479,16 @@ export class Mission {
 		await this.status();
 	}
 
-	public async startTask(taskId: string): Promise<void> {
-		await (await this.requireTask(taskId)).start();
+	public async startTask(taskId: string, options: { terminalSessionName?: string } = {}): Promise<void> {
+		const task = await this.requireTask(taskId);
+		const taskState = task.toState();
+		const runnerId = this.resolveTaskStartRunnerId(taskState);
+		await task.start({
+			...(runnerId ? { runnerId } : {}),
+			prompt: buildMissionTaskLaunchPrompt(taskState, this.adapter.getMissionWorkspacePath(this.missionDir)),
+			workingDirectory: this.adapter.getMissionWorkspacePath(this.missionDir),
+			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
+		});
 	}
 
 	public async completeTask(taskId: string): Promise<void> {
@@ -509,13 +505,6 @@ export class Mission {
 
 	public async setTaskAutostart(taskId: string, autostart: boolean): Promise<void> {
 		await (await this.requireTask(taskId)).setAutostart(autostart);
-	}
-
-	public async setTaskLaunchMode(
-		taskId: string,
-		launchMode: MissionTaskLaunchMode
-	): Promise<void> {
-		await (await this.requireTask(taskId)).setLaunchMode(launchMode);
 	}
 
 	public async generateTasksForStage(stageId: MissionStageId): Promise<void> {
@@ -1074,12 +1063,11 @@ export class Mission {
 		return runner;
 	}
 
-	private resolveDefaultRunnerId(): string {
-		const runnerId = this.agentRunners.keys().next().value;
-		if (!runnerId) {
-			throw new Error('No mission agent runners are configured for this mission.');
-		}
-		return runnerId;
+	private resolveTaskStartRunnerId(task: MissionTaskState): string | undefined {
+		const taskRunnerId = normalizeLegacyAgentRunnerId(task.agent);
+		return (taskRunnerId && this.agentRunners.has(taskRunnerId) ? taskRunnerId : undefined)
+			?? (this.agentRunners.size === 1 ? this.agentRunners.keys().next().value : undefined)
+			?? (this.agentRunners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
 	}
 
 	private async startTaskRuntimeSession(
@@ -1135,41 +1123,6 @@ export class Mission {
 			reason: error instanceof Error ? error.message : String(error)
 		});
 		await this.refresh();
-	}
-
-	private async launchTaskAction(
-		taskId: string,
-		options: { terminalSessionName?: string } = {}
-	): Promise<MissionAgentSessionRecord> {
-		const task = await this.requireTask(taskId);
-		const taskState = task.toState();
-		const status = await this.status();
-		const missionDir = status.missionDir ?? this.adapter.getMissionWorkspacePath(this.missionDir);
-		const session = await task.launchSession({
-			runnerId: this.resolveDefaultRunnerId(),
-			transportId: this.requireAgentRunner(this.resolveDefaultRunnerId()).transportId,
-			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {}),
-			workingDirectory: missionDir,
-			prompt: buildMissionTaskLaunchPrompt(taskState, missionDir),
-			title: taskState.subject,
-			assignmentLabel: taskState.relativePath,
-			scope: {
-				kind: 'slice',
-				sliceTitle: taskState.subject,
-				verificationTargets: [],
-				requiredSkills: [],
-				dependsOn: [...taskState.dependsOn],
-				...(status.missionId ? { missionId: status.missionId } : {}),
-				...(status.missionDir ? { missionDir: status.missionDir } : {}),
-				stage: taskState.stage,
-				taskId: taskState.taskId,
-				taskTitle: taskState.subject,
-				taskSummary: taskState.subject,
-				taskInstruction: taskState.instruction
-			},
-			startFreshSession: true
-		});
-		return session.toRecord();
 	}
 
 	private requireAgentSessionRecord(sessionId: string): MissionAgentSessionRecord {
@@ -1230,15 +1183,7 @@ export class Mission {
 		return new MissionTask({
 			isMissionDelivered: () => this.isDelivered(this.lastKnownStatus?.stages ?? []),
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
-			readTaskLaunchPolicy: async (taskId) => {
-				const taskState = await this.requireWorkflowTask(taskId);
-				return {
-					autostart: taskState.runtime.autostart,
-					launchMode: taskState.runtime.launchMode
-				};
-			},
-			queueTask: (taskId) => this.queueTask(taskId),
-			startTaskExecution: (taskId) => this.startTaskExecution(taskId),
+			queueTask: (taskId, options) => this.queueTask(taskId, options),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
 			blockTask: (taskId, reason) => this.blockTaskExecution(taskId, reason),
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
@@ -1501,12 +1446,14 @@ export class Mission {
 		this.lastKnownStatus = undefined;
 	}
 
-	private async queueTask(taskId: string): Promise<void> {
-		await this.applyWorkflowEvent(this.createWorkflowEvent('task.queued', { taskId }));
-	}
-
-	private async startTaskExecution(taskId: string): Promise<void> {
-		await this.applyWorkflowEvent(this.createWorkflowEvent('task.started', { taskId }));
+	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<void> {
+		await this.applyWorkflowEvent(this.createWorkflowEvent('task.queued', {
+			taskId,
+			...(options.runnerId?.trim() ? { runnerId: options.runnerId.trim() } : {}),
+			...(options.prompt?.trim() ? { prompt: options.prompt.trim() } : {}),
+			...(options.workingDirectory?.trim() ? { workingDirectory: options.workingDirectory.trim() } : {}),
+			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
+		}));
 	}
 
 	private async completeTaskExecution(taskId: string): Promise<void> {
@@ -1526,12 +1473,11 @@ export class Mission {
 
 	private async updateTaskLaunchPolicy(
 		taskId: string,
-		launchPolicy: { autostart: boolean; launchMode: MissionTaskLaunchMode }
+		launchPolicy: { autostart: boolean }
 	): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.launch-policy.changed', {
 			taskId,
-			autostart: launchPolicy.autostart,
-			launchMode: launchPolicy.launchMode
+			autostart: launchPolicy.autostart
 		}));
 	}
 }
@@ -1571,7 +1517,6 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Oper
 
 	for (const task of getOrderedTasks(input)) {
 		actions.push(buildTaskStartAction(input, task));
-		actions.push(buildTaskLaunchAction(input, task));
 		actions.push(buildTaskDoneAction(input, task));
 		actions.push(buildTaskBlockedAction(input, task));
 		actions.push(buildTaskReopenAction(input, task));
@@ -1749,27 +1694,6 @@ function buildTaskStartAction(input: MissionAvailableActionsInput, task: Mission
 		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
 		metadata: {
 			stageId: task.stageId as MissionStageId,
-			launchMode: task.runtime.launchMode,
-			autostart: task.runtime.autostart
-		}
-	};
-}
-
-function buildTaskLaunchAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
-	const enabled = isTaskLaunchEnabled(input, task);
-	return {
-		id: `task.launch.${task.taskId}`,
-		label: 'Launch Agent Session',
-		action: '/launch',
-		scope: 'task',
-		targetId: task.taskId,
-		...buildAvailability(enabled, describeTaskLaunchUnavailable(input, task)),
-		ui: { toolbarLabel: 'LAUNCH', requiresConfirmation: false },
-		flow: { targetLabel: 'TASK', actionLabel: 'LAUNCH', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: {
-			stageId: task.stageId as MissionStageId,
-			launchMode: task.runtime.launchMode,
 			autostart: task.runtime.autostart
 		}
 	};
@@ -1825,11 +1749,10 @@ function buildTaskReopenAction(input: MissionAvailableActionsInput, task: Missio
 
 function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor[] {
 	const actions: OperatorActionDescriptor[] = [];
-	const changeErrors = (autostart: boolean, launchMode = task.runtime.launchMode) => getValidationErrors(input, {
+	const changeErrors = (autostart: boolean) => getValidationErrors(input, {
 		type: 'task.launch-policy.changed',
 		taskId: task.taskId,
-		autostart,
-		launchMode
+		autostart
 	});
 
 	if (task.runtime.autostart) {
@@ -1844,7 +1767,7 @@ function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task:
 			ui: { toolbarLabel: 'AUTOSTART OFF', requiresConfirmation: false },
 			flow: { targetLabel: 'TASK', actionLabel: 'DISABLE AUTOSTART', steps: [] },
 			presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-			metadata: { stageId: task.stageId as MissionStageId, autostart: false, launchMode: task.runtime.launchMode }
+			metadata: { stageId: task.stageId as MissionStageId, autostart: false }
 		});
 	} else {
 		const errors = changeErrors(true);
@@ -1858,24 +1781,9 @@ function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task:
 			ui: { toolbarLabel: 'AUTOSTART ON', requiresConfirmation: false },
 			flow: { targetLabel: 'TASK', actionLabel: 'ENABLE AUTOSTART', steps: [] },
 			presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-			metadata: { stageId: task.stageId as MissionStageId, autostart: true, launchMode: task.runtime.launchMode }
+			metadata: { stageId: task.stageId as MissionStageId, autostart: true }
 		});
 	}
-
-	const targetLaunchMode = task.runtime.launchMode === 'automatic' ? 'manual' : 'automatic';
-	const launchModeErrors = changeErrors(task.runtime.autostart, targetLaunchMode);
-	actions.push({
-		id: `task.launch-mode.${targetLaunchMode}.${task.taskId}`,
-		label: targetLaunchMode === 'automatic' ? 'Switch To Automatic Launch' : 'Require Manual Start',
-		action: targetLaunchMode === 'automatic' ? '/task launch-mode automatic' : '/task launch-mode manual',
-		scope: 'task',
-		targetId: task.taskId,
-		...buildAvailability(launchModeErrors.length === 0, launchModeErrors[0]),
-		ui: { toolbarLabel: targetLaunchMode === 'automatic' ? 'AUTO LAUNCH' : 'MANUAL START', requiresConfirmation: false },
-		flow: { targetLabel: 'TASK', actionLabel: targetLaunchMode === 'automatic' ? 'SWITCH TO AUTOMATIC LAUNCH' : 'REQUIRE MANUAL START', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: { stageId: task.stageId as MissionStageId, autostart: task.runtime.autostart, launchMode: targetLaunchMode }
-	});
 
 	return actions;
 }
@@ -2010,59 +1918,6 @@ function describeTaskStartUnavailable(input: MissionAvailableActionsInput, task:
 	}
 }
 
-function isTaskLaunchEnabled(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): boolean {
-	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
-		return false;
-	}
-	if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
-		return false;
-	}
-	if (task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
-		return false;
-	}
-	return !input.sessions.some(
-		(session) =>
-			session.taskId === task.taskId
-			&& (
-				session.lifecycleState === 'starting'
-				|| session.lifecycleState === 'running'
-				|| session.lifecycleState === 'awaiting-input'
-			)
-	);
-}
-
-function describeTaskLaunchUnavailable(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): string {
-	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
-		return 'Clear panic before launching an agent.';
-	}
-	if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
-		return 'Resume the mission before launching an agent.';
-	}
-	if (input.sessions.some((session) => session.taskId === task.taskId && (
-		session.lifecycleState === 'starting'
-		|| session.lifecycleState === 'running'
-		|| session.lifecycleState === 'awaiting-input'
-	))) {
-		return 'Task already has an active agent session.';
-	}
-	if (task.lifecycle === 'ready' || task.lifecycle === 'queued' || task.lifecycle === 'running') {
-		return 'Task is ready to launch.';
-	}
-	if (task.lifecycle === 'pending') {
-		return task.blockedByTaskIds.length > 0 ? `Waiting on ${task.blockedByTaskIds.join(', ')}.` : 'Waiting for an earlier stage to become eligible.';
-	}
-	if (task.lifecycle === 'blocked') {
-		return 'Task is blocked.';
-	}
-	if (task.lifecycle === 'completed') {
-		return 'Task is already completed.';
-	}
-	if (task.lifecycle === 'failed' || task.lifecycle === 'cancelled') {
-		return 'Reopen the task before launching it again.';
-	}
-	return 'Task is not available for launch.';
-}
-
 function isActiveMissionAgentSession(lifecycleState: MissionAgentLifecycleState): boolean {
 	return lifecycleState === 'starting'
 		|| lifecycleState === 'running'
@@ -2087,7 +1942,7 @@ function getValidationErrors(
 		| { type: 'task.completed'; taskId: string }
 		| { type: 'task.blocked'; taskId: string; reason: string }
 		| { type: 'task.reopened'; taskId: string }
-		| { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean; launchMode: MissionRuntimeRecord['runtime']['tasks'][number]['runtime']['launchMode'] }
+		| { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean }
 ): string[] {
 	return getMissionWorkflowEventValidationErrors(
 		input.runtime,

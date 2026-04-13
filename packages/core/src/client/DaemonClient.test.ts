@@ -13,6 +13,9 @@ import { DaemonClient } from './DaemonClient.js';
 describe('DaemonClient', () => {
 	it('connects through the deterministic socket path when the manifest is missing', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'daemon-client-'));
+		const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'daemon-client-runtime-'));
+		const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+		process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
 		const socketPath = resolveDaemonSocketPath();
 		const server = net.createServer();
 
@@ -51,6 +54,12 @@ describe('DaemonClient', () => {
 					() => undefined
 				);
 			}
+			if (previousRuntimeDirectory === undefined) {
+				delete process.env['XDG_RUNTIME_DIR'];
+			} else {
+				process.env['XDG_RUNTIME_DIR'] = previousRuntimeDirectory;
+			}
+			await fs.rm(runtimeRoot, { recursive: true, force: true });
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});

@@ -159,8 +159,7 @@ function applyEventMutation(
                     lifecycle: 'pending',
                     blockedByTaskIds: [],
                     runtime: {
-                        autostart: stageDefinition.taskLaunchPolicy.defaultAutostart,
-                        launchMode: stageDefinition.taskLaunchPolicy.launchMode
+                        autostart: stageDefinition.taskLaunchPolicy.defaultAutostart
                     },
                     ...(task.agentRunner ? { agentRunner: task.agentRunner } : {}),
                     retries: 0,
@@ -176,8 +175,7 @@ function applyEventMutation(
                     ? {
                         ...task,
                         runtime: {
-                            autostart: event.autostart,
-                            launchMode: event.launchMode
+                            autostart: event.autostart
                         },
                         updatedAt: event.occurredAt
                     }
@@ -194,6 +192,19 @@ function applyEventMutation(
                     }
                     : task
             );
+            if (!state.launchQueue.some((request) => request.taskId === event.taskId)) {
+                state.launchQueue.push({
+                    requestId: `task.launch:${event.taskId}:${event.occurredAt}`,
+                    taskId: event.taskId,
+                    requestedAt: event.occurredAt,
+                    requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
+                    causedByEventId: event.eventId,
+                    ...(event.runnerId ? { runnerId: event.runnerId } : {}),
+                    ...(event.prompt ? { prompt: event.prompt } : {}),
+                    ...(event.workingDirectory ? { workingDirectory: event.workingDirectory } : {}),
+                    ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {})
+                });
+            }
             return;
         case 'task.started':
             state.tasks = state.tasks.map((task) =>
@@ -512,10 +523,64 @@ function queueAutostartTasks(
     configuration: MissionWorkflowConfigurationSnapshot,
     requests: MissionWorkflowRequest[]
 ): void {
-    void state;
-    void event;
-    void configuration;
-    void requests;
+    if (state.lifecycle !== 'running' || state.pause.paused || state.panic.active) {
+        return;
+    }
+
+    const queuedLaunchTaskIds = new Set(state.launchQueue.map((request) => request.taskId));
+    const activeSessionTaskIds = new Set(
+        state.sessions
+            .filter((session) => session.lifecycle === 'starting' || session.lifecycle === 'running')
+            .map((session) => session.taskId)
+    );
+    const activeTaskCount = state.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
+    const activeSessionCount = state.sessions.filter((session) => session.lifecycle === 'starting' || session.lifecycle === 'running').length;
+
+    let availableTaskSlots = Math.max(0, configuration.workflow.execution.maxParallelTasks - activeTaskCount);
+    let availableSessionSlots = Math.max(0, configuration.workflow.execution.maxParallelSessions - activeSessionCount);
+
+    for (const task of state.tasks) {
+        if (task.lifecycle !== 'ready' || !task.runtime.autostart) {
+            continue;
+        }
+        if (queuedLaunchTaskIds.has(task.taskId) || activeSessionTaskIds.has(task.taskId)) {
+            continue;
+        }
+        if (availableTaskSlots < 1) {
+            break;
+        }
+        task.lifecycle = 'queued';
+        task.updatedAt = event.occurredAt;
+        state.launchQueue.push({
+            requestId: `task.launch:${task.taskId}:${event.occurredAt}`,
+            taskId: task.taskId,
+            requestedAt: event.occurredAt,
+            requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
+            causedByEventId: event.eventId
+        });
+        queuedLaunchTaskIds.add(task.taskId);
+        availableTaskSlots -= 1;
+    }
+
+    for (const launchRequest of state.launchQueue) {
+        if (launchRequest.dispatchedAt || activeSessionTaskIds.has(launchRequest.taskId)) {
+            continue;
+        }
+        if (availableSessionSlots < 1) {
+            break;
+        }
+        const request = createRequest('session.launch', event.occurredAt, {
+            taskId: launchRequest.taskId,
+            ...(launchRequest.runnerId ? { runnerId: launchRequest.runnerId } : {}),
+            ...(launchRequest.prompt ? { prompt: launchRequest.prompt } : {}),
+            ...(launchRequest.workingDirectory ? { workingDirectory: launchRequest.workingDirectory } : {}),
+            ...(launchRequest.terminalSessionName ? { terminalSessionName: launchRequest.terminalSessionName } : {})
+        });
+        launchRequest.dispatchedAt = event.occurredAt;
+        launchRequest.requestId = request.requestId;
+        requests.push(request);
+        availableSessionSlots -= 1;
+    }
 }
 
 function buildStageProjections(

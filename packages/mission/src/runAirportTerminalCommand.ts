@@ -1,13 +1,15 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { readMissionUserConfig } from '@flying-pillow/mission-core';
 import type { EntryContext } from './entryContext.js';
 
 const require = createRequire(import.meta.url);
 
 export async function runAirportTerminalCommand(command: string, context: EntryContext): Promise<void> {
 	const airportTerminalCliEntryPath = resolveAirportTerminalCliEntryPath();
-	const child = spawn('bun', [airportTerminalCliEntryPath, command, ...context.args], {
+	const bunBinary = readMissionUserConfig()?.bunBinary?.trim() || 'bun';
+	const child = spawn(bunBinary, [airportTerminalCliEntryPath, command, ...context.args], {
 		stdio: 'inherit',
 		env: {
 			...process.env,
@@ -20,7 +22,7 @@ export async function runAirportTerminalCommand(command: string, context: EntryC
 	await new Promise<void>((resolve, reject) => {
 		child.once('error', (error) => {
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-				reject(new Error('Bun is required to run the Airport terminal surface. Install Bun or run Mission through a pnpm script that exposes the workspace Bun binary.'));
+				reject(new Error(`Mission could not execute the configured Bun runtime '${bunBinary}'. Run 'mission install' to provision or repair the Mission runtime envelope.`));
 				return;
 			}
 			reject(error);

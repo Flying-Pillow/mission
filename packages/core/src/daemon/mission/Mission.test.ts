@@ -257,7 +257,7 @@ describe('Mission', () => {
         }
     });
 
-    it('exposes and executes a task launch action for ready tasks', async () => {
+    it('starts a ready task by launching its agent session', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
@@ -276,16 +276,19 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const launchAction = (await mission.listAvailableActions()).find(
-                    (action) => action.id === `task.launch.${taskId}`
+                const startAction = (await mission.listAvailableActions()).find(
+                    (action) => action.id === `task.start.${taskId}`
                 );
-                expect(launchAction).toMatchObject({
-                    action: '/launch',
+                expect(startAction).toMatchObject({
+                    action: '/task start',
                     enabled: true,
                     targetId: taskId
                 });
+                expect((await mission.listAvailableActions()).some(
+                    (action) => action.id === `task.launch.${taskId}`
+                )).toBe(false);
 
-                const nextStatus = await mission.executeAction(`task.launch.${taskId}`, [], {
+                const nextStatus = await mission.executeAction(`task.start.${taskId}`, [], {
                     terminalSessionName: 'airport-terminal-session'
                 });
                 expect(await runner.listSessions()).toHaveLength(1);
@@ -311,7 +314,7 @@ describe('Mission', () => {
         }
     });
 
-    it('launches an agent session for a running task without violating workflow validation', async () => {
+    it('does not expose a separate launch action once a task is already running', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
@@ -331,15 +334,16 @@ describe('Mission', () => {
 
                 const runningStatus = await mission.executeAction(`task.start.${taskId}`);
                 expect(runningStatus.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('running');
-
-                const launchedStatus = await mission.executeAction(`task.launch.${taskId}`);
                 expect(await runner.listSessions()).toHaveLength(1);
-                expect(launchedStatus.agentSessions?.length ?? 0).toBe(1);
-                expect(launchedStatus.agentSessions?.[0]).toMatchObject({
+                expect(runningStatus.agentSessions?.length ?? 0).toBe(1);
+                expect(runningStatus.agentSessions?.[0]).toMatchObject({
                     taskId,
                     runnerId: runner.id,
                     lifecycleState: 'running'
                 });
+                expect((await mission.listAvailableActions()).some(
+                    (action) => action.id === `task.launch.${taskId}`
+                )).toBe(false);
             } finally {
                 mission.dispose();
             }
@@ -482,8 +486,7 @@ function createWorkflowBindings(runner: FakeAgentRunner): MissionWorkflowBinding
                 ...stage,
                 taskLaunchPolicy: {
                     ...stage.taskLaunchPolicy,
-                    defaultAutostart: false,
-                    launchMode: 'manual' as const
+                    defaultAutostart: false
                 }
             }
         ])

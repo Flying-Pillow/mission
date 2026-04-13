@@ -1,24 +1,23 @@
 import type {
     AgentLaunchRequest,
     AgentPrompt,
-    AgentRunnerId,
+    AgentRuntimeError,
     AgentSessionEvent,
-    AgentSessionReference,
     AgentSessionId,
+    AgentSessionReference,
     AgentSessionSnapshot,
     AgentSteerAction,
     AgentRuntimePrimitive
 } from './AgentRuntimeTypes.js';
 
-export interface AgentRunner {
-    readonly id: AgentRunnerId;
-    readonly displayName: string;
-
-    checkAvailability(): Promise<{ available: boolean; detail?: string }>;
-    observe(listener: (event: AgentSessionEvent) => void): { dispose(): void };
+export interface AgentRuntime {
+    // Runtime chooses the runner. `requestedRunnerId` is advisory only.
     launch(request: AgentLaunchRequest): Promise<AgentSessionSnapshot>;
+    // Attach never returns undefined. Missing sessions normalize to a terminal snapshot.
     attach(reference: AgentSessionReference): Promise<AgentSessionSnapshot>;
-    list?(): Promise<AgentSessionSnapshot[]>;
+    listSessions(filter?: { missionId?: string }): Promise<AgentSessionSnapshot[]>;
+    getSession(sessionId: AgentSessionId): Promise<AgentSessionSnapshot | undefined>;
+    // These operations reject with AgentRuntimeError for unsupported or invalid operations.
     prompt(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<AgentSessionSnapshot>;
     steer(
         sessionId: AgentSessionId,
@@ -30,4 +29,6 @@ export interface AgentRunner {
     ): Promise<AgentSessionSnapshot>;
     cancel(sessionId: AgentSessionId, reason?: string): Promise<AgentSessionSnapshot>;
     terminate(sessionId: AgentSessionId, reason?: string): Promise<AgentSessionSnapshot>;
+    // Observe is the authoritative runtime event stream used for workflow reconciliation.
+    observe(listener: (event: AgentSessionEvent) => void): { dispose(): void };
 }

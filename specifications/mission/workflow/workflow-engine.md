@@ -203,11 +203,8 @@ export type MissionTaskLifecycleState =
   | 'failed'
   | 'cancelled';
 
-export type MissionTaskLaunchMode = 'automatic' | 'manual';
-
 export interface MissionTaskRuntimeSettings {
   autostart: boolean;
-  launchMode: MissionTaskLaunchMode;
 }
 
 export interface MissionTaskRuntimeState {
@@ -238,7 +235,7 @@ export interface MissionTaskRuntimeState {
 - and concurrency rules permit new work
 - and no panic or global pause is in effect
 
-then the engine may emit a launch effect for the task.
+then the engine may queue the task and emit a session launch effect for it.
 
 If `autostart` is `false`, the task becomes `ready` but remains idle until a human-triggered event explicitly starts it.
 
@@ -249,7 +246,6 @@ Stages define default task launch policy. They do not define stage execution sta
 ```ts
 export interface WorkflowStageTaskLaunchPolicy {
   defaultAutostart: boolean;
-  launchMode: MissionTaskLaunchMode;
 }
 
 export interface WorkflowStageDefinition {
@@ -570,7 +566,6 @@ export interface TaskLaunchPolicyChangedEvent extends MissionWorkflowEventBase {
   type: 'task.launch-policy.changed';
   taskId: string;
   autostart: boolean;
-  launchMode: MissionTaskLaunchMode;
 }
 
 export interface TaskMarkedReadyEvent extends MissionWorkflowEventBase {
@@ -582,6 +577,10 @@ export interface TaskQueuedEvent extends MissionWorkflowEventBase {
   type: 'task.queued';
   taskId: string;
 }
+
+Manual task start is modeled as a human-emitted `task.queued` event.
+
+There is no separate agent-session auto-launch mode and no separate `/launch` task action.
 
 export interface TaskStartedEvent extends MissionWorkflowEventBase {
   type: 'task.started';

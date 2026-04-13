@@ -13,7 +13,6 @@ import {
     readDaemonManifest,
     resolveAirportControlRuntimeMode,
     type OperatorActionDescriptor,
-    type MissionAgentTurnRequest,
     type MissionBrief,
     type MissionSelector,
     type OperatorStatus,
@@ -71,7 +70,7 @@ async function main(): Promise<void> {
             }
             selector = { missionId: started.missionId };
         }
-        const finalStatus = await driveMissionToCompletion(api, selector, controlRoot);
+        const finalStatus = await driveMissionToCompletion(api, selector);
 
         const report = createReport(controlRoot, finalStatus, options.keepControlRoot);
         if (options.json) {
@@ -167,8 +166,7 @@ function runGit(controlRoot: string, args: string[]): void {
 
 async function driveMissionToCompletion(
     api: DaemonApi,
-    selector: MissionSelector,
-    controlRoot: string
+    selector: MissionSelector
 ): Promise<OperatorStatus> {
     const timeoutAt = Date.now() + 10 * 60 * 1000;
 
@@ -190,7 +188,7 @@ async function driveMissionToCompletion(
                 const startCommand = requireTaskCommand(taskActions, nextTask.taskId, 'task.start.');
                 await api.mission.executeAction(selector, startCommand.id);
             }
-            await executeTask(api, selector, nextTask, status, controlRoot);
+            await executeTask(api, selector, nextTask);
             await api.mission.getStatus(selector);
             const doneActions = await api.mission.listAvailableActions(selector, { taskId: nextTask.taskId });
             const doneCommand = requireTaskCommand(doneActions, nextTask.taskId, 'task.done.');
@@ -250,22 +248,30 @@ function requireTaskCommand(
 async function executeTask(
     api: DaemonApi,
     selector: MissionSelector,
-    task: MissionTaskState,
-    status: OperatorStatus,
-    controlRoot: string
+    task: MissionTaskState
 ): Promise<void> {
-    const request = createTaskTurnRequest(task, status, controlRoot);
-    const launchRequest = {
-        workingDirectory: request.workingDirectory,
-        prompt: request.prompt,
-        startFreshSession: true,
-        ...(request.title ? { title: request.title } : {}),
-        ...(request.operatorIntent ? { operatorIntent: request.operatorIntent } : {}),
-        ...(request.scope ? { scope: request.scope } : {})
-    };
-    const session = await api.mission.launchTaskSession(selector, task.taskId, launchRequest);
+    const sessionId = await waitForTaskSessionStart(api, selector, task.taskId);
+    await waitForTaskSessionCompletion(api, selector, sessionId, task.taskId);
+}
 
-    await waitForTaskSessionCompletion(api, selector, session.sessionId, task.taskId);
+async function waitForTaskSessionStart(
+    api: DaemonApi,
+    selector: MissionSelector,
+    taskId: string
+): Promise<string> {
+    const timeoutAt = Date.now() + 30 * 1000;
+
+    while (Date.now() < timeoutAt) {
+        const status = await api.mission.getStatus(selector);
+        const session = (status.agentSessions ?? []).find((candidate) => candidate.taskId === taskId);
+        if (session) {
+            return session.sessionId;
+        }
+
+        await delay(250);
+    }
+
+    throw new Error(`Timed out waiting for mission task '${taskId}' to create an agent session.`);
 }
 
 async function waitForTaskSessionCompletion(
@@ -313,35 +319,6 @@ async function waitForTaskSessionCompletion(
         `Timed out waiting for '${taskId}' to finish.`
     ).catch(() => undefined);
     throw new Error(`Timed out waiting for mission task session '${sessionId}' to complete for '${taskId}'.`);
-}
-
-function createTaskTurnRequest(
-    task: MissionTaskState,
-    status: OperatorStatus,
-    controlRoot: string
-): MissionAgentTurnRequest {
-    const missionDir = status.missionDir ?? controlRoot;
-    return {
-        workingDirectory:
-            task.stage === 'implementation' ? controlRoot : missionDir,
-        prompt: task.instruction,
-        title: task.subject,
-        operatorIntent: 'Complete this mission task autonomously and stop when the task is finished.',
-        scope: {
-            kind: 'slice',
-            sliceTitle: task.subject,
-            verificationTargets: [],
-            requiredSkills: [],
-            dependsOn: [...task.dependsOn],
-            ...(status.missionId ? { missionId: status.missionId } : {}),
-            ...(missionDir ? { missionDir } : {}),
-            stage: task.stage,
-            taskId: task.taskId,
-            taskTitle: task.subject,
-            taskSummary: task.subject,
-            taskInstruction: task.instruction
-        }
-    };
 }
 
 function summarizeMissionFailure(status: OperatorStatus): string | undefined {
