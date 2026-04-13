@@ -73,10 +73,44 @@ function deriveContextGraph(
 		].filter((value) => value.trim().length > 0))
 	);
 	const tasks = dedupeTasks(missionStatus);
+	const artifacts = {
+		...Object.fromEntries(
+			Object.entries(missionStatus?.productFiles ?? {}).map(([artifactKey, artifactPath]) => {
+				const artifactId = buildArtifactId(repositoryId, missionStatus?.missionId, artifactKey);
+				const artifactContext: ArtifactContext = {
+					artifactId,
+					...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : { repositoryId }),
+					filePath: artifactPath,
+					logicalKind: artifactKey,
+					displayLabel: path.basename(artifactPath)
+				};
+				return [artifactId, artifactContext] as const;
+			})
+		),
+		...Object.fromEntries(
+			tasks
+				.filter((task) => typeof task.filePath === 'string' && task.filePath.trim().length > 0)
+				.map((task) => {
+					const artifactId = buildTaskArtifactId(repositoryId, missionStatus?.missionId, task.taskId);
+					const artifactContext: ArtifactContext = {
+						artifactId,
+						...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : { repositoryId }),
+						ownerTaskId: task.taskId,
+						filePath: task.filePath,
+						logicalKind: 'task-instruction',
+						displayLabel: path.basename(task.filePath)
+					};
+					return [artifactId, artifactContext] as const;
+				})
+		)
+	};
 	const taskContexts = Object.fromEntries(tasks.map((task) => {
 		const sessionIds = (missionStatus?.agentSessions ?? [])
 			.filter((session) => session.taskId === task.taskId)
 			.map((session) => session.sessionId);
+		const primaryArtifactId = task.filePath?.trim()
+			? buildTaskArtifactId(repositoryId, missionStatus?.missionId, task.taskId)
+			: undefined;
 		const taskContext: TaskContext = {
 			taskId: task.taskId,
 			...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : {}),
@@ -85,23 +119,11 @@ function deriveContextGraph(
 			instructionSummary: task.instruction,
 			lifecycleState: task.status,
 			dependencyIds: [...task.dependsOn],
+			...(primaryArtifactId ? { primaryArtifactId } : {}),
 			...(sessionIds.length > 0 ? { agentSessionIds: sessionIds } : {})
 		};
 		return [task.taskId, taskContext] as const;
 	}));
-	const artifacts = Object.fromEntries(
-		Object.entries(missionStatus?.productFiles ?? {}).map(([artifactKey, artifactPath]) => {
-			const artifactId = buildArtifactId(repositoryId, missionStatus?.missionId, artifactKey);
-			const artifactContext: ArtifactContext = {
-				artifactId,
-				...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : { repositoryId }),
-				filePath: artifactPath,
-				logicalKind: artifactKey,
-				displayLabel: path.basename(artifactPath)
-			};
-			return [artifactId, artifactContext] as const;
-		})
-	);
 	const agentSessions = Object.fromEntries(
 		(missionStatus?.agentSessions ?? []).map((session) => {
 			const sessionContext: AgentSessionContext = {
@@ -114,7 +136,9 @@ function deriveContextGraph(
 				...(session.currentTurnTitle ? { promptTitle: session.currentTurnTitle } : {}),
 				...(session.transportId ? { transportId: session.transportId } : {}),
 				...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
-				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {})
+				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
+				...(session.createdAt ? { createdAt: session.createdAt } : {}),
+				...(session.lastUpdatedAt ? { lastUpdatedAt: session.lastUpdatedAt } : {})
 			};
 			return [session.sessionId, sessionContext] as const;
 		})
@@ -405,6 +429,11 @@ function dedupeTasks(missionStatus: MissionControlSource['missionStatus'] | unde
 function buildArtifactId(repositoryId: string, missionId: string | undefined, artifactKey: string): string {
 	const missionScope = missionId?.trim() || repositoryId;
 	return `${missionScope}:${artifactKey}`;
+}
+
+function buildTaskArtifactId(repositoryId: string, missionId: string | undefined, taskId: string): string {
+	const missionScope = missionId?.trim() || repositoryId;
+	return `${missionScope}:task:${taskId}`;
 }
 
 function pickSelectedTaskId(missionStatus: MissionControlSource['missionStatus'] | undefined): string | undefined {

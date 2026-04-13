@@ -14,6 +14,7 @@ import type {
 	MissionSystemSnapshot,
 	MissionSystemState
 } from '../types.js';
+import { resolveMissionSelectionFromContext } from '../lib/resolveMissionSelection.js';
 import { MissionControl } from './system/MissionControl.js';
 import { deriveSystemAirportProjections } from './system/ProjectionService.js';
 import { RepositoryAirportRegistry } from './system/RepositoryAirportRegistry.js';
@@ -338,14 +339,21 @@ function derivePaneBindings(
 	graph: ContextGraph
 ): Partial<Record<AirportPaneId, PaneBinding>> {
 	const { repositoryId, missionId, artifactId } = graph.selection;
+	const resolvedSelection = resolveMissionSelectionFromContext({
+		selection: graph.selection,
+		domain: graph
+	});
+	const resolvedArtifactId = artifactId
+		|| resolvedSelection?.activeInstructionArtifactId
+		|| resolvedSelection?.activeStageResultArtifactId;
 	const nextBindings: Partial<Record<AirportPaneId, PaneBinding>> = {
 		tower: missionId
 			? { targetKind: 'mission', targetId: missionId, mode: 'control' }
 			: repositoryId
 				? { targetKind: 'repository', targetId: repositoryId, mode: 'control' }
 				: { targetKind: 'empty' },
-		briefingRoom: artifactId
-			? { targetKind: 'artifact', targetId: artifactId, mode: 'view' }
+		briefingRoom: resolvedArtifactId
+			? { targetKind: 'artifact', targetId: resolvedArtifactId, mode: 'view' }
 			: missionId
 				? { targetKind: 'mission', targetId: missionId, mode: 'view' }
 				: repositoryId

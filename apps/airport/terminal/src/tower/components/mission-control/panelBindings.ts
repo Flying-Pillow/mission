@@ -1,15 +1,12 @@
-import type { PaneBinding } from '@flying-pillow/mission-core';
-import type { TreeTargetKind } from './missionControlDomain.js';
+import type { MissionResolvedSelection, PaneBinding } from '@flying-pillow/mission-core';
 
-export function resolvePanelBindingsFromTreeTarget(
-	target: {
-		kind: TreeTargetKind;
-		sourcePath?: string;
-	} | undefined,
+export function resolvePanelBindingsFromSelection(
+	selection: MissionResolvedSelection | undefined,
 	missionId: string | undefined
 ): Partial<Record<'briefingRoom', PaneBinding>> | undefined {
 	const normalizedMissionId = missionId?.trim();
-	if (!target) {
+	const artifactId = selection?.activeInstructionArtifactId ?? selection?.activeStageResultArtifactId;
+	if (!artifactId) {
 		if (!normalizedMissionId) {
 			return undefined;
 		}
@@ -22,24 +19,10 @@ export function resolvePanelBindingsFromTreeTarget(
 		};
 	}
 
-	if ((target.kind === 'task-artifact' || target.kind === 'stage-artifact') && target.sourcePath?.trim()) {
-		return {
-			briefingRoom: {
-				targetKind: 'artifact',
-				targetId: target.sourcePath.trim(),
-				mode: 'view'
-			}
-		};
-	}
-
-	if (!normalizedMissionId) {
-		return undefined;
-	}
-
 	return {
 		briefingRoom: {
-			targetKind: 'mission',
-			targetId: normalizedMissionId,
+			targetKind: 'artifact',
+			targetId: artifactId,
 			mode: 'view'
 		}
 	};

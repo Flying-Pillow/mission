@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import type {
 	DaemonClient,
 	ContextGraph,
+	MissionResolvedSelection,
 	MissionSystemSnapshot,
 	OperatorActionDescriptor,
 	OperatorActionTargetContext,
@@ -15,6 +16,7 @@ import type {
 } from '@flying-pillow/mission-core';
 import {
 	DaemonApi,
+	resolveMissionSelection,
 } from '@flying-pillow/mission-core';
 import { useKeyboard, useRenderer } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement } from 'solid-js';
@@ -43,7 +45,7 @@ import {
 } from './tower/components/mission-control/missionControlDomain.js';
 import { useMissionControlController } from './tower/components/mission-control/missionControlController.js';
 import { MissionControlPanel } from './tower/components/mission-control/MissionControlPanel.js';
-import { resolvePanelBindingsFromTreeTarget } from './tower/components/mission-control/panelBindings.js';
+import { resolvePanelBindingsFromSelection } from './tower/components/mission-control/panelBindings.js';
 import { MissionFlowOverlay, RepositoryFlowSurface } from './tower/components/flow/FlowPanel.js';
 import { createFlowController } from './tower/components/flow/flowController.js';
 import {
@@ -217,6 +219,19 @@ export function AirportShell({
 	const selectedTreeTarget = missionControlController.selectedTreeTarget;
 	const selectedTreeContext = createMemo(() =>
 		resolveTreeSelectionContext(selectedTreeTarget(), systemDomain())
+	);
+	const resolvedMissionSelection = createMemo<MissionResolvedSelection | undefined>(() =>
+		{
+			if (towerMode() !== 'mission') {
+				return undefined;
+			}
+			const missionId = currentMissionId()?.trim();
+			return resolveMissionSelection({
+				target: selectedTreeTarget(),
+				domain: systemDomain(),
+				...(missionId ? { missionId } : {})
+			});
+		}
 	);
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
 		(towerProjection()?.stageRail ?? []).map((item: { id: string; label: string; state: ProgressRailItem['state']; subtitle?: string }) => ({
@@ -427,10 +442,7 @@ export function AirportShell({
 			runwayPaneController.sync(undefined);
 			return;
 		}
-		const bindings = resolvePanelBindingsFromTreeTarget(
-			selectedTreeTarget(),
-			currentMissionId()
-		);
+		const bindings = resolvePanelBindingsFromSelection(resolvedMissionSelection(), currentMissionId());
 		if (!bindings) {
 			return;
 		}
@@ -474,7 +486,8 @@ export function AirportShell({
 			runwayPaneController.sync(undefined);
 			return;
 		}
-		const session = missionControlController.selectedSessionRecord();
+		const resolvedSessionId = resolvedMissionSelection()?.activeAgentSessionId?.trim();
+		const session = resolvedSessionId ? systemDomain()?.agentSessions[resolvedSessionId] : undefined;
 		const terminalSessionName = session?.terminalSessionName?.trim();
 		if (!terminalSessionName || session?.transportId !== 'terminal') {
 			runwayPaneController.sync(undefined);

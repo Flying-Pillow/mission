@@ -420,6 +420,8 @@ export type AgentSessionContext = {
 	transportId?: string;
 	terminalSessionName?: string;
 	terminalPaneId?: string;
+	createdAt?: string;
+	lastUpdatedAt?: string;
 };
 
 export type ContextGraph = {
@@ -500,6 +502,26 @@ export type MissionTowerTreeNode = {
 	stageId?: MissionStageId;
 	taskId?: string;
 	sessionId?: string;
+};
+
+export type MissionSelectionTarget = {
+	kind: MissionTowerTreeNodeKind;
+	label?: string;
+	sourcePath?: string;
+	stageId?: MissionStageId;
+	taskId?: string;
+	sessionId?: string;
+};
+
+export type MissionResolvedSelection = {
+	missionId?: string;
+	stageId?: MissionStageId;
+	taskId?: string;
+	activeInstructionArtifactId?: string;
+	activeInstructionPath?: string;
+	activeStageResultArtifactId?: string;
+	activeStageResultPath?: string;
+	activeAgentSessionId?: string;
 };
 
 export type MissionTowerProjection = {

@@ -267,8 +267,8 @@ export function buildProjectedSessionRecords(
 			...(session.transportId ? { transportId: session.transportId } : {}),
 			...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
 			...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
-			createdAt: '',
-			lastUpdatedAt: ''
+			createdAt: session.createdAt ?? '',
+			lastUpdatedAt: session.lastUpdatedAt ?? session.createdAt ?? ''
 		}))
 		.sort((left, right) => left.sessionId.localeCompare(right.sessionId));
 }
