@@ -289,6 +289,31 @@ Each `MissionAgentSessionRecord` may carry:
 - `assignmentLabel` for UI-facing session display
 - provider lifecycle, scope, and telemetry state
 
+## Selection Resolution Boundary
+
+Mission-control selection must resolve through semantic ownership, not by pane-local heuristics.
+
+The important rule is:
+
+- a task selection represents the task's work bundle
+- a stage selection represents the stage's product result
+
+For selection purposes, a task's work bundle is the combination of:
+
+- the task identity and lifecycle record
+- the task's canonical instruction markdown artifact
+- the task's associated agent sessions
+
+For selection purposes, a stage result is the stage's canonical product artifact, such as `PRD.md` or `SPEC.md`.
+
+This resolution output is derived daemon projection state.
+
+It is not persisted as airport pane state in `mission.json`.
+
+If a task exists without a canonical instruction artifact, that is invalid mission state.
+
+Mission surfaces must not compensate with filename heuristics or empty-state fallbacks.
+
 ## Frontmatter Model
 
 Mission uses a deliberately small frontmatter format implemented in `packages/core/src/lib/frontmatter.ts`.

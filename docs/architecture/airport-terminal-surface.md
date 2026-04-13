@@ -75,6 +75,13 @@ Those come from `OperatorStatus` and `MissionSystemSnapshot` returned by the dae
 
 Tower may still ask the daemon to update shared pane bindings, but that is a layout command, not a transfer of UI ownership. The daemon should know which artifact Briefing Room is showing. It should not decide which tree row the user is currently on.
 
+In mission mode, that means Tower may own the raw tree cursor while shared selection resolution owns the companion bundle:
+
+- task selection resolves `activeInstruction` and preferred `activeAgentSession`
+- stage selection resolves `activeStageResult`
+
+That rule keeps Briefing Room and Runway coherent without turning pane components into separate routing authorities.
+
 ## Tower Feature Controllers
 
 Tower is moving toward a feature-owned structure rather than a monolithic shell controller.

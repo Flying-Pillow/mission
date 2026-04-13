@@ -260,6 +260,18 @@ export function AirportShell({
 			fallbackGitHubUser: fallbackGitHubUser()
 		})
 	);
+	const actionsInvalidationKey = createMemo(() =>
+		JSON.stringify({
+			systemVersion: systemSnapshot()?.state.version ?? null,
+			workflowUpdatedAt: status().workflow?.updatedAt ?? null,
+			workflowLifecycle: status().workflow?.lifecycle ?? null,
+			missionId: status().missionId ?? null,
+			controlAvailableMissionCount: status().control?.availableMissionCount ?? null,
+			controlSettingsComplete: status().control?.settingsComplete ?? null,
+			controlBranch: status().control?.currentBranch ?? null,
+			found: status().found
+		})
+	);
 	const commandFlowOwner = flowController.owner;
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
 		if (towerMode() !== 'mission') {
@@ -293,6 +305,7 @@ export function AirportShell({
 	});
 	const commandController = useCommandController({
 		client,
+		actionsInvalidationKey,
 		towerMode,
 		currentMissionId,
 		selectedMissionMatchesLoaded,

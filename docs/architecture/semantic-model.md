@@ -82,13 +82,24 @@ It exists to answer questions such as:
 - which artifact Briefing Room should show
 - which task or session the operator is targeting
 
+Mission mode also needs one more layer above that raw target:
+
+- which task instruction should be active when a task is selected
+- which agent session should be active for that task when no explicit session row is selected
+- which stage product artifact should be active when a stage is selected
+
+That resolution is derived projection behavior, not mission runtime persistence.
+
 ## Invariants
 
 1. Stage state is derived from task state, not independently edited by the UI.
 2. Artifact contexts are routing records, not the artifacts themselves.
 3. The daemon may project a mission through `ContextGraph` without changing mission execution state.
 4. Sessions are tied to tasks semantically, but they remain runtime objects with their own lifecycle and transport boundary.
+5. Task selection is a work-bundle selection: task identity, canonical instruction artifact, and preferred session belong together.
+6. Stage selection resolves to the stage's canonical product artifact.
+7. Selection resolution must be explicit and deterministic; filename guessing and pane-local fallback behavior are architectural drift.
 
 ## Relationship To Replay Anchors
 
-This page is the architecture home for the replayed mission "Mission Semantic Model" and aligns with `specifications/mission/model/core-object-model.md` and `specifications/mission/model/mission-model.md`.
+This page is the architecture home for the replayed mission "Mission Semantic Model" and aligns with `specifications/mission/model/core-object-model.md`, `specifications/mission/model/mission-model.md`, and `specifications/mission/model/selection-resolution.md`.

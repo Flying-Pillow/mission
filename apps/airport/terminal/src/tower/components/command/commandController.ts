@@ -38,6 +38,7 @@ type CommandTargetDescriptor = {
 
 type CommandControllerOptions = {
 	client: Accessor<DaemonClient | undefined>;
+	actionsInvalidationKey: Accessor<string | number | undefined>;
 	towerMode: Accessor<TowerMode>;
 	currentMissionId: Accessor<string | undefined>;
 	selectedMissionMatchesLoaded: Accessor<boolean>;
@@ -57,6 +58,20 @@ type CommandControllerOptions = {
 	onNotify: (message: string) => void;
 	onExecuteToolbarAction: (actionId: string) => Promise<void> | void;
 };
+
+export function buildAvailableActionsQueryKey(input: {
+	actionsInvalidationKey: string | number | undefined;
+	mode: TowerMode;
+	missionId: string | undefined;
+	context: OperatorActionQueryContext;
+}): string {
+	return JSON.stringify({
+		actionsInvalidationKey: input.actionsInvalidationKey,
+		mode: input.mode,
+		missionId: input.mode === 'mission' ? input.missionId : undefined,
+		context: input.mode === 'mission' ? input.context : undefined
+	});
+}
 
 export function useCommandController(options: CommandControllerOptions) {
 	const [inputValue, setInputValue] = createSignal<string>('');
@@ -147,6 +162,7 @@ export function useCommandController(options: CommandControllerOptions) {
 
 	createEffect(() => {
 		const currentClient = options.client();
+		const actionsInvalidationKey = options.actionsInvalidationKey();
 		const mode = options.towerMode();
 		const missionId = options.currentMissionId();
 		const context = options.commandTargetContext();
@@ -167,10 +183,11 @@ export function useCommandController(options: CommandControllerOptions) {
 			lastActionsQueryKey = undefined;
 			return;
 		}
-		const queryKey = JSON.stringify({
+		const queryKey = buildAvailableActionsQueryKey({
+			actionsInvalidationKey,
 			mode,
-			missionId: mode === 'mission' ? missionId : undefined,
-			context: mode === 'mission' ? context : undefined
+			missionId,
+			context,
 		});
 		if (queryKey === lastActionsQueryKey) {
 			return;

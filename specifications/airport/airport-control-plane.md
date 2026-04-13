@@ -438,6 +438,7 @@ export interface ContextGraph {
 export interface ContextSelection {
   repositoryId?: string;
   missionId?: string;
+  stageId?: MissionStageId;
   taskId?: string;
   artifactId?: string;
   agentSessionId?: string;
@@ -457,6 +458,20 @@ Selection is not focus truth.
 This distinction is mandatory.
 
 The words `selected`, `running`, `bound`, and `focused` are not interchangeable.
+
+Mission-mode pane routing must distinguish between raw selection and resolved selection.
+
+Raw selection is the semantic target highlighted by the operator.
+
+Resolved selection is the daemon-owned companion context derived from that target, for example:
+
+- task selection resolves the canonical task instruction artifact and preferred agent session
+- stage selection resolves the canonical stage result artifact
+- explicit artifact or session selection refines the resolved bundle for the same task or stage
+
+Airport bindings must consume that resolved bundle.
+
+Pane-specific fallback heuristics are not allowed.
 
 ### RepositoryContext
 
@@ -503,6 +518,10 @@ Minimum required fields:
 - associated agent session ids if any
 
 TaskContext must not be shaped around a specific panel.
+
+TaskContext must still be sufficient for deterministic task companion resolution.
+
+That means the task semantic model must expose one canonical instruction artifact and any associated session ids without relying on filename guessing.
 
 ### ArtifactContext
 

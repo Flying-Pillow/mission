@@ -69,6 +69,8 @@ flowchart TD
 Semantic selection is a separate concern from focus intent:
 
 - mission or repository selection updates pane bindings and projections
+- mission-mode task selection should resolve the task's canonical instruction and preferred session before panes bind
+- mission-mode stage selection should resolve the stage's canonical result artifact before panes bind
 - explicit airport focus observations update observed focus state; they do not reassert stale intent
 - selecting an artifact or agent session must not, by itself, move terminal focus away from Tower
 

@@ -10,4 +10,5 @@ has_children: true
 
 - [Core Object Model](core-object-model.md)
 - [Mission Model](mission-model.md)
+- [Selection Resolution](selection-resolution.md)
 - [Repository Layout And Adoption](repository-layout-and-adoption.md)
