@@ -49,7 +49,7 @@ import {
 import { useMissionControlController } from './tower/components/mission-control/missionControlController.js';
 import { MissionControlPanel } from './tower/components/mission-control/MissionControlPanel.js';
 import { resolvePanelBindingsFromSelection } from './tower/components/mission-control/panelBindings.js';
-import { resolveOperatorActionContextFromSelection } from './tower/components/mission-control/commandContext.js';
+import { resolveOperatorActionContextFromTreeTarget } from './tower/components/mission-control/commandContext.js';
 import { MissionFlowOverlay, RepositoryFlowSurface } from './tower/components/flow/FlowPanel.js';
 import { createFlowController } from './tower/components/flow/flowController.js';
 import { RepositoryPanel } from './tower/components/repository/RepositoryPanel.js';
@@ -327,7 +327,7 @@ export function AirportApp({
 		if (towerMode() !== 'mission') {
 			return {};
 		}
-		return resolveOperatorActionContextFromSelection(resolvedMissionSelection());
+		return resolveOperatorActionContextFromTreeTarget(selectedTreeTarget());
 	});
 	const selectedCommandTargetDescriptor = createMemo<{
 		sessionId?: string;
@@ -526,7 +526,6 @@ export function AirportApp({
 		})
 	);
 	const commandHelp = createMemo(() => {
-		const statusPrefix = lastCommandStatusText();
 		const debugSuffix = showCommandDebug()
 			? (() => {
 				const context = commandTargetContext();
@@ -541,21 +540,20 @@ export function AirportApp({
 				return `DBG sel=${commandSelectionKey() ?? 'none'} ctx=${contextText} actions=${String(enabledActions)}/${String(totalActions)}`;
 			})()
 			: undefined;
-		const withStatus = (base: string) => statusPrefix ? `${statusPrefix} | ${base}` : base;
 		const withDebug = (base: string) => debugSuffix ? `${base} | ${debugSuffix}` : base;
 		const step = currentCommandFlowStep();
 		if (step && towerMode() !== 'repository') {
-			return withDebug(withStatus(step.helperText));
+			return withDebug(step.helperText);
 		}
 		if (towerMode() === 'repository' && step?.kind === 'selection') {
-			return withDebug(withStatus('Repository flow active. Tab to the flow panel, use left/right to move between steps, and use up/down to browse options.'));
+			return withDebug('Repository flow active. Tab to the flow panel, use left/right to move between steps, and use up/down to browse options.');
 		}
 		if (towerMode() === 'repository' && step?.kind === 'text') {
-			return withDebug(withStatus('Repository flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.'));
+			return withDebug('Repository flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.');
 		}
 		const actions = commandController.availableActions();
 		if (actions.length === 0) {
-			return withDebug(withStatus('No daemon actions returned for the current selection.'));
+			return withDebug('No daemon actions returned for the current selection.');
 		}
 		const enabledCommands = actions
 			.filter((command) => command.enabled)
@@ -563,13 +561,13 @@ export function AirportApp({
 		const uniqueCommands = [...new Set(enabledCommands)];
 		if (uniqueCommands.length === 0) {
 			const firstReason = actions.find((command) => command.reason?.trim())?.reason?.trim();
-			return withDebug(withStatus(
+			return withDebug(
 				firstReason
 					? `No enabled commands for current selection (${String(actions.length)} actions). ${firstReason}`
 					: `No enabled commands for current selection (${String(actions.length)} actions).`
-			));
+			);
 		}
-		return withDebug(withStatus(`Available: ${uniqueCommands.join(', ')}`));
+		return withDebug(`Available: ${uniqueCommands.join(', ')}`);
 	});
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
@@ -1305,6 +1303,8 @@ export function AirportApp({
 					showCommandPicker={commandController.showCommandPicker()}
 					commandPickerItems={commandController.commandPickerItems()}
 					selectedCommandPickerItemId={commandController.selectedCommandPickerItemId()}
+					isVerifyingCommands={commandController.isVerifyingAvailableActions()}
+					commandResultText={lastCommandStatusText() ?? ''}
 					isRunningCommand={commandController.isCommandInteractionRunning()}
 					inputValue={commandController.commandPanelInputValue()}
 					commandHelp={commandHelp()}

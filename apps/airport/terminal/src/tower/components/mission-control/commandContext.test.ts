@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolveMissionSelection, type ContextGraph } from '@flying-pillow/mission-core';
-import { resolveOperatorActionContextFromSelection } from './commandContext.js';
+import {
+	resolveOperatorActionContextFromSelection,
+	resolveOperatorActionContextFromTreeTarget
+} from './commandContext.js';
 
 describe('resolveOperatorActionContextFromSelection', () => {
 	it('returns empty context when no selection is resolved', () => {
@@ -123,6 +126,60 @@ describe('resolveOperatorActionContextFromSelection', () => {
 		expect(resolveOperatorActionContextFromSelection(afterSelection)).toEqual({
 			stageId: 'spec',
 			taskId: 'task-1'
+		});
+	});
+});
+
+describe('resolveOperatorActionContextFromTreeTarget', () => {
+	it('returns empty context when no tree target is selected', () => {
+		expect(resolveOperatorActionContextFromTreeTarget(undefined)).toEqual({});
+	});
+
+	it('keeps task command targeting strict to stage/task for task rows', () => {
+		expect(resolveOperatorActionContextFromTreeTarget({
+			kind: 'task',
+			stageId: 'spec',
+			taskId: 'task-1',
+			sessionId: 'session-7'
+		})).toEqual({
+			stageId: 'spec',
+			taskId: 'task-1'
+		});
+	});
+
+	it('keeps task-artifact command targeting strict to stage/task', () => {
+		expect(resolveOperatorActionContextFromTreeTarget({
+			kind: 'task-artifact',
+			stageId: 'spec',
+			taskId: 'task-1',
+			sessionId: 'session-7'
+		})).toEqual({
+			stageId: 'spec',
+			taskId: 'task-1'
+		});
+	});
+
+	it('includes session id only for session rows', () => {
+		expect(resolveOperatorActionContextFromTreeTarget({
+			kind: 'session',
+			stageId: 'spec',
+			taskId: 'task-1',
+			sessionId: 'session-7'
+		})).toEqual({
+			stageId: 'spec',
+			taskId: 'task-1',
+			sessionId: 'session-7'
+		});
+	});
+
+	it('keeps stage rows scoped to stage only', () => {
+		expect(resolveOperatorActionContextFromTreeTarget({
+			kind: 'stage',
+			stageId: 'spec',
+			taskId: 'task-1',
+			sessionId: 'session-7'
+		})).toEqual({
+			stageId: 'spec'
 		});
 	});
 });

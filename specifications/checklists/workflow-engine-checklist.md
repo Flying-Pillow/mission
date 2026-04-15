@@ -65,9 +65,8 @@ Use it to sequence delivery without expanding the spec.
 ## 6. Request Executor
 
 - Implement request execution outside the reducer.
-- Support `tasks.request-generation`, `session.launch`, `session.prompt`, `session.command`, `session.terminate`, `session.cancel`, `mission.pause`, and `mission.mark-completed`.
+- Support `tasks.request-generation`, `session.launch`, `session.prompt`, `session.command`, `session.terminate`, and `session.cancel`.
 - Emit normal workflow events back into the engine as request outcomes.
-- Treat `mission.mark-completed` as notification only, not state mutation.
 - Emit `session.launch-failed` when launch fails before any session is created.
 - Route `session.prompt` to the shared runtime session prompt path rather than a workflow-only adapter side channel.
 - Route `session.command` to the shared runtime session command path while keeping `session.cancel` and `session.terminate` as explicit lifecycle requests.

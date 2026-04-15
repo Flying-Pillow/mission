@@ -18,9 +18,7 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowGlobalSetting
 		},
 		humanInLoop: {
 			enabled: asBoolean(source.humanInLoop?.enabled, defaults.humanInLoop.enabled),
-			pauseOnMissionStart: asBoolean(source.humanInLoop?.pauseOnMissionStart, defaults.humanInLoop.pauseOnMissionStart),
-			pauseOnTaskFailure: asBoolean(source.humanInLoop?.pauseOnTaskFailure, defaults.humanInLoop.pauseOnTaskFailure),
-			pauseOnTaskCompletion: asBoolean(source.humanInLoop?.pauseOnTaskCompletion, defaults.humanInLoop.pauseOnTaskCompletion)
+			pauseOnMissionStart: asBoolean(source.humanInLoop?.pauseOnMissionStart, defaults.humanInLoop.pauseOnMissionStart)
 		},
 		panic: {
 			terminateSessions: asBoolean(source.panic?.terminateSessions, defaults.panic.terminateSessions),
@@ -197,12 +195,6 @@ function normalizeStages(
 			displayName: typeof candidate?.displayName === 'string' ? candidate.displayName : defaultStage.displayName,
 			taskLaunchPolicy: {
 				defaultAutostart: asBoolean(candidate?.taskLaunchPolicy?.defaultAutostart, defaultStage.taskLaunchPolicy.defaultAutostart)
-			},
-			completionPolicy: {
-				requireAllTasksCompleted: asBoolean(
-					candidate?.completionPolicy?.requireAllTasksCompleted,
-					defaultStage.completionPolicy.requireAllTasksCompleted
-				)
 			}
 		};
 	}
@@ -220,9 +212,6 @@ function normalizeStages(
 			displayName: typeof candidateStage.displayName === 'string' ? candidateStage.displayName : stageId,
 			taskLaunchPolicy: {
 				defaultAutostart: asBoolean(candidateStage.taskLaunchPolicy?.defaultAutostart, false)
-			},
-			completionPolicy: {
-				requireAllTasksCompleted: asBoolean(candidateStage.completionPolicy?.requireAllTasksCompleted, true)
 			}
 		};
 	}

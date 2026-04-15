@@ -8,8 +8,9 @@ import type {
     AgentSessionSnapshot
 } from '../../agent/AgentRuntimeTypes.js';
 import {
+    buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
-    createMissionRuntimeRecordForMission,
+    createMissionRuntimeRecord,
     ingestMissionWorkflowEvent,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
@@ -75,7 +76,7 @@ export class MissionWorkflowController {
             return undefined;
         }
         this.document = document;
-        const synchronized = await this.ensureGeneratedTasksForEligibleStage(document);
+        const synchronized = await this.reconcileDerivedRequests(document);
         this.document = synchronized;
         return synchronized;
     }
@@ -166,8 +167,8 @@ export class MissionWorkflowController {
                 workflowVersion: this.workflowVersion,
                 workflow: this.resolveWorkflow()
             });
-            document = ingestMissionWorkflowEvent(
-                createMissionRuntimeRecordForMission({
+            const created = ingestMissionWorkflowEvent(
+                createMissionRuntimeRecord({
                     missionId: this.descriptor.missionId,
                     configuration,
                     createdAt: occurredAt
@@ -178,8 +179,15 @@ export class MissionWorkflowController {
                     occurredAt,
                     source: input?.source ?? 'system'
                 }
-            ).document;
+            );
+            document = created.document;
             await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, document);
+            this.document = document;
+
+            const emittedEvents = await this.executeRequests(document, created.requests);
+            for (const emittedEvent of emittedEvents) {
+                document = await this.applyEvent(emittedEvent);
+            }
             this.document = document;
         } else {
             this.document = document;
@@ -286,84 +294,24 @@ export class MissionWorkflowController {
         return this.resolveWorkflowOverride?.() ?? this.workflow;
     }
 
-    private async ensureGeneratedTasksForEligibleStage(
+    private async reconcileDerivedRequests(
         document: MissionRuntimeRecord
     ): Promise<MissionRuntimeRecord> {
-        if (document.runtime.lifecycle === 'delivered') {
-            return document;
-        }
-
-        const stageId = this.resolveEligibleStageId(document);
-        if (!stageId) {
-            return document;
-        }
-
-        if (document.runtime.tasks.some((task) => task.stageId === stageId)) {
-            return document;
-        }
-
-        const generationRule = document.configuration.workflow.taskGeneration.find(
-            (candidate) => candidate.stageId === stageId
+        const requests = buildWorkflowTaskGenerationRequests(
+            document.runtime,
+            document.configuration,
+            new Date().toISOString()
         );
-        if (
-            !generationRule
-            || (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
-        ) {
+        if (requests.length === 0) {
             return document;
         }
 
-        const emittedEvents = await this.executeRequests(document, [
-            {
-                requestId: `${document.missionId}:refresh:generate:${stageId}`,
-                type: 'tasks.request-generation',
-                payload: { stageId }
-            }
-        ]);
+        const emittedEvents = await this.executeRequests(document, requests);
 
         let nextDocument = document;
         for (const emittedEvent of emittedEvents) {
             nextDocument = await this.applyEvent(emittedEvent);
         }
         return nextDocument;
-    }
-
-    private resolveEligibleStageId(document: MissionRuntimeRecord): string | undefined {
-        for (const stageId of document.configuration.workflow.stageOrder) {
-            const stageTasks = document.runtime.tasks.filter((task) => task.stageId === stageId);
-            const completed =
-                (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
-                this.isImplicitlyCompletedEmptyFinalStage(document, stageId, stageTasks);
-            if (!completed) {
-                return stageId;
-            }
-        }
-
-        return undefined;
-    }
-
-    private isImplicitlyCompletedEmptyFinalStage(
-        document: MissionRuntimeRecord,
-        stageId: string,
-        stageTasks: MissionRuntimeRecord['runtime']['tasks']
-    ): boolean {
-        if (stageTasks.length > 0) {
-            return false;
-        }
-
-        const finalStageId = document.configuration.workflow.stageOrder[
-            document.configuration.workflow.stageOrder.length - 1
-        ];
-        if (stageId !== finalStageId) {
-            return false;
-        }
-
-        const generationRule = document.configuration.workflow.taskGeneration.find(
-            (candidate) => candidate.stageId === stageId
-        );
-        if (!generationRule) {
-            return true;
-        }
-
-        return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0;
     }
 }

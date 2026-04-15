@@ -13,10 +13,13 @@ The workflow engine is the mission-local execution authority. Its job is to redu
 
 | Component | Responsibility | Owned state | Persisted state |
 | --- | --- | --- | --- |
-| `MissionWorkflowController` | Loads, initializes, normalizes, updates, and persists the mission runtime record | cached `MissionRuntimeRecord` | `mission.json` |
+| `MissionWorkflowController` | Loads, initializes, persists, and replays machine-derived requests around the mission runtime record | cached `MissionRuntimeRecord` | `mission.json` |
 | reducer ingestion logic | Applies one event to the current runtime record and yields requests | none, pure transformation | none |
+| workflow policy helpers | Own stage eligibility, completion, generation, reopen, and mission completion rules | none, pure derivation | none |
 | `MissionWorkflowRequestExecutor` | Executes request side effects such as task generation and session launch | daemon-owned agent control dependency, buffered runtime events | none directly |
 | Task generation helpers | Turn workflow config and templates into task records | generation result in memory | task files + artifact files |
+
+Execution settings are reducer-owned policy, not documentation-only decoration: `execution.maxParallelTasks` limits how many tasks may be `queued` or `running`, and `execution.maxParallelSessions` limits how many launch/session slots may be occupied at once.
 
 ## Runtime Record Structure
 
@@ -76,6 +79,8 @@ The reducer never opens files, starts zellij, or talks to a model provider. It e
 
 The important boundary is that workflow does not depend on UI pane state, but it does depend on normalized runtime truth.
 
+The reducer no longer emits decorative mission-level requests. Mission completion is state plus signals inside the machine, not an executor no-op.
+
 That includes operator interference when it changes the real execution substrate. If a human kills a terminal-backed session outside the happy path, the daemon must reconcile that disappearance back into workflow state. Treating that as workflow input is correct because it is runtime truth, not presentation state.
 
 ## Execution Loop
@@ -103,23 +108,47 @@ sequenceDiagram
 
 ## Task Generation Rules
 
-The engine currently auto-generates tasks for eligible stages when all of these are true:
+The engine now single-sources generation eligibility in the workflow policy layer. A `tasks.request-generation` request is derived when all of these are true:
 
 1. the mission is not already delivered
 2. the stage is the next incomplete stage in workflow order
 3. no tasks for that stage already exist in runtime state
 4. the workflow configuration includes generation templates for that stage
 
-This means stage progression and task generation are tightly coupled to the persisted configuration snapshot in `mission.json`.
+The reducer emits that request during normal event ingestion, and the controller may replay the same machine-derived request during refresh to recover from missed side effects or older persisted records. Stage progression and task generation stay coupled to the persisted configuration snapshot in `mission.json`, but the rules now live in one place.
 
 ## Invariants
 
 1. `mission.json` is the mission execution authority after initialization.
 2. The controller persists after every applied event before running follow-up requests.
-3. Stage state is derived from tasks, not manually edited by Tower.
-4. Session events must be translated back into workflow events before they become mission truth.
-5. Operator-facing surfaces may refresh or invalidate command projections, but they must not decide workflow transitions.
-6. Runtime transport failures, detached sessions, and externally terminated sessions are valid workflow inputs once normalized by the daemon runtime layer.
+3. Workflow rules such as eligible stage, implicit final-stage completion, and reopen constraints must be defined once and consumed by reducer, validation, and refresh reconciliation.
+4. Stage state is derived from tasks, not manually edited by Tower.
+5. Session events must be translated back into workflow events before they become mission truth.
+6. Operator-facing surfaces may refresh or invalidate command projections, but they must not decide workflow transitions.
+7. Runtime transport failures, detached sessions, and externally terminated sessions are valid workflow inputs once normalized by the daemon runtime layer.
+
+## End-To-End Coverage
+
+The workflow engine now has a controller-level end-to-end suite in `packages/core/src/workflow/engine/workflowEngine.e2e.test.ts`.
+
+That suite is intentionally above the reducer-only layer. It exercises the full persisted loop:
+
+- event validation
+- reducer transition and derivation
+- mission document persistence
+- recursive request execution
+- emitted event ingestion
+- refresh recovery against persisted runtime state
+
+The required scenario matrix covered there is:
+
+1. Happy-path mission execution from `mission.created` through automatic generation, auto-launch, manual queueing, completion, and `mission.delivered`.
+2. Human control paths including `mission.paused`, `mission.resumed`, session prompt, session command, cancel, and terminate.
+3. Failure and recovery paths including `session.launch-failed`, `task.blocked`, and `task.reopened`.
+4. Panic and recovery paths including `mission.panic.requested`, queue clearing, session termination, `mission.panic.cleared`, and `mission.launch-queue.restarted`.
+5. Refresh repair of machine-derived requests when persisted state is missing generated follow-up work.
+
+That suite is the guardrail for the claim that the workflow engine is a first-class state machine rather than a collection of reducer-only unit rules.
 
 ## Operator Interference Boundary
 

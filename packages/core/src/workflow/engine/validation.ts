@@ -1,12 +1,19 @@
 import type {
     MissionAgentSessionRuntimeState,
-    MissionStageId,
     MissionTaskRuntimeState,
     MissionWorkflowConfigurationSnapshot,
     MissionWorkflowEvent,
     MissionRuntimeRecord,
     MissionWorkflowRuntimeState
 } from './types.js';
+import {
+    countOccupiedTaskExecutionSlots,
+    hasActiveDownstreamActivity,
+    isActiveSessionLifecycle,
+    isReopenableTaskLifecycle,
+    isTerminalTaskLifecycle,
+    resolveEligibleStageId
+} from './policy.js';
 
 export class MissionWorkflowValidationError extends Error {
     public constructor(message: string) {
@@ -117,7 +124,7 @@ export function getMissionWorkflowEventValidationErrors(
             const task = findTask(event.taskId);
             if (!task) {
                 errors.push(`task.launch-policy.changed references unknown task '${event.taskId}'.`);
-            } else if (isTerminalTask(task.lifecycle)) {
+            } else if (isTerminalTaskLifecycle(task.lifecycle)) {
                 errors.push(`task.launch-policy.changed is not allowed for terminal task '${event.taskId}'.`);
             }
             break;
@@ -136,6 +143,9 @@ export function getMissionWorkflowEventValidationErrors(
                 }
                 if (task.stageId !== eligibleStageId) {
                     errors.push(`task.queued requires task '${event.taskId}' to be in eligible stage '${eligibleStageId ?? 'none'}'.`);
+                }
+                if (countOccupiedTaskExecutionSlots(runtime) >= configuration.workflow.execution.maxParallelTasks) {
+                    errors.push(`task.queued exceeds execution.maxParallelTasks '${String(configuration.workflow.execution.maxParallelTasks)}'.`);
                 }
             }
             break;
@@ -170,24 +180,10 @@ export function getMissionWorkflowEventValidationErrors(
         case 'task.reopened': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task) {
-                if (task.lifecycle !== 'completed' && task.lifecycle !== 'failed' && task.lifecycle !== 'cancelled' && task.lifecycle !== 'blocked') {
+                if (!isReopenableTaskLifecycle(task.lifecycle)) {
                     errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, cancelled, or blocked, received '${task.lifecycle}'.`);
                 }
-                const stageOrder = configuration.workflow.stageOrder;
-                const reopenedStageIndex = stageOrder.indexOf(task.stageId);
-                const hasActiveDownstreamWork = runtime.tasks.some((candidate) => {
-                    const candidateStageIndex = stageOrder.indexOf(candidate.stageId);
-                    return candidateStageIndex > reopenedStageIndex && (candidate.lifecycle === 'queued' || candidate.lifecycle === 'running');
-                });
-                const hasActiveDownstreamSessions = runtime.sessions.some((session) => {
-                    const sessionTask = findTask(session.taskId);
-                    if (!sessionTask) {
-                        return false;
-                    }
-                    const candidateStageIndex = stageOrder.indexOf(sessionTask.stageId);
-                    return candidateStageIndex > reopenedStageIndex && isActiveSessionLifecycle(session.lifecycle);
-                });
-                if (hasActiveDownstreamWork || hasActiveDownstreamSessions) {
+                if (hasActiveDownstreamActivity(runtime, task.stageId, configuration)) {
                     errors.push(`task.reopened for '${event.taskId}' is not allowed while downstream work is active.`);
                 }
             }
@@ -229,58 +225,12 @@ export function getMissionWorkflowEventValidationErrors(
     return errors;
 }
 
-function isActiveSessionLifecycle(lifecycle: MissionAgentSessionRuntimeState['lifecycle']): boolean {
-    return lifecycle === 'starting' || lifecycle === 'running';
-}
-
-function resolveEligibleStageId(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
-): MissionStageId | undefined {
-    for (const stageId of configuration.workflow.stageOrder) {
-        const stageTasks = runtime.tasks.filter((task) => task.stageId === stageId);
-        const complete =
-            (stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed')) ||
-            isImplicitlyCompletedEmptyFinalStage(stageId, stageTasks, configuration);
-        if (!complete) {
-            return stageId;
-        }
-    }
-    return undefined;
-}
-
-function isImplicitlyCompletedEmptyFinalStage(
-    stageId: MissionStageId,
-    stageTasks: MissionTaskRuntimeState[],
-    configuration: MissionWorkflowConfigurationSnapshot
-): boolean {
-    if (stageTasks.length > 0) {
-        return false;
-    }
-
-    const finalStageId = configuration.workflow.stageOrder[configuration.workflow.stageOrder.length - 1];
-    if (stageId !== finalStageId) {
-        return false;
-    }
-
-    const generationRule = configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
-    if (!generationRule) {
-        return true;
-    }
-
-    return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0;
-}
-
 function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; dependsOn: string[]; agentRunner?: string }): boolean {
     return task.taskId === payload.taskId &&
         task.title === payload.title &&
         task.instruction === payload.instruction &&
         JSON.stringify(task.dependsOn) === JSON.stringify(payload.dependsOn) &&
         task.agentRunner === payload.agentRunner;
-}
-
-function isTerminalTask(lifecycle: MissionTaskRuntimeState['lifecycle']): boolean {
-    return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled';
 }
 
 function requireTask(

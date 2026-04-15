@@ -69,8 +69,9 @@ describe('Mission workflow snapshot timing', () => {
 
             const workflowDocument = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
             expect(workflowDocument?.configuration.workflow.execution.maxParallelTasks).toBe(3);
-            expect(workflowDocument?.eventLog.slice(0, 2).map((event) => event.type)).toEqual([
+            expect(workflowDocument?.eventLog.slice(0, 3).map((event) => event.type)).toEqual([
                 'mission.created',
+                'tasks.generated',
                 'mission.started'
             ]);
             mission.dispose();

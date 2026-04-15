@@ -103,6 +103,96 @@ describe('workflow reducer delivery completion', () => {
         }));
     });
 
+    it('enforces execution limits for autostart queueing and session dispatch', () => {
+        const workflow = createDefaultWorkflowSettings();
+        workflow.execution.maxParallelTasks = 2;
+        workflow.execution.maxParallelSessions = 1;
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceMissionWorkflowEvent(runtime, {
+            eventId: 'mission.created',
+            type: 'mission.created',
+            occurredAt: '2026-04-10T15:51:25.000Z',
+            source: 'human'
+        }, configuration).nextState;
+        runtime = reduceMissionWorkflowEvent(runtime, {
+            eventId: 'mission.started',
+            type: 'mission.started',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'human'
+        }, configuration).nextState;
+
+        const generated = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+            { taskId: 'prd/01', title: 'PRD 1', instruction: 'Draft PRD 1.' },
+            { taskId: 'prd/02', title: 'PRD 2', instruction: 'Draft PRD 2.' },
+            { taskId: 'prd/03', title: 'PRD 3', instruction: 'Draft PRD 3.' }
+        ]), configuration);
+
+        expect(generated.nextState.tasks.filter((task) => task.lifecycle === 'queued').map((task) => task.taskId)).toEqual([
+            'prd/01',
+            'prd/02'
+        ]);
+        expect(generated.nextState.tasks.find((task) => task.taskId === 'prd/03')?.lifecycle).toBe('ready');
+        expect(generated.requests.filter((request) => request.type === 'session.launch')).toHaveLength(1);
+        expect(generated.nextState.launchQueue.find((request) => request.taskId === 'prd/01')?.dispatchedAt).toBe('2026-04-10T15:53:00.000Z');
+        expect(generated.nextState.launchQueue.find((request) => request.taskId === 'prd/02')?.dispatchedAt).toBeUndefined();
+    });
+
+    it('rejects queueing a task beyond execution.maxParallelTasks', () => {
+        const workflow = createDefaultWorkflowSettings();
+        workflow.execution.maxParallelTasks = 1;
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow
+        });
+
+        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'PRD 1',
+                instruction: 'Draft PRD 1.',
+                dependsOn: [],
+                lifecycle: 'queued',
+                blockedByTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:51:25.000Z'
+            },
+            {
+                taskId: 'prd/02',
+                stageId: 'prd',
+                title: 'PRD 2',
+                instruction: 'Draft PRD 2.',
+                dependsOn: [],
+                lifecycle: 'ready',
+                blockedByTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:51:25.000Z'
+            }
+        ];
+
+        expect(() => validateMissionWorkflowEvent(runtime, {
+            eventId: 'task.queued:prd/02',
+            type: 'task.queued',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'human',
+            taskId: 'prd/02'
+        }, configuration)).toThrow(/execution.maxParallelTasks/);
+    });
+
     it('restarts a stale launch queue and re-emits launch requests for queued tasks', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
@@ -283,6 +373,59 @@ describe('workflow reducer delivery completion', () => {
         expect(runtime.lifecycle).toBe('delivered');
     });
 
+    it('does not emit decorative mission completion requests', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: MissionWorkflowEvent[] = [
+            {
+                eventId: 'mission.created',
+                type: 'mission.created',
+                occurredAt: '2026-04-10T15:51:25.000Z',
+                source: 'human'
+            },
+            {
+                eventId: 'mission.started',
+                type: 'mission.started',
+                occurredAt: '2026-04-10T15:52:00.000Z',
+                source: 'human'
+            },
+            createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+                { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' }
+            ]),
+            createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'),
+            createGeneratedTasksEvent('spec', '2026-04-10T15:55:00.000Z', [
+                { taskId: 'spec/01', title: 'Spec', instruction: 'Draft spec.' }
+            ]),
+            createTaskCompletedEvent('spec/01', '2026-04-10T15:56:00.000Z'),
+            createGeneratedTasksEvent('implementation', '2026-04-10T15:57:00.000Z', [
+                { taskId: 'implementation/01', title: 'Implement', instruction: 'Ship implementation.' }
+            ]),
+            createTaskCompletedEvent('implementation/01', '2026-04-10T15:58:00.000Z'),
+            createGeneratedTasksEvent('audit', '2026-04-10T15:59:00.000Z', [
+                { taskId: 'audit/01', title: 'Audit', instruction: 'Debrief.' }
+            ]),
+            createTaskCompletedEvent('audit/01', '2026-04-10T16:00:00.000Z')
+        ];
+
+        let finalResult = reduceMissionWorkflowEvent(runtime, events[0]!, configuration);
+        runtime = finalResult.nextState;
+        for (const event of events.slice(1)) {
+            validateMissionWorkflowEvent(runtime, event, configuration);
+            finalResult = reduceMissionWorkflowEvent(runtime, event, configuration);
+            runtime = finalResult.nextState;
+        }
+
+        expect(runtime.lifecycle).toBe('completed');
+        expect(finalResult.requests).toEqual([]);
+        expect(finalResult.signals.map((signal) => signal.type)).toContain('mission.completed');
+        expect(finalResult.signals.map((signal) => signal.type)).toContain('mission.delivered-ready');
+    });
+
     it('does not auto-complete empty non-terminal stages', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
@@ -323,12 +466,128 @@ describe('workflow reducer delivery completion', () => {
         expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('blocked');
         expect(runtime.gates.find((gate) => gate.gateId === 'deliver')?.state).toBe('blocked');
     });
+
+    it('keeps dependency references strict and blocks tasks with unresolved dependencies', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: MissionWorkflowEvent[] = [
+            {
+                eventId: 'mission.created',
+                type: 'mission.created',
+                occurredAt: '2026-04-10T15:51:25.000Z',
+                source: 'human'
+            },
+            {
+                eventId: 'mission.started',
+                type: 'mission.started',
+                occurredAt: '2026-04-10T15:52:00.000Z',
+                source: 'human'
+            },
+            createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+                { taskId: 'prd/01-prd', title: 'PRD', instruction: 'Draft PRD.' }
+            ]),
+            createTaskCompletedEvent('prd/01-prd', '2026-04-10T15:54:00.000Z'),
+            createGeneratedTasksEvent('spec', '2026-04-10T15:55:00.000Z', [
+                { taskId: 'spec/02-plan', title: 'Plan', instruction: 'Draft plan.' }
+            ]),
+            createTaskCompletedEvent('spec/02-plan', '2026-04-10T15:56:00.000Z'),
+            createGeneratedTasksEvent('implementation', '2026-04-10T15:57:00.000Z', [
+                {
+                    taskId: 'implementation/01-derive-title',
+                    title: 'Derive title',
+                    instruction: 'Derive runtime title.',
+                    dependsOn: ['spec/02-plan.md']
+                }
+            ])
+        ];
+
+        for (const event of events) {
+            validateMissionWorkflowEvent(runtime, event, configuration);
+            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+        }
+
+        const task = runtime.tasks.find((candidate) => candidate.taskId === 'implementation/01-derive-title');
+        expect(task).toBeDefined();
+        expect(task?.dependsOn).toEqual(['spec/02-plan.md']);
+        expect(task?.blockedByTaskIds).toEqual(['spec/02-plan.md']);
+        expect(task?.lifecycle).toBe('pending');
+        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('blocked');
+    });
+
+    it('rewinds downstream stage tasks when an upstream task is reopened', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: MissionWorkflowEvent[] = [
+            {
+                eventId: 'mission.created',
+                type: 'mission.created',
+                occurredAt: '2026-04-10T15:51:25.000Z',
+                source: 'human'
+            },
+            {
+                eventId: 'mission.started',
+                type: 'mission.started',
+                occurredAt: '2026-04-10T15:52:00.000Z',
+                source: 'human'
+            },
+            createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+                { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' }
+            ]),
+            createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'),
+            createGeneratedTasksEvent('spec', '2026-04-10T15:55:00.000Z', [
+                { taskId: 'spec/01', title: 'Spec', instruction: 'Draft spec.', dependsOn: ['prd/01'] }
+            ]),
+            createTaskCompletedEvent('spec/01', '2026-04-10T15:56:00.000Z'),
+            createGeneratedTasksEvent('implementation', '2026-04-10T15:57:00.000Z', [
+                { taskId: 'implementation/01', title: 'Implement', instruction: 'Ship implementation.', dependsOn: ['spec/01'] }
+            ]),
+            {
+                eventId: 'session.started:implementation/01:2026-04-10T15:57:30.000Z',
+                type: 'session.started',
+                occurredAt: '2026-04-10T15:57:30.000Z',
+                source: 'daemon',
+                sessionId: 'session-implementation-01',
+                taskId: 'implementation/01',
+                runnerId: 'copilot-cli'
+            },
+            {
+                eventId: 'session.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
+                type: 'session.cancelled',
+                occurredAt: '2026-04-10T15:58:00.000Z',
+                source: 'daemon',
+                sessionId: 'session-implementation-01',
+                taskId: 'implementation/01'
+            },
+            createTaskReopenedEvent('prd/01', '2026-04-10T15:59:00.000Z'),
+            createTaskCompletedEvent('prd/01', '2026-04-10T16:00:00.000Z')
+        ];
+
+        for (const event of events) {
+            validateMissionWorkflowEvent(runtime, event, configuration);
+            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+        }
+
+        const specTask = runtime.tasks.find((task) => task.taskId === 'spec/01');
+        expect(specTask?.lifecycle).toBe('ready');
+        expect(runtime.stages.find((stage) => stage.stageId === 'spec')?.lifecycle).toBe('ready');
+        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('pending');
+    });
 });
 
 function createGeneratedTasksEvent(
     stageId: string,
     occurredAt: string,
-    tasks: Array<{ taskId: string; title: string; instruction: string }>
+    tasks: Array<{ taskId: string; title: string; instruction: string; dependsOn?: string[] }>
 ): MissionWorkflowEvent {
     return {
         eventId: `tasks.generated:${stageId}:${occurredAt}`,
@@ -338,7 +597,7 @@ function createGeneratedTasksEvent(
         stageId,
         tasks: tasks.map((task) => ({
             ...task,
-            dependsOn: []
+            dependsOn: [...(task.dependsOn ?? [])]
         }))
     };
 }
@@ -347,6 +606,16 @@ function createTaskCompletedEvent(taskId: string, occurredAt: string): MissionWo
     return {
         eventId: `task.completed:${taskId}:${occurredAt}`,
         type: 'task.completed',
+        occurredAt,
+        source: 'human',
+        taskId
+    };
+}
+
+function createTaskReopenedEvent(taskId: string, occurredAt: string): MissionWorkflowEvent {
+    return {
+        eventId: `task.reopened:${taskId}:${occurredAt}`,
+        type: 'task.reopened',
         occurredAt,
         source: 'human',
         taskId

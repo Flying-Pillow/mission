@@ -41,6 +41,8 @@ type TowerPanelProps = {
 	showCommandPicker: boolean;
 	commandPickerItems: CommandItem[];
 	selectedCommandPickerItemId: string | undefined;
+	isVerifyingCommands?: boolean;
+	commandResultText?: string;
 	inputValue: string;
 	isRunningCommand: boolean;
 	commandHelp: string;
@@ -110,6 +112,8 @@ export function TowerPanel(props: TowerPanelProps) {
 					showCommandPicker={props.showCommandPicker}
 					commandPickerItems={props.commandPickerItems}
 					selectedCommandPickerItemId={props.selectedCommandPickerItemId}
+					isVerifyingCommands={props.isVerifyingCommands ?? false}
+					{...(props.commandResultText ? { commandResultText: props.commandResultText } : {})}
 					{...(props.commandPanelConfirmationPrompt ? { confirmationPrompt: props.commandPanelConfirmationPrompt } : {})}
 					onInputChange={props.onInputChange}
 					onInputSubmit={props.onInputSubmit}

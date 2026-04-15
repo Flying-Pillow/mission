@@ -317,7 +317,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 		);
 	});
 
-	it('reconciles unattached persisted active sessions as terminated when runtime attach fails', async () => {
+	it('does not synthesize termination when runtime session reattach fails', async () => {
 		class ThrowingReconcileRunner extends FakeAgentRunner {
 			protected override async onReconcileSession(_reference: AgentSessionReference): Promise<AgentSession> {
 				throw new Error('runtime attach failed');
@@ -356,11 +356,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			eventLog: []
 		});
 
-		expect(events).toContainEqual(expect.objectContaining({
-			type: 'session.terminated',
-			sessionId: 'stale-running-session',
-			taskId: task.taskId
-		}));
+		expect(events).toEqual([]);
 	});
 
 	it('does not reconcile persisted terminal sessions that are already terminated', async () => {

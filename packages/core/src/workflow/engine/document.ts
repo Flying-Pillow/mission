@@ -3,10 +3,22 @@ import {
     type MissionAgentSessionRuntimeState,
     type MissionStageId,
     type MissionWorkflowConfigurationSnapshot,
+    type MissionWorkflowEvent,
+    type MissionWorkflowEventRecord,
+    type MissionWorkflowRequest,
     type MissionRuntimeRecord,
+    type MissionWorkflowSignal,
     type MissionWorkflowRuntimeState,
     type WorkflowGlobalSettings
 } from './types.js';
+import { reduceMissionWorkflowEvent } from './reducer.js';
+import { ensureMissionWorkflowEventAccepted } from './validation.js';
+
+export interface MissionWorkflowIngestResult {
+    document: MissionRuntimeRecord;
+    signals: MissionWorkflowSignal[];
+    requests: MissionWorkflowRequest[];
+}
 
 export function createMissionWorkflowConfigurationSnapshot(input: {
     createdAt?: string;
@@ -82,6 +94,24 @@ export function createMissionRuntimeRecord(input: {
     };
 }
 
+export function ingestMissionWorkflowEvent(
+    document: MissionRuntimeRecord,
+    event: MissionWorkflowEvent
+): MissionWorkflowIngestResult {
+    ensureMissionWorkflowEventAccepted(document, event);
+    const reduction = reduceMissionWorkflowEvent(document.runtime, event, document.configuration);
+    const nextDocument: MissionRuntimeRecord = {
+        ...document,
+        runtime: reduction.nextState,
+        eventLog: [...document.eventLog, toEventRecord(event)]
+    };
+    return {
+        document: nextDocument,
+        signals: reduction.signals,
+        requests: reduction.requests
+    };
+}
+
 export function toMissionAgentSessionRuntimeState(
     session: MissionAgentSessionRuntimeState
 ): MissionAgentSessionRuntimeState {
@@ -99,6 +129,20 @@ export function toMissionAgentSessionRuntimeState(
         ...(session.failedAt ? { failedAt: session.failedAt } : {}),
         ...(session.cancelledAt ? { cancelledAt: session.cancelledAt } : {}),
         ...(session.terminatedAt ? { terminatedAt: session.terminatedAt } : {})
+    };
+}
+
+function toEventRecord(event: MissionWorkflowEvent): MissionWorkflowEventRecord {
+    const payloadEntries = Object.entries(event).filter(([key]) =>
+        key !== 'eventId' && key !== 'type' && key !== 'occurredAt' && key !== 'source' && key !== 'causedByRequestId'
+    );
+    return {
+        eventId: event.eventId,
+        type: event.type,
+        occurredAt: event.occurredAt,
+        source: event.source,
+        ...(event.causedByRequestId ? { causedByRequestId: event.causedByRequestId } : {}),
+        payload: Object.fromEntries(payloadEntries)
     };
 }
 

@@ -86,6 +86,7 @@ export function useCommandController(options: CommandControllerOptions) {
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
 	const [availableActions, setAvailableActions] = createSignal<OperatorActionDescriptor[]>([]);
+	const [isVerifyingAvailableActions, setIsVerifyingAvailableActions] = createSignal<boolean>(false);
 	const [availableActionsRefreshNonce, setAvailableActionsRefreshNonce] = createSignal<number>(0);
 	let availableActionsQueryVersion = 0;
 	let lastActionsQueryKey: string | undefined;
@@ -175,12 +176,14 @@ export function useCommandController(options: CommandControllerOptions) {
 		const context = options.commandTargetContext();
 		if (!currentClient) {
 			setAvailableActions([]);
+			setIsVerifyingAvailableActions(false);
 			lastActionsQueryKey = undefined;
 			lastActionsRefreshNonce = undefined;
 			return;
 		}
 		if (mode === 'mission' && (!missionId || !options.selectedMissionMatchesLoaded())) {
 			setAvailableActions([]);
+			setIsVerifyingAvailableActions(false);
 			lastActionsQueryKey = undefined;
 			lastActionsRefreshNonce = undefined;
 			return;
@@ -198,6 +201,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		lastActionsQueryKey = queryKey;
 		lastActionsRefreshNonce = refreshNonce;
 		const requestVersion = ++availableActionsQueryVersion;
+		setIsVerifyingAvailableActions(true);
 		const nextContext: OperatorActionQueryContext | undefined = mode === 'mission' ? context : undefined;
 		void (async () => {
 			try {
@@ -207,10 +211,12 @@ export function useCommandController(options: CommandControllerOptions) {
 					: await api.control.listAvailableActionsSnapshot();
 				if (requestVersion === availableActionsQueryVersion) {
 					setAvailableActions(nextActionsSnapshot.actions);
+					setIsVerifyingAvailableActions(false);
 				}
 			} catch {
 				if (requestVersion === availableActionsQueryVersion) {
 					setAvailableActions([]);
+					setIsVerifyingAvailableActions(false);
 					if (lastActionsQueryKey === queryKey && lastActionsRefreshNonce === refreshNonce) {
 						lastActionsQueryKey = undefined;
 						lastActionsRefreshNonce = undefined;
@@ -355,7 +361,8 @@ export function useCommandController(options: CommandControllerOptions) {
 
 	function invokeSelectedActionById(actionId: string, commandTextOverride?: string): void {
 		setInputValue('');
-		setSelectedCommandId(actionId);
+		setSelectedCommandId(undefined);
+		setSelectedPickerItemId(undefined);
 		closeCommandPicker({ clearCommandInput: true });
 		options.onInvokeAction(actionId, commandTextOverride);
 	}
@@ -364,6 +371,10 @@ export function useCommandController(options: CommandControllerOptions) {
 		commandId: string,
 		config?: { execute?: boolean; fromPicker?: boolean; items?: CommandItem[] }
 	): void {
+		if (isVerifyingAvailableActions()) {
+			options.onNotify('Verifying commands for the selected target. Please wait.');
+			return;
+		}
 		const nextCommand = config?.items?.find((item) => item.id === commandId)
 			?? commandPickerItems().find((item) => item.id === commandId)
 			?? (() => {
@@ -458,6 +469,10 @@ export function useCommandController(options: CommandControllerOptions) {
 	}
 
 	function submitToolbarConfirmation(): void {
+		if (isVerifyingAvailableActions()) {
+			options.onNotify('Verifying commands for the selected target. Please wait.');
+			return;
+		}
 		const confirmingCommandId = confirmingToolbarCommandId();
 		const intent = resolveToolbarCommandSubmitIntent({
 			selectedCommand: selectedToolbarCommand(),
@@ -513,6 +528,10 @@ export function useCommandController(options: CommandControllerOptions) {
 	}
 
 	function handlePanelInputSubmit(submittedValue?: string): void {
+		if (isVerifyingAvailableActions()) {
+			options.onNotify('Verifying commands for the selected target. Please wait.');
+			return;
+		}
 		const value = typeof submittedValue === 'string' ? submittedValue : commandPanelInputValue();
 		if (isMissionFlowTextStep()) {
 			options.flowController.setTextValue(value);
@@ -716,6 +735,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		commandPanelInputValue,
 		commandPanelPrefix,
 		isCommandInteractionRunning,
+		isVerifyingAvailableActions,
 		refreshAvailableActions,
 		openCommandPickerShortcut,
 		appendCommandPickerFilter,

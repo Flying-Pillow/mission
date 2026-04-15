@@ -20,6 +20,8 @@ type CommandPanelProps = {
 	showCommandPicker: boolean;
 	commandPickerItems: CommandItem[];
 	selectedCommandPickerItemId: string | undefined;
+	isVerifyingCommands?: boolean;
+	commandResultText?: string;
 	onInputChange: (value: string) => void;
 	onInputSubmit: (value?: string) => void;
 	onInputKeyDown?: (event: TowerKeyEvent) => void;
@@ -40,8 +42,9 @@ export function CommandPanel(props: CommandPanelProps) {
 		return Math.max(24, normalizedTerminalWidth - 10);
 	};
 	const commandFocused = () => props.focusArea === 'command';
-	const pickerFocused = () => commandFocused() && props.showCommandPicker;
-	const inputFocused = () => commandFocused() && !props.showCommandPicker;
+	const isVerifyingCommands = () => props.isVerifyingCommands ?? false;
+	const pickerFocused = () => commandFocused() && props.showCommandPicker && !isVerifyingCommands();
+	const inputFocused = () => commandFocused() && !props.showCommandPicker && !isVerifyingCommands();
 	const pickerOptions = () => {
 		const [commandWidth, descriptionWidth] = splitOptionColumns(commandPickerTotalWidth());
 		return props.commandPickerItems.map<SelectOption>((item) => ({
@@ -59,13 +62,16 @@ export function CommandPanel(props: CommandPanelProps) {
 	};
 
 	const showIdleBadge = () => !props.isRunningCommand;
+	const showVerifyingBadge = () => isVerifyingCommands();
 
 	return (
 		<Panel
 			title={props.title}
 			borderColor={commandFocused() ? towerTheme.accent : towerTheme.border}
 			style={{ ...(props.style ?? {}) }}
-			{...(showIdleBadge() ? { footerBadges: [{ text: 'idle', tone: 'neutral' as const }] } : {})}
+			{...(showVerifyingBadge()
+				? { footerBadges: [{ text: 'verifying', tone: 'warning' as const }] }
+				: showIdleBadge() ? { footerBadges: [{ text: 'idle', tone: 'neutral' as const }] } : {})}
 		>
 			<box style={{ flexDirection: 'column', gap: 1 }}>
 				<box style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
@@ -86,15 +92,26 @@ export function CommandPanel(props: CommandPanelProps) {
 							}}
 							focused={inputFocused()}
 							width="100%"
-							placeholder={props.isRunningCommand ? 'Running...' : props.placeholder}
+							placeholder={props.isRunningCommand ? 'Running...' : isVerifyingCommands() ? 'Verifying commands for selection...' : props.placeholder}
 							value={props.inputValue}
 							onChange={(value) => {
+								if (isVerifyingCommands()) {
+									return;
+								}
 								props.onInputChange(inputRef?.value ?? value);
 							}}
 							onKeyDown={(event) => {
+								if (isVerifyingCommands()) {
+									event.preventDefault();
+									event.stopPropagation();
+									return;
+								}
 								props.onInputKeyDown?.(event);
 							}}
 							onSubmit={(value) => {
+								if (isVerifyingCommands()) {
+									return;
+								}
 								props.onInputSubmit(inputRef?.value ?? (typeof value === 'string' ? value : props.inputValue));
 							}}
 						/>
@@ -103,6 +120,11 @@ export function CommandPanel(props: CommandPanelProps) {
 				{props.confirmationPrompt ? (
 					<text style={{ fg: towerTheme.mutedText }}>{props.confirmationPrompt}</text>
 				) : null}
+				<Show when={props.commandResultText?.trim().length}>
+					<text style={{ fg: props.commandResultText?.trim().startsWith('ERR') ? towerTheme.danger : towerTheme.mutedText }}>
+						{props.commandResultText}
+					</text>
+				</Show>
 				<Show when={props.showCommandPicker && props.commandPickerItems.length > 0}>
 					<box style={{ height: Math.min(8, props.commandPickerItems.length), minHeight: 1, flexGrow: 1 }}>
 						<select
@@ -121,19 +143,34 @@ export function CommandPanel(props: CommandPanelProps) {
 							selectedDescriptionColor={towerTheme.primaryText}
 							showDescription={false}
 							onKeyDown={(event) => {
+								if (isVerifyingCommands()) {
+									event.preventDefault();
+									event.stopPropagation();
+									return;
+								}
 								props.onCommandPickerKeyDown?.(event);
 							}}
 							onChange={(_index, option) => {
+								if (isVerifyingCommands()) {
+									return;
+								}
 								props.onCommandPickerHighlight?.(String(option?.value ?? ''));
 							}}
 							onSelect={(_index, option) => {
+								if (isVerifyingCommands()) {
+									return;
+								}
 								props.onCommandPickerSelect?.(String(option?.value ?? ''));
 							}}
 						/>
 					</box>
 				</Show>
 				<Show when={props.showCommandPicker && props.commandPickerItems.length === 0}>
-					<text style={{ fg: towerTheme.secondaryText }}>No commands are available for the current selection.</text>
+					<text style={{ fg: towerTheme.secondaryText }}>
+						{isVerifyingCommands()
+							? 'Verifying commands for the current selection...'
+							: 'No commands are available for the current selection.'}
+					</text>
 				</Show>
 			</box>
 		</Panel>

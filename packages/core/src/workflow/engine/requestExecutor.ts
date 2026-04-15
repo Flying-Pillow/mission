@@ -273,9 +273,6 @@ export class MissionWorkflowRequestExecutor {
 					await this.terminateRuntimeSession(sessionId, 'terminated by workflow engine');
 					break;
 				}
-				case 'mission.pause':
-				case 'mission.mark-completed':
-					break;
 			}
 
 			events.push(...this.drainRuntimeEvents());
@@ -673,18 +670,11 @@ export class MissionWorkflowRequestExecutor {
 	private createAttachFailureLifecycleEvent(
 		session: MissionAgentSessionRuntimeState
 	): MissionWorkflowEvent | undefined {
-		if (isTerminalStatus(session.lifecycle)) {
-			return undefined;
-		}
-		this.sessionTaskIds.set(session.sessionId, session.taskId);
-		return {
-			eventId: `reconcile:${session.sessionId}:terminated:${new Date().toISOString()}`,
-			type: 'session.terminated',
-			occurredAt: new Date().toISOString(),
-			source: 'daemon',
-			sessionId: session.sessionId,
-			taskId: session.taskId
-		};
+		void session;
+		// Reattach failures are not authoritative lifecycle facts.
+		// If we cannot observe a runtime session, keep workflow state unchanged
+		// until a concrete terminal snapshot/event is received.
+		return undefined;
 	}
 }
 

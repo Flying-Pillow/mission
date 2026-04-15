@@ -153,8 +153,6 @@ export interface WorkflowMissionAutostartSettings {
 export interface WorkflowHumanInLoopSettings {
     enabled: boolean;
     pauseOnMissionStart: boolean;
-    pauseOnTaskFailure: boolean;
-    pauseOnTaskCompletion: boolean;
 }
 
 export interface WorkflowPanicSettings {
@@ -176,9 +174,6 @@ export interface WorkflowStageDefinition {
     stageId: MissionStageId;
     displayName: string;
     taskLaunchPolicy: WorkflowStageTaskLaunchPolicy;
-    completionPolicy: {
-        requireAllTasksCompleted: boolean;
-    };
 }
 
 export interface WorkflowGeneratedTaskDefinition {
@@ -424,9 +419,7 @@ export interface MissionWorkflowRequest {
     | 'session.prompt'
     | 'session.command'
     | 'session.terminate'
-    | 'session.cancel'
-    | 'mission.pause'
-    | 'mission.mark-completed';
+    | 'session.cancel';
     payload: Record<string, unknown>;
 }
 

@@ -9,9 +9,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
         },
         humanInLoop: {
             enabled: true,
-            pauseOnMissionStart: false,
-            pauseOnTaskFailure: true,
-            pauseOnTaskCompletion: false
+            pauseOnMissionStart: false
         },
         panic: {
             terminateSessions: true,
@@ -29,9 +27,6 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 displayName: 'PRD',
                 taskLaunchPolicy: {
                     defaultAutostart: true
-                },
-                completionPolicy: {
-                    requireAllTasksCompleted: true
                 }
             },
             spec: {
@@ -39,9 +34,6 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 displayName: 'Spec',
                 taskLaunchPolicy: {
                     defaultAutostart: true
-                },
-                completionPolicy: {
-                    requireAllTasksCompleted: true
                 }
             },
             implementation: {
@@ -49,9 +41,6 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 displayName: 'Implement',
                 taskLaunchPolicy: {
                     defaultAutostart: false
-                },
-                completionPolicy: {
-                    requireAllTasksCompleted: true
                 }
             },
             audit: {
@@ -59,9 +48,6 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 displayName: 'Audit',
                 taskLaunchPolicy: {
                     defaultAutostart: true
-                },
-                completionPolicy: {
-                    requireAllTasksCompleted: true
                 }
             },
             delivery: {
@@ -69,9 +55,6 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
                 displayName: 'Delivery',
                 taskLaunchPolicy: {
                     defaultAutostart: false
-                },
-                completionPolicy: {
-                    requireAllTasksCompleted: true
                 }
             }
         },

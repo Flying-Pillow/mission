@@ -259,9 +259,6 @@ export interface WorkflowStageDefinition {
   stageId: MissionStageId;
   displayName: string;
   taskLaunchPolicy: WorkflowStageTaskLaunchPolicy;
-  completionPolicy: {
-    requireAllTasksCompleted: boolean;
-  };
 }
 ```
 
@@ -340,8 +337,6 @@ export interface WorkflowMissionAutostartSettings {
 export interface WorkflowHumanInLoopSettings {
   enabled: boolean;
   pauseOnMissionStart: boolean;
-  pauseOnTaskFailure: boolean;
-  pauseOnTaskCompletion: boolean;
 }
 
 export interface WorkflowPanicSettings {
@@ -676,13 +671,12 @@ export interface MissionWorkflowSignal {
 export interface MissionWorkflowRequest {
   requestId: string;
   type:
+    | 'tasks.request-generation'
     | 'session.launch'
     | 'session.prompt'
     | 'session.command'
     | 'session.terminate'
-    | 'session.cancel'
-    | 'mission.pause'
-    | 'mission.mark-completed';
+    | 'session.cancel';
   payload: Record<string, unknown>;
 }
 
@@ -708,6 +702,20 @@ The request executor is not part of the reducer.
 It performs requested runtime work and feeds completion back into the engine as new events.
 
 It must route all live session work through the daemon-owned agent control path built on `AgentRunner` and `AgentSession`.
+
+## Required End-To-End Coverage
+
+The implementation must keep a controller-level end-to-end suite that exercises the workflow engine through persisted mission runtime records rather than reducer-only helpers.
+
+Minimum required scenario coverage:
+
+1. Mission bootstrap from `mission.created` through `mission.started`, generation, auto-launch, stage progression, mission completion, and `mission.delivered`.
+2. Human control events and commands: `mission.paused`, `mission.resumed`, manual `task.queued`, prompt, command, cancel, and terminate.
+3. Failure recovery: `session.launch-failed`, `task.blocked`, and `task.reopened`.
+4. Panic recovery: `mission.panic.requested`, queue clearing, `session.terminated`, `mission.panic.cleared`, and launch-queue restart.
+5. Refresh recovery where persisted state is missing machine-derived follow-up work and the controller must replay it.
+
+The authoritative regression suite for this is `packages/core/src/workflow/engine/workflowEngine.e2e.test.ts`.
 
 Examples:
 
