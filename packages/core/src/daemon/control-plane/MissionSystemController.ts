@@ -194,7 +194,7 @@ export class MissionSystemController {
 		const bindingsStartedAt = performance.now();
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
-			deriveTowerPaneBinding(domain)
+			deriveAirportPaneBindings(domain)
 		);
 		const bindingsDurationMs = performance.now() - bindingsStartedAt;
 		const totalDurationMs = performance.now() - startedAt;
@@ -235,7 +235,7 @@ export class MissionSystemController {
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
 		const domain = this.missionControl.getState();
-		const nextBindings = deriveTowerPaneBinding(domain);
+		const nextBindings = deriveAirportPaneBindings(domain);
 		if (params.intentPaneId) {
 			this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings, {
 				focusIntent: params.intentPaneId
@@ -355,16 +355,24 @@ export class MissionSystemController {
 	}
 }
 
-function deriveTowerPaneBinding(
+function deriveAirportPaneBindings(
 	graph: ContextGraph
 ): Partial<Record<AirportPaneId, PaneBinding>> {
-	const { repositoryId, missionId } = graph.selection;
+	const { repositoryId, missionId, artifactId, agentSessionId } = graph.selection;
 	return {
 		tower: missionId
 			? { targetKind: 'mission', targetId: missionId, mode: 'control' }
 			: repositoryId
 				? { targetKind: 'repository', targetId: repositoryId, mode: 'control' }
-				: { targetKind: 'empty' }
+				: { targetKind: 'empty' },
+		briefingRoom: artifactId
+			? { targetKind: 'artifact', targetId: artifactId, mode: 'view' }
+			: missionId
+				? { targetKind: 'mission', targetId: missionId, mode: 'view' }
+				: { targetKind: 'empty' },
+		runway: agentSessionId
+			? { targetKind: 'agentSession', targetId: agentSessionId, mode: 'view' }
+			: { targetKind: 'empty' }
 	};
 }
 

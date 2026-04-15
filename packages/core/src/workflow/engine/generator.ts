@@ -1,7 +1,8 @@
 import {
     renderMissionTaskTemplate,
     type MissionTaskTemplate
-} from '../templates/mission/index.js';
+} from '../mission/templates/index.js';
+import { getMissionControlRootFromMissionDir } from '../../lib/repoConfig.js';
 import type { MissionDescriptor } from '../../types.js';
 import type {
     MissionGeneratedTaskPayload,
@@ -33,6 +34,7 @@ export async function generateMissionWorkflowTasks(input: {
             renderMissionTaskTemplate(
                 { templatePath: templateSource.path },
                 {
+                    controlRoot: getMissionControlRootFromMissionDir(input.descriptor.missionDir),
                     brief: input.descriptor.brief,
                     branchRef: input.descriptor.branchRef
                 }
@@ -40,7 +42,7 @@ export async function generateMissionWorkflowTasks(input: {
         )
     );
 
-    const tasks = deduplicateGeneratedTasksByTaskId([
+    const tasks = normalizeGeneratedTaskDependencies(deduplicateGeneratedTasksByTaskId([
         ...rule.tasks.map((task) => ({
             taskId: task.taskId,
             title: task.title,
@@ -51,7 +53,7 @@ export async function generateMissionWorkflowTasks(input: {
         ...renderedTasks.map((taskTemplate) =>
             toGeneratedTaskPayload(input.stageId, taskTemplate)
         )
-    ]);
+    ]));
 
     return {
         stageId: input.stageId,
@@ -88,4 +90,62 @@ function deduplicateGeneratedTasksByTaskId(tasks: MissionGeneratedTaskPayload[])
         deduplicated.push(task);
     }
     return deduplicated;
+}
+
+export function normalizeGeneratedTaskDependencies(tasks: MissionGeneratedTaskPayload[]): MissionGeneratedTaskPayload[] {
+    return tasks.map((task, index) => ({
+        ...task,
+        dependsOn: task.dependsOn.length > 0
+            ? [...new Set(task.dependsOn.map((dependency) => resolveGeneratedTaskDependencyReference(task, dependency, tasks)))]
+            : index > 0
+                ? [tasks[index - 1]!.taskId]
+                : []
+    }));
+}
+
+function resolveGeneratedTaskDependencyReference(
+    task: MissionGeneratedTaskPayload,
+    dependency: string,
+    tasks: MissionGeneratedTaskPayload[]
+): string {
+    const trimmedDependency = dependency.trim();
+    if (!trimmedDependency) {
+        throw new Error(`Task '${task.taskId}' contains an empty dependsOn entry.`);
+    }
+
+    const exactMatch = tasks.find((candidate) => candidate.taskId === trimmedDependency);
+    if (exactMatch) {
+        if (exactMatch.taskId === task.taskId) {
+            throw new Error(`Task '${task.taskId}' cannot depend on itself.`);
+        }
+        return exactMatch.taskId;
+    }
+
+    const taskStageId = task.taskId.split('/')[0] ?? '';
+    const localMatches = tasks.filter((candidate) => {
+        const candidateStageId = candidate.taskId.split('/')[0] ?? '';
+        const candidateStem = candidate.taskId.split('/').at(-1) ?? candidate.taskId;
+        return candidateStageId === taskStageId && (
+            candidateStem === trimmedDependency ||
+            `${candidateStem}.md` === trimmedDependency ||
+            candidate.taskId === `${taskStageId}/${trimmedDependency}`
+        );
+    });
+
+    if (localMatches.length > 1) {
+        throw new Error(`Task '${task.taskId}' dependsOn '${trimmedDependency}', but that reference is ambiguous.`);
+    }
+    if (localMatches.length === 1) {
+        const dependencyTask = localMatches[0]!;
+        if (dependencyTask.taskId === task.taskId) {
+            throw new Error(`Task '${task.taskId}' cannot depend on itself.`);
+        }
+        return dependencyTask.taskId;
+    }
+
+    if (trimmedDependency.includes('/')) {
+        return trimmedDependency;
+    }
+
+    throw new Error(`Task '${task.taskId}' dependsOn '${trimmedDependency}', but no generated task matches that reference.`);
 }

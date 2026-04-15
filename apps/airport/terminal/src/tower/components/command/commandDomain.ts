@@ -141,12 +141,9 @@ export function describeCommandFlowCompletionMessage(
 	command: OperatorActionDescriptor,
 	status: OperatorStatus | undefined
 ): string | undefined {
-	if (command.id === 'control.mission.start') {
+	if (command.id === 'control.repository.init' || command.id === 'control.mission.start') {
 		if (!status) {
-			return 'Mission prepared.';
-		}
-		if (status.preparation?.kind === 'repository-bootstrap') {
-			return `Repository bootstrap prepared on ${status.preparation.branchRef}. PR: ${status.preparation.pullRequestUrl}`;
+			return command.id === 'control.repository.init' ? 'Initialization mission prepared.' : 'Mission prepared.';
 		}
 		if (status.preparation?.kind === 'mission') {
 			return `Mission ${status.preparation.missionId} prepared on ${status.preparation.branchRef}. Worktree: ${status.preparation.worktreePath}`;

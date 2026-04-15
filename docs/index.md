@@ -154,7 +154,7 @@ Mission is already usable, but it is still an alpha product. A few current truth
 - the public CLI centers on opening the Airport layout, installing prerequisites, inspecting airport state, and stopping the daemon
 - the Airport terminal surfaces currently require Bun at runtime
 - GitHub is the tracking provider used by the implemented mission intake flows
-- repository scaffolding is real, but `mission init` is not currently exposed as a public routed command
+- repository scaffolding is real, but it is currently prepared through the Airport `/init` control flow rather than a public routed `mission init` command
 
 Those constraints do not change the product direction. They just define the current operational boundary.
 

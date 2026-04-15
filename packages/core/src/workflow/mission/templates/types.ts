@@ -5,7 +5,7 @@ import type {
 	MissionTaskAgent,
 	MissionTaskStatus
 } from '../../../types.js';
-import type { TemplateObject } from './templateRenderer.js';
+import type { TemplateObject } from '../../engine/templates/templateRenderer.js';
 
 export type MissionProductTemplate = {
 	key: MissionArtifactKey;
@@ -48,6 +48,7 @@ export type MissionTemplateContext = TemplateObject & {
 };
 
 export type MissionTemplateContextInput = {
+	controlRoot: string;
 	brief: MissionBrief;
 	branchRef: string;
 };

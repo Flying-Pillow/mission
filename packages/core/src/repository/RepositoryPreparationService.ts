@@ -32,7 +32,8 @@ export class RepositoryPreparationService {
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			proposalStore.stagePaths([
-				path.relative(proposalWorktreePath, initialization.daemonSettingsPath)
+				path.relative(proposalWorktreePath, initialization.daemonSettingsPath),
+				path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
 			], proposalWorktreePath, { force: true });
 			proposalStore.commit(this.buildCommitMessage(), proposalWorktreePath);
 			proposalStore.pushBranch(branchRef, proposalWorktreePath);
@@ -73,7 +74,8 @@ export class RepositoryPreparationService {
 			'This PR initializes the tracked Mission repository scaffolding.',
 			'',
 			`- Branch: \`${branchRef}\``,
-			'- Creates `.mission/settings.json` with repository workflow defaults.',
+			'- Creates `.mission/settings.json` for repository control settings.',
+			'- Creates `.mission/workflow/workflow.json` and `.mission/workflow/templates/` as the repository-owned workflow preset.',
 			'- Establishes repo-scoped Mission control settings.',
 			'- Leaves branch-owned `.mission/missions/<mission-id>` content to mission branches.',
 			'',

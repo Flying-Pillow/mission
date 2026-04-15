@@ -13,10 +13,9 @@ import type {
 	MissionSelectionCandidate,
 	TrackedIssueSummary,
 	OperatorStatus,
-	PaneBinding,
 	MissionWorkspaceContext,
 	SystemStatus
-} from '@flying-pillow/mission-core';
+	} from '@flying-pillow/mission-core';
 import {
 	DaemonApi,
 	resolveMissionSelection,
@@ -71,6 +70,12 @@ import {
 	toErrorMessage,
 } from './airportDomain.js';
 import type { TowerConnectRequest } from './tower/bootstrapTowerPane.js';
+import {
+	buildActionsInvalidationKey,
+	buildMissionActionsRevision,
+	computeSelectionBindingSyncPlan,
+	computeSelectionBindingUpdates,
+} from './airportAppDomain.js';
 
 export type AirportConnection = {
 	client: DaemonClient;
@@ -143,9 +148,13 @@ export function AirportApp({
 	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
 	const [selectedThemeName, setSelectedThemeName] = createSignal<TowerThemeName>(initialTheme);
 	let lastObservedSelectionKey: string | undefined;
+	let acknowledgedSelectionSyncKey: string | undefined;
 	let inFlightSelectionSyncKey: string | undefined;
 	let queuedSelectionBindings: TreeSelectionPaneBindings | undefined;
 	let selectionSyncWorkerActive = false;
+	const [missionActionsRevision, setMissionActionsRevision] = createSignal<string | undefined>(
+		buildMissionActionsRevision(initialConnection?.status ?? { found: false }, initialConnection?.status.missionId)
+	);
 	const [systemStatus, setSystemStatus] = createSignal<SystemStatus | undefined>();
 	const [fallbackControlBranch, setFallbackControlBranch] = createSignal<string | undefined>();
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
@@ -305,15 +314,10 @@ export function AirportApp({
 		})
 	);
 	const actionsInvalidationKey = createMemo(() =>
-		JSON.stringify({
-			systemVersion: systemSnapshot()?.state.version ?? null,
-			workflowUpdatedAt: status().workflow?.updatedAt ?? null,
-			workflowLifecycle: status().workflow?.lifecycle ?? null,
-			missionId: status().missionId ?? null,
-			controlAvailableMissionCount: status().control?.availableMissionCount ?? null,
-			controlSettingsComplete: status().control?.settingsComplete ?? null,
-			controlBranch: status().control?.currentBranch ?? null,
-			found: status().found
+		buildActionsInvalidationKey({
+			mode: towerMode(),
+			status: status(),
+			missionActionsRevision: missionActionsRevision()
 		})
 	);
 	const commandFlowOwner = flowController.owner;
@@ -596,9 +600,15 @@ export function AirportApp({
 
 	createEffect(() => {
 		selectedShellTargetKey();
+		acknowledgedSelectionSyncKey = undefined;
 		inFlightSelectionSyncKey = undefined;
 		queuedSelectionBindings = undefined;
 		selectionSyncWorkerActive = false;
+	});
+
+	createEffect(() => {
+		const currentMission = currentMissionId();
+		setMissionActionsRevision(buildMissionActionsRevision(status(), currentMission));
 	});
 
 	createEffect(() => {
@@ -614,9 +624,20 @@ export function AirportApp({
 		if (!bindings) {
 			return;
 		}
-		const airportPanes = systemSnapshot()?.state.airport.panes;
-		const updates = computeSelectionBindingUpdates(bindings, airportPanes);
-		if (updates.length === 0) {
+		const plan = computeSelectionBindingSyncPlan({
+			desiredBindings: bindings,
+			currentPanes: systemSnapshot()?.state.airport.panes,
+			acknowledgedSyncKey: acknowledgedSelectionSyncKey,
+			inFlightSyncKey: inFlightSelectionSyncKey,
+		});
+		if (plan.currentMatches) {
+			acknowledgedSelectionSyncKey = plan.desiredSyncKey;
+			if (inFlightSelectionSyncKey === plan.desiredSyncKey) {
+				inFlightSelectionSyncKey = undefined;
+			}
+			return;
+		}
+		if (!plan.shouldQueue) {
 			return;
 		}
 		queuedSelectionBindings = bindings;
@@ -646,6 +667,10 @@ export function AirportApp({
 				const airportPanes = systemSnapshot()?.state.airport.panes;
 				const updates = computeSelectionBindingUpdates(targetBindings, airportPanes);
 				if (updates.length === 0) {
+					acknowledgedSelectionSyncKey = JSON.stringify(targetBindings);
+					if (inFlightSelectionSyncKey === acknowledgedSelectionSyncKey) {
+						inFlightSelectionSyncKey = undefined;
+					}
 					continue;
 				}
 
@@ -658,6 +683,7 @@ export function AirportApp({
 						binding
 					});
 				}
+				acknowledgedSelectionSyncKey = selectionSyncKey;
 				if (inFlightSelectionSyncKey === selectionSyncKey) {
 					inFlightSelectionSyncKey = undefined;
 				}
@@ -697,7 +723,7 @@ export function AirportApp({
 			/>
 		);
 	}
-	const repositoryFlowPanel = createMemo<JSXElement>(() => {
+	function renderRepositoryFlowPanel(): JSXElement {
 		const exactCommand = findAvailableCommandByText(commandController.availableActions(), commandController.inputValue().trim());
 		return (
 			<RepositoryFlowSurface
@@ -724,8 +750,9 @@ export function AirportApp({
 						: {})}
 			/>
 		);
-	});
-	const repositorySelectionPanel = createMemo<JSXElement>(() => (
+	}
+	function renderRepositorySelectionPanel(): JSXElement {
+		return (
 		<RepositoryPanel
 			items={repositorySelectionItems()}
 			selectedItemId={selectedRepositorySelectionItemId()}
@@ -746,17 +773,18 @@ export function AirportApp({
 				setFocusArea('command');
 			}}
 		/>
-	));
-	const centerContent = createMemo<JSXElement>(() => {
+		);
+	}
+	function renderCenterContent(): JSXElement {
 		switch (towerMode()) {
 			case 'mission':
 				return renderMissionControlPanel() ?? <box />;
 			case 'repository':
 			default:
-				return currentCommandFlowStep() ? repositoryFlowPanel() : repositorySelectionPanel();
+				return currentCommandFlowStep() ? renderRepositoryFlowPanel() : renderRepositorySelectionPanel();
 		}
-	});
-	const overlayContent = createMemo<JSXElement | undefined>(() => {
+	}
+	function renderOverlayContent(): JSXElement | undefined {
 		if (shellOverlay().kind === 'mission-flow') {
 			return (
 				<MissionFlowOverlay
@@ -771,7 +799,7 @@ export function AirportApp({
 			);
 		}
 		return undefined;
-	});
+	}
 
 	createEffect(() => {
 		const currentClient = client();
@@ -885,7 +913,7 @@ export function AirportApp({
 			}
 			if (event.type === 'mission.actions.changed') {
 				if (event.missionId === currentMissionId()) {
-					commandController.refreshAvailableActions();
+					setMissionActionsRevision(event.revision);
 				}
 				return;
 			}
@@ -896,7 +924,9 @@ export function AirportApp({
 			if (missionStatusEvent) {
 				runtimeController.handleMissionStatus(missionStatusEvent.status);
 				if (event.missionId === currentMissionId()) {
-					commandController.refreshAvailableActions();
+					setMissionActionsRevision(
+						buildMissionActionsRevision(missionStatusEvent.status, event.missionId)
+					);
 				}
 				return;
 			}
@@ -1274,60 +1304,63 @@ export function AirportApp({
 	return (
 		<Show when={selectedThemeName()} keyed>
 			<Show when={!showIntroSplash()} fallback={<IntroSplash onComplete={() => setShowIntroSplash(false)} />}>
-				<TowerPanel
-					headerPanelTitle={headerPanelTitle()}
-					showHeader={true}
-					title={screenTitle()}
-					headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
-					headerSelectedTabId={headerController.currentTabId()}
-					headerTabsFocusable={headerTabsFocusable()}
-					headerStatusLines={headerStatusLines()}
-					headerFooterBadges={headerFooterBadges()}
-					stageItems={stageItems()}
-					focusArea={focusArea()}
-					onHeaderMoveSelection={(delta) => {
-						previewHeaderTabSelection(delta);
-					}}
-					onHeaderMoveFocus={(delta) => {
-						moveFocus(delta);
-					}}
-					onHeaderSelect={() => {
-						void headerController.activateSelected();
-					}}
-					centerContent={centerContent()}
-					overlayContent={overlayContent()}
-					showCommandPanel={true}
-					commandPanelTitle={commandController.commandPanelDescriptor().title}
-					commandPanelPlaceholder={commandController.commandPanelDescriptor().placeholder}
-					{...(commandController.commandPanelPrefix() ? { commandPanelPrefix: commandController.commandPanelPrefix() } : {})}
-					showCommandPicker={commandController.showCommandPicker()}
-					commandPickerItems={commandController.commandPickerItems()}
-					selectedCommandPickerItemId={commandController.selectedCommandPickerItemId()}
-					isVerifyingCommands={commandController.isVerifyingAvailableActions()}
-					commandResultText={lastCommandStatusText() ?? ''}
-					isRunningCommand={commandController.isCommandInteractionRunning()}
-					inputValue={commandController.commandPanelInputValue()}
-					commandHelp={commandHelp()}
-					keyHintsText={keyHintsText()}
-					onInputChange={(value) => {
-						commandController.handlePanelInputChange(value);
-					}}
-					onInputSubmit={(submittedValue?: string) => {
-						commandController.handlePanelInputSubmit(submittedValue);
-					}}
-					onInputKeyDown={(event) => {
-						commandController.handlePanelKeyDown(event);
-					}}
-					onCommandPickerHighlight={(itemId) => {
-						commandController.highlightCommandPickerItem(itemId);
-					}}
-					onCommandPickerSelect={(itemId) => {
-						commandController.selectCommandById(itemId, { fromPicker: true });
-					}}
-					onCommandPickerKeyDown={(event) => {
-						commandController.handleCommandPickerKeyDown(event);
-					}}
-				/>
+				<Show when={selectedShellTargetKey()} keyed>
+					<TowerPanel
+						headerPanelTitle={headerPanelTitle()}
+						showHeader={true}
+						title={screenTitle()}
+						headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
+						headerSelectedTabId={headerController.currentTabId()}
+						headerTabsFocusable={headerTabsFocusable()}
+						headerStatusLines={headerStatusLines()}
+						headerFooterBadges={headerFooterBadges()}
+						stageItems={stageItems()}
+						focusArea={focusArea()}
+						onHeaderMoveSelection={(delta) => {
+							previewHeaderTabSelection(delta);
+						}}
+						onHeaderMoveFocus={(delta) => {
+							moveFocus(delta);
+						}}
+						onHeaderSelect={() => {
+							void headerController.activateSelected();
+						}}
+						centerContent={renderCenterContent}
+						overlayContent={renderOverlayContent}
+						hasOverlayContent={shellOverlay().kind === 'mission-flow'}
+						showCommandPanel={true}
+						commandPanelTitle={commandController.commandPanelDescriptor().title}
+						commandPanelPlaceholder={commandController.commandPanelDescriptor().placeholder}
+						{...(commandController.commandPanelPrefix() ? { commandPanelPrefix: commandController.commandPanelPrefix() } : {})}
+						showCommandPicker={commandController.showCommandPicker()}
+						commandPickerItems={commandController.commandPickerItems()}
+						selectedCommandPickerItemId={commandController.selectedCommandPickerItemId()}
+						isVerifyingCommands={commandController.isVerifyingAvailableActions()}
+						commandResultText={lastCommandStatusText() ?? ''}
+						isRunningCommand={commandController.isCommandInteractionRunning()}
+						inputValue={commandController.commandPanelInputValue()}
+						commandHelp={commandHelp()}
+						keyHintsText={keyHintsText()}
+						onInputChange={(value) => {
+							commandController.handlePanelInputChange(value);
+						}}
+						onInputSubmit={(submittedValue?: string) => {
+							commandController.handlePanelInputSubmit(submittedValue);
+						}}
+						onInputKeyDown={(event) => {
+							commandController.handlePanelKeyDown(event);
+						}}
+						onCommandPickerHighlight={(itemId) => {
+							commandController.highlightCommandPickerItem(itemId);
+						}}
+						onCommandPickerSelect={(itemId) => {
+							commandController.selectCommandById(itemId, { fromPicker: true });
+						}}
+						onCommandPickerKeyDown={(event) => {
+							commandController.handleCommandPickerKeyDown(event);
+						}}
+					/>
+				</Show>
 			</Show>
 		</Show>
 	);
@@ -1387,25 +1420,6 @@ function resolveTreeSelectionContext(
 		...(target.taskId ? { taskId: target.taskId } : {}),
 		...(target.stageId ? { stageId: target.stageId as MissionStageId } : {})
 	};
-}
-
-function computeSelectionBindingUpdates(
-	desiredBindings: TreeSelectionPaneBindings,
-	currentPanes: MissionSystemSnapshot['state']['airport']['panes'] | undefined
-): Array<['briefingRoom' | 'runway', PaneBinding]> {
-	const updates: Array<['briefingRoom' | 'runway', PaneBinding]> = [];
-	for (const paneId of ['briefingRoom', 'runway'] as const) {
-		const desiredBinding = desiredBindings[paneId];
-		if (!desiredBinding) {
-			continue;
-		}
-		const currentBinding = currentPanes?.[paneId];
-		if (JSON.stringify(desiredBinding) === JSON.stringify(currentBinding)) {
-			continue;
-		}
-		updates.push([paneId, desiredBinding as PaneBinding]);
-	}
-	return updates;
 }
 
 async function resolveGitBranchName(cwd: string): Promise<string | undefined> {

@@ -1,4 +1,4 @@
-import type { WorkflowGlobalSettings } from './types.js';
+import type { WorkflowGlobalSettings } from '../engine/types.js';
 
 export const DEFAULT_WORKFLOW_VERSION = 'mission-workflow-v1';
 
@@ -61,11 +61,13 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
         taskGeneration: [
             {
                 stageId: 'prd',
+                artifactTasks: false,
                 templateSources: [{ templateId: 'prd-from-brief', path: 'tasks/PRD/01-prd-from-brief.md' }],
                 tasks: []
             },
             {
                 stageId: 'spec',
+                artifactTasks: false,
                 templateSources: [
                     { templateId: 'draft-spec', path: 'tasks/SPEC/01-spec-from-prd.md' },
                     { templateId: 'plan-implementation', path: 'tasks/SPEC/02-plan.md' }
@@ -74,11 +76,13 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
             },
             {
                 stageId: 'implementation',
+                artifactTasks: true,
                 templateSources: [],
                 tasks: []
             },
             {
                 stageId: 'audit',
+                artifactTasks: false,
                 templateSources: [
                     { templateId: 'debrief', path: 'tasks/AUDIT/01-debrief.md' },
                     { templateId: 'touchdown', path: 'tasks/AUDIT/02-touchdown.md' }
@@ -87,6 +91,7 @@ export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
             },
             {
                 stageId: 'delivery',
+                artifactTasks: false,
                 templateSources: [],
                 tasks: []
             }

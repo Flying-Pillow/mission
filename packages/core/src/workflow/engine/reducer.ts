@@ -367,12 +367,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'cancelled', event.occurredAt);
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
-                        ? {
-                            ...task,
-                            lifecycle: 'cancelled',
-                            cancelledAt: event.occurredAt,
-                            updatedAt: event.occurredAt
-                        }
+                        ? resetInterruptedTask(task, event.occurredAt)
                         : task
                 );
                 return;
@@ -380,12 +375,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'terminated', event.occurredAt);
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
-                        ? {
-                            ...task,
-                            lifecycle: 'cancelled',
-                            cancelledAt: event.occurredAt,
-                            updatedAt: event.occurredAt
-                        }
+                        ? resetInterruptedTask(task, event.occurredAt)
                         : task
                 );
                 return;
@@ -638,6 +628,18 @@ function applyDerivedWorkflowProjectionState(
     state.stages = derived.stages;
     state.gates = derived.gates;
     assignActiveStageId(state, derived.activeStageId);
+}
+
+function resetInterruptedTask(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
+    const { completedAt, failedAt, cancelledAt, ...rest } = task;
+    void completedAt;
+    void failedAt;
+    void cancelledAt;
+    return {
+        ...rest,
+        lifecycle: 'pending',
+        updatedAt: occurredAt
+    };
 }
 
 function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowRuntimeState {

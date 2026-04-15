@@ -68,10 +68,18 @@ It does not store provider-native control protocol.
 The repository settings document currently combines:
 
 - daemon defaults such as agent runner and theme
-- repository workflow settings
 - persisted airport intent
 
-This means repository policy and layout intent share one repository-scoped settings file, while mission execution remains isolated in `mission.json`.
+Repository workflow content now lives separately under `.mission/workflow/`.
+
+## `.mission/workflow/`
+
+The repository workflow preset is split into:
+
+- `.mission/workflow/workflow.json` for the serializable workflow definition
+- `.mission/workflow/templates/` for repository-owned stage and task templates
+
+This means repository control settings, repository workflow content, and mission execution remain explicit as separate persisted contracts.
 
 ## Operator Action Contracts
 

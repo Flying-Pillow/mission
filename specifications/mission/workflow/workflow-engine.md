@@ -238,11 +238,14 @@ The workflow engine stores and snapshots it, but does not interpret provider-spe
 `autostart` means:
 
 - if the task becomes `ready`
+- and every task listed in `dependsOn` is completed, so `blockedByTaskIds` is empty
 - and the mission lifecycle allows auto-execution
 - and concurrency rules permit new work
 - and no panic or global pause is in effect
 
 then the engine may queue the task and emit a session launch effect for it.
+
+Tasks with unresolved dependencies do not become `ready`; they remain `pending` until the dependency set clears.
 
 If `autostart` is `false`, the task becomes `ready` but remains idle until a human-triggered event explicitly starts it.
 
@@ -721,6 +724,7 @@ Examples:
 
 - `session.launch` request succeeds and generates `session.started`
 - a running session later exits successfully and generates `session.completed`
+- a running session later gets cancelled or terminated and generates `session.cancelled` or `session.terminated`, while the task returns to normal derived readiness instead of becoming terminal `cancelled`
 - panic policy emits `session.terminate` requests for all running sessions
 
 ## Core Flow

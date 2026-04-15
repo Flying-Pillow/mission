@@ -144,14 +144,16 @@ Two distinctions are especially important:
 
 Repository control state is separate again:
 
-- `.mission/settings.json` stores repository-scoped daemon and workflow defaults
+- `.mission/settings.json` stores repository-scoped daemon and control defaults
+- `.mission/workflow/` stores the repository-owned workflow preset
 - `mission.json` stores one mission's execution runtime
 
 This is the practical division of responsibility:
 
 | State location | What it is |
 | --- | --- |
-| `.mission/settings.json` | Repository policy and control defaults |
+| `.mission/settings.json` | Repository daemon and control defaults |
+| `.mission/workflow/workflow.json` + `.mission/workflow/templates/` | Repository workflow preset |
 | `MissionSystemSnapshot` | Live daemon-wide composite state and airport projections |
 | `mission.json` | Mission-local persisted execution record |
 

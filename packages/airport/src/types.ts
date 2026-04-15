@@ -10,7 +10,7 @@ export type PaneTargetKind =
 
 export type PaneMode = 'view' | 'control';
 
-const PERSISTED_AIRPORT_PANE_IDS = ['tower', 'briefingRoom'] as const;
+const PERSISTED_AIRPORT_PANE_IDS = ['briefingRoom'] as const;
 const PANE_TARGET_KINDS = ['empty', 'repository', 'mission', 'task', 'artifact', 'agentSession'] as const;
 const PANE_MODES = ['view', 'control'] as const;
 
@@ -19,6 +19,8 @@ export interface PaneBinding {
 	targetId?: string;
 	mode?: PaneMode;
 }
+
+export type AirportPaneOverrides = Partial<Record<Exclude<AirportPaneId, 'tower'>, PaneBinding>>;
 
 export interface AirportFocusState {
 	intentPaneId?: AirportPaneId;
@@ -61,6 +63,8 @@ export interface AirportState {
 	repositoryId?: string;
 	repositoryRootPath?: string;
 	sessionId?: string;
+	defaultPanes: Record<AirportPaneId, PaneBinding>;
+	paneOverrides: AirportPaneOverrides;
 	panes: Record<AirportPaneId, PaneBinding>;
 	focus: AirportFocusState;
 	clients: Record<string, AirportClientState>;
@@ -68,7 +72,7 @@ export interface AirportState {
 }
 
 export interface PersistedAirportIntent {
-	panes?: Partial<Record<AirportPaneId, PaneBinding>>;
+	panes?: AirportPaneOverrides;
 	focus?: {
 		intentPaneId?: AirportPaneId;
 	};
@@ -143,11 +147,11 @@ export interface BindAirportPaneParams {
 }
 
 export function derivePersistedAirportIntent(state: AirportState): PersistedAirportIntent {
+	const panes = Object.keys(state.paneOverrides).length > 0
+		? { ...state.paneOverrides }
+		: undefined;
 	return {
-		panes: {
-			tower: normalizePaneBinding(state.panes.tower),
-			briefingRoom: normalizePaneBinding(state.panes.briefingRoom)
-		},
+		...(panes ? { panes } : {}),
 		...(state.focus.intentPaneId && state.focus.intentPaneId !== 'runway'
 			? {
 				focus: {

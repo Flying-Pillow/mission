@@ -42,7 +42,7 @@ describe('bootstrapAirportLayout session reset parsing', () => {
 		expect(layout).toContain(`args "-lc" "exec tower-command"`);
 		expect(layout).toContain(`pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {`);
 		expect(layout).toContain(`args "-lc" "exec briefing-command"`);
-		expect(layout).toContain(`pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="RUNWAY" size="34%" command="sh" cwd="/repo" {`);
 		expect(layout).toContain(`args "-lc" "exec runway-command"`);
 	});
 
@@ -56,7 +56,7 @@ describe('bootstrapAirportLayout session reset parsing', () => {
 		});
 		expect(layout).toContain(`pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {`);
 		expect(layout).toContain(`pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {`);
-		expect(layout).toContain(`pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="RUNWAY" size="34%" command="sh" cwd="/repo" {`);
 	});
 
 	it('uses a horizontal split for runway only when the viewport is wide enough', () => {

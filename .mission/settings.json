@@ -89,6 +89,7 @@
     "taskGeneration": [
       {
         "stageId": "prd",
+        "artifactTasks": false,
         "templateSources": [
           {
             "templateId": "prd-from-brief",
@@ -99,6 +100,7 @@
       },
       {
         "stageId": "spec",
+        "artifactTasks": false,
         "templateSources": [
           {
             "templateId": "draft-spec",
@@ -113,11 +115,13 @@
       },
       {
         "stageId": "implementation",
+        "artifactTasks": true,
         "templateSources": [],
         "tasks": []
       },
       {
         "stageId": "audit",
+        "artifactTasks": false,
         "templateSources": [
           {
             "templateId": "debrief",
@@ -128,6 +132,7 @@
       },
       {
         "stageId": "delivery",
+        "artifactTasks": false,
         "templateSources": [
           {
             "templateId": "touchdown",

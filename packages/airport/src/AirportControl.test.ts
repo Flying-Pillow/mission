@@ -38,4 +38,72 @@ describe('AirportControl', () => {
 
 		expect(control.getState().focus).toMatchObject({ observedPaneId: 'briefingRoom' });
 	});
+
+	it('keeps explicit briefing-room intent when canonical defaults are reapplied', () => {
+		const control = new AirportControl({
+			airportId: 'airport:test',
+			repositoryId: 'repo',
+			repositoryRootPath: '/tmp/repo',
+			terminalSessionName: 'mission-control-repo-test'
+		});
+
+		control.bindPane({
+			paneId: 'briefingRoom',
+			binding: {
+				targetKind: 'artifact',
+				targetId: 'repo:task:task-1',
+				mode: 'view'
+			}
+		});
+
+		control.applyDefaultBindings({
+			tower: { targetKind: 'mission', targetId: 'mission-1', mode: 'control' },
+			briefingRoom: { targetKind: 'mission', targetId: 'mission-1', mode: 'view' }
+		});
+
+		expect(control.getState().defaultPanes.briefingRoom).toMatchObject({
+			targetKind: 'mission',
+			targetId: 'mission-1',
+			mode: 'view'
+		});
+		expect(control.getState().paneOverrides.briefingRoom).toMatchObject({
+			targetKind: 'artifact',
+			targetId: 'repo:task:task-1',
+			mode: 'view'
+		});
+		expect(control.getState().panes.briefingRoom).toMatchObject({
+			targetKind: 'artifact',
+			targetId: 'repo:task:task-1',
+			mode: 'view'
+		});
+	});
+
+	it('drops redundant briefing-room overrides once defaults catch up', () => {
+		const control = new AirportControl({
+			airportId: 'airport:test',
+			repositoryId: 'repo',
+			repositoryRootPath: '/tmp/repo',
+			terminalSessionName: 'mission-control-repo-test'
+		});
+
+		control.bindPane({
+			paneId: 'briefingRoom',
+			binding: {
+				targetKind: 'artifact',
+				targetId: 'repo:task:task-1',
+				mode: 'view'
+			}
+		});
+
+		control.applyDefaultBindings({
+			briefingRoom: {
+				targetKind: 'artifact',
+				targetId: 'repo:task:task-1',
+				mode: 'view'
+			}
+		});
+
+		expect(control.getState().paneOverrides.briefingRoom).toBeUndefined();
+		expect(control.getPersistedIntent().panes).toBeUndefined();
+	});
 });

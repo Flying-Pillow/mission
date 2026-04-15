@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { FakeAgentRunner } from '../agent/testing/FakeAgentRunner.js';
@@ -472,6 +472,46 @@ describe('Mission', () => {
         }
     });
 
+    it('marks an active agent session completed before advancing a task to done', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(209, 'Mission completes active session on task done'),
+                branchRef: adapter.deriveMissionBranchName(209, 'Mission completes active session on task done')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const launched = await mission.launchAgentSession({
+                    runnerId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Finish this task.'
+                });
+
+                expect(launched.lifecycleState).toBe('running');
+
+                await mission.completeTask(taskId);
+
+                const completedSession = mission.getAgentSession(launched.sessionId);
+                expect(completedSession?.lifecycleState).toBe('completed');
+                expect(runner.getSession(launched.sessionId)?.getSnapshot().status).toBe('completed');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('fills missing transport identity for persisted copilot-cli runtime sessions', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'terminal');
@@ -587,6 +627,87 @@ describe('Mission', () => {
                     runnerId: runner.id,
                     lifecycleState: 'running'
                 });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('serves loaded mission status from in-memory runtime instead of rereading out-of-band mission.json edits', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(208, 'Mission live daemon cache'),
+                branchRef: adapter.deriveMissionBranchName(208, 'Mission live daemon cache')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId) {
+                    throw new Error('Expected a ready task after workflow start.');
+                }
+
+                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                if (!persisted) {
+                    throw new Error('Expected a persisted mission runtime record.');
+                }
+
+                persisted.runtime.tasks = persisted.runtime.tasks.map((task) =>
+                    task.taskId === taskId
+                        ? {
+                            ...task,
+                            lifecycle: 'completed',
+                            completedAt: '2026-04-14T10:00:00.000Z',
+                            updatedAt: '2026-04-14T10:00:00.000Z'
+                        }
+                        : task
+                );
+                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+
+                const status = await mission.status();
+                expect(status.readyTasks?.some((task) => task.taskId === taskId)).toBe(true);
+                expect(status.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('ready');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('refreshes mission action snapshots after pause and resume transitions', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(209, 'Mission action snapshot freshness'),
+                branchRef: adapter.deriveMissionBranchName(209, 'Mission action snapshot freshness')
+            }, createWorkflowBindings(runner));
+
+            try {
+                await mission.startWorkflow();
+
+                const runningActions = await mission.listAvailableActionsSnapshot();
+                expect(runningActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(true);
+                expect(runningActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(false);
+
+                await mission.pauseMission();
+                const pausedActions = await mission.listAvailableActionsSnapshot();
+                expect(pausedActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(true);
+                expect(pausedActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(false);
+
+                await mission.resumeMission();
+                const resumedActions = await mission.listAvailableActionsSnapshot();
+                expect(resumedActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(true);
+                expect(resumedActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(false);
             } finally {
                 mission.dispose();
             }

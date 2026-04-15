@@ -31,8 +31,9 @@ type TowerPanelProps = {
 	headerFooterBadges: PanelBadge[];
 	stageItems: ProgressRailItem[];
 	focusArea: FocusArea;
-	centerContent: JSXElement;
-	overlayContent?: JSXElement;
+	centerContent: () => JSXElement;
+	overlayContent?: () => JSXElement | undefined;
+	hasOverlayContent?: boolean;
 	showCommandPanel: boolean;
 	commandPanelTitle: string;
 	commandPanelPlaceholder: string;
@@ -89,13 +90,13 @@ export function TowerPanel(props: TowerPanelProps) {
 			</Show>
 
 			<box style={{ flexDirection: 'row', flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
-				<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0, gap: props.overlayContent ? 1 : 0 }}>
+				<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0, gap: props.hasOverlayContent ? 1 : 0 }}>
 					<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
-						{props.centerContent}
+						{props.centerContent()}
 					</box>
-					<Show when={props.overlayContent}>
+					<Show when={props.hasOverlayContent === true && props.overlayContent !== undefined}>
 						<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
-							{props.overlayContent}
+							{props.overlayContent?.()}
 						</box>
 					</Show>
 				</box>

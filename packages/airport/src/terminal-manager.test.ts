@@ -191,14 +191,19 @@ describe('TerminalManagerSubstrateController', () => {
 });
 
 function createAirportState(overrides: Partial<AirportState['panes']> = {}, panes: AirportState['substrate']['panes'] = {}): AirportState {
+	const defaultPanes: AirportState['defaultPanes'] = {
+		tower: { targetKind: 'repository', targetId: 'repo', mode: 'control' },
+		briefingRoom: { targetKind: 'repository', targetId: 'repo', mode: 'view' },
+		runway: { targetKind: 'empty' }
+	};
 	return {
 		airportId: 'airport:test',
 		repositoryId: 'repo',
 		repositoryRootPath: '/tmp/repo',
+		defaultPanes,
+		paneOverrides: {},
 		panes: {
-			tower: { targetKind: 'repository', targetId: 'repo', mode: 'control' },
-			briefingRoom: { targetKind: 'repository', targetId: 'repo', mode: 'view' },
-			runway: { targetKind: 'empty' },
+			...defaultPanes,
 			...overrides
 		},
 		focus: {},

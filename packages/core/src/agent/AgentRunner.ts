@@ -21,6 +21,7 @@ export type AgentRunnerDefinition = {
 };
 
 export type AgentRunnerSessionController = {
+    done(): Promise<AgentSessionSnapshot>;
     submitPrompt(prompt: AgentPrompt): Promise<AgentSessionSnapshot>;
     submitCommand(command: AgentCommand): Promise<AgentSessionSnapshot>;
     cancel(reason?: string): Promise<AgentSessionSnapshot>;
@@ -391,6 +392,7 @@ export abstract class AgentRunner {
         return new ManagedAgentSession({
             getSnapshot: () => this.getManagedSnapshot(sessionId),
             observe: (listener) => this.observeManagedSession(sessionId, listener),
+            done: () => this.invokeManagedDone(sessionId),
             submitPrompt: (prompt) => this.invokeManagedSubmitPrompt(sessionId, prompt),
             submitCommand: (command) => this.invokeManagedSubmitCommand(sessionId, command),
             cancel: (reason) => this.invokeManagedCancel(sessionId, reason),
@@ -486,6 +488,7 @@ export abstract class AgentRunner {
 
     private createTerminalSessionController(sessionId: string): AgentRunnerSessionController {
         return {
+            done: async () => this.completeTerminalSession(sessionId),
             submitPrompt: async (prompt) => this.submitTerminalPrompt(sessionId, prompt),
             submitCommand: async (command) => this.submitTerminalCommand(sessionId, command),
             cancel: async (reason) => this.cancelTerminalSession(sessionId, reason),
@@ -644,6 +647,30 @@ export abstract class AgentRunner {
         return snapshot;
     }
 
+    private async completeTerminalSession(sessionId: string): Promise<AgentSessionSnapshot> {
+        this.requireActiveTerminalSession(sessionId, 'mark the session done');
+        this.stopTerminalPolling(sessionId);
+        const endedAt = new Date().toISOString();
+        const snapshot = this.updateManagedSnapshot(sessionId, {
+            status: 'completed',
+            attention: 'none',
+            waitingForInput: false,
+            acceptsPrompts: false,
+            acceptedCommands: [],
+            progress: {
+                state: 'done',
+                updatedAt: endedAt
+            },
+            endedAt,
+            failureMessage: undefined
+        });
+        this.emitSessionEvent({
+            type: 'session.completed',
+            snapshot
+        });
+        return snapshot;
+    }
+
     private async pollTerminalSession(sessionId: string, runtime: ConfiguredTerminalRuntime): Promise<void> {
         const handle = this.terminalSessions.get(sessionId);
         if (!handle || handle.polling) {
@@ -792,6 +819,10 @@ export abstract class AgentRunner {
         return this.requireManagedSessionRecord(sessionId).controller.submitPrompt(prompt);
     }
 
+    private async invokeManagedDone(sessionId: AgentSessionId): Promise<AgentSessionSnapshot> {
+        return this.requireManagedSessionRecord(sessionId).controller.done();
+    }
+
     private async invokeManagedSubmitCommand(
         sessionId: AgentSessionId,
         command: AgentCommand
@@ -817,6 +848,7 @@ export abstract class AgentRunner {
 type ManagedAgentSessionOptions = {
     getSnapshot(): AgentSessionSnapshot;
     observe(listener: (event: AgentSessionEvent) => void): { dispose(): void };
+    done(): Promise<AgentSessionSnapshot>;
     submitPrompt(prompt: AgentPrompt): Promise<AgentSessionSnapshot>;
     submitCommand(command: AgentCommand): Promise<AgentSessionSnapshot>;
     cancel(reason?: string): Promise<AgentSessionSnapshot>;
@@ -836,6 +868,10 @@ class ManagedAgentSession implements AgentSession {
 
     public onDidEvent(listener: (event: AgentSessionEvent) => void): { dispose(): void } {
         return this.options.observe(listener);
+    }
+
+    public done(): Promise<AgentSessionSnapshot> {
+        return this.options.done();
     }
 
     public submitPrompt(prompt: AgentPrompt): Promise<AgentSessionSnapshot> {
@@ -868,6 +904,10 @@ class DetachedAgentSession implements AgentSession {
 
     public onDidEvent(): { dispose(): void } {
         return { dispose() {} };
+    }
+
+    public async done(): Promise<AgentSessionSnapshot> {
+        return this.getSnapshot();
     }
 
     public async submitPrompt(): Promise<AgentSessionSnapshot> {

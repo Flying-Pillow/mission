@@ -1,8 +1,11 @@
-import { readMissionTemplate } from './templateRepository.js';
-import { renderTemplate } from './templateRenderer.js';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readTemplateFile } from '../../engine/templates/templateRepository.js';
+import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../../agent/runtimes/AgentRuntimeIds.js';
+import { getMissionWorkflowTemplatesPath } from '../../../lib/repoConfig.js';
 import type {
     MissionProductTemplate,
     MissionStageTemplateDefinitions,
@@ -12,6 +15,8 @@ import type {
     MissionTemplateContextInput
 } from './types.js';
 import type { MissionTaskAgent, MissionTaskStatus } from '../../../types.js';
+
+const packagedTemplateDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export type {
     MissionProductTemplate,
@@ -38,7 +43,7 @@ export async function renderMissionTaskTemplate(
     template: MissionTaskTemplateRef,
     input: MissionTemplateContextInput
 ): Promise<MissionTaskTemplate> {
-    const templateText = await readMissionTemplate(template.templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), template.templatePath);
     const renderedText = renderTemplate(templateText, createMissionTemplateContext(input));
     const document = parseFrontmatterDocument(renderedText);
 
@@ -92,35 +97,40 @@ async function renderMissionTemplate(
     templatePath: string,
     input: MissionTemplateContextInput
 ): Promise<string> {
-    const templateText = await readMissionTemplate(templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), templatePath);
     return renderTemplate(templateText, createMissionTemplateContext(input));
+}
+
+function resolveMissionTemplateDirectory(controlRoot: string): string {
+	const repositoryTemplateDirectory = getMissionWorkflowTemplatesPath(controlRoot);
+	return path.isAbsolute(repositoryTemplateDirectory) ? repositoryTemplateDirectory : packagedTemplateDirectory;
 }
 
 export const MISSION_STAGE_TEMPLATE_DEFINITIONS: MissionStageTemplateDefinitions = {
     prd: {
-        artifacts: [{ key: 'prd', templatePath: 'products/PRD.md' }],
+        artifacts: [{ key: 'prd', templatePath: 'stages/PRD.md' }],
         defaultTasks: [{ templatePath: 'tasks/PRD/01-prd-from-brief.md' }]
     },
     spec: {
-        artifacts: [{ key: 'spec', templatePath: 'products/SPEC.md' }],
+        artifacts: [{ key: 'spec', templatePath: 'stages/SPEC.md' }],
         defaultTasks: [
             { templatePath: 'tasks/SPEC/01-spec-from-prd.md' },
             { templatePath: 'tasks/SPEC/02-plan.md' }
         ]
     },
     implementation: {
-        artifacts: [{ key: 'verify', templatePath: 'products/VERIFICATION.md' }],
+        artifacts: [{ key: 'verify', templatePath: 'stages/VERIFICATION.md' }],
         defaultTasks: []
     },
     audit: {
-        artifacts: [{ key: 'audit', templatePath: 'products/AUDIT.md' }],
+        artifacts: [{ key: 'audit', templatePath: 'stages/AUDIT.md' }],
         defaultTasks: [
             { templatePath: 'tasks/AUDIT/01-debrief.md' },
             { templatePath: 'tasks/AUDIT/02-touchdown.md' }
         ]
     },
     delivery: {
-        artifacts: [{ key: 'delivery', templatePath: 'products/DELIVERY.md' }],
+        artifacts: [{ key: 'delivery', templatePath: 'stages/DELIVERY.md' }],
         defaultTasks: []
     }
 };

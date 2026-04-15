@@ -1,5 +1,5 @@
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import {
-	createDefaultWorkflowSettings,
 	type WorkflowGlobalSettings,
 	type WorkflowStageDefinition
 } from '../workflow/engine/index.js';
@@ -38,6 +38,7 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowGlobalSetting
 				.filter((rule): rule is WorkflowGlobalSettings['taskGeneration'][number] => Boolean(rule && typeof rule === 'object'))
 				.map((rule) => ({
 					stageId: typeof rule.stageId === 'string' ? rule.stageId : '',
+					artifactTasks: asBoolean(rule.artifactTasks, defaults.taskGeneration.find((candidate) => candidate.stageId === rule.stageId)?.artifactTasks ?? false),
 					templateSources: Array.isArray(rule.templateSources)
 						? rule.templateSources
 							.filter((sourceRule): sourceRule is WorkflowGlobalSettings['taskGeneration'][number]['templateSources'][number] => Boolean(sourceRule && typeof sourceRule === 'object'))

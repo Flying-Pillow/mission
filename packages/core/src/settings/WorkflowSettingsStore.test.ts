@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+import { getMissionWorkflowDefinitionPath } from '../lib/repoConfig.js';
 import { WorkflowSettingsStore } from './WorkflowSettingsStore.js';
 
 describe('WorkflowSettingsStore', () => {
@@ -13,11 +14,15 @@ describe('WorkflowSettingsStore', () => {
 			const store = new WorkflowSettingsStore(workspaceRoot);
 			const initialized = await store.initialize();
 			const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
+			const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
 			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as { workflow?: unknown };
+			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as { stageOrder?: unknown };
 
 			expect(initialized.metadata.initialized).toBe(true);
+			expect(initialized.metadata.sourcePath).toBe(workflowPath);
 			expect(initialized.workflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
-			expect(content.workflow).toBeDefined();
+			expect(content.workflow).toBeUndefined();
+			expect(persistedWorkflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
@@ -46,16 +51,15 @@ describe('WorkflowSettingsStore', () => {
 
 			expect(updated.workflow.execution.maxParallelTasks).toBe(2);
 
-			const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
-			const rawSettings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
-			rawSettings['workflow'] = {
-				...(rawSettings['workflow'] as Record<string, unknown>),
+			const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
+			const rawWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as Record<string, unknown>;
+			rawWorkflow['execution'] = {
 				execution: {
 					maxParallelTasks: 3,
 					maxParallelSessions: 1
 				}
-			};
-			await fs.writeFile(settingsPath, `${JSON.stringify(rawSettings, null, 2)}\n`, 'utf8');
+			}['execution'];
+			await fs.writeFile(workflowPath, `${JSON.stringify(rawWorkflow, null, 2)}\n`, 'utf8');
 
 			await expect(
 				store.update({

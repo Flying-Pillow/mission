@@ -29,7 +29,7 @@ export function createMissionWorkflowConfigurationSnapshot(input: {
         createdAt: input.createdAt ?? new Date().toISOString(),
         source: 'global-settings',
         workflowVersion: input.workflowVersion,
-        workflow: input.workflow
+        workflow: structuredClone(input.workflow)
     };
 }
 

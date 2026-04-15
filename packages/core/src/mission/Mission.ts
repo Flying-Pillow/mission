@@ -17,6 +17,7 @@ import type {
 } from '../agent/AgentRuntimeTypes.js';
 
 import type { MissionDefaultAgentMode } from '../lib/daemonConfig.js';
+import { initializeMissionRepository } from '../repository/initializeMissionRepository.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
@@ -44,10 +45,10 @@ import {
 	type MissionTaskState
 } from '../types.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
 import {
 	MissionWorkflowController,
 	MissionWorkflowRequestExecutor,
-	DEFAULT_WORKFLOW_VERSION,
 	createDraftMissionWorkflowRuntimeState,
 	createMissionWorkflowConfigurationSnapshot,
 	type MissionWorkflowEvent,
@@ -76,6 +77,7 @@ export class Mission {
 	private descriptor: MissionDescriptor;
 	private agentSessions: MissionAgentSessionRecord[] = [];
 	private lastKnownStatus: OperatorStatus | undefined;
+	private lastKnownActionSnapshot: OperatorActionListSnapshot | undefined;
 	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
 	private readonly workflowController: MissionWorkflowController;
 	private readonly workflowResolver: () => WorkflowGlobalSettings;
@@ -132,6 +134,10 @@ export class Mission {
 	}
 
 	public async initialize(): Promise<this> {
+		const missionWorkspaceRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
+		await initializeMissionRepository(missionWorkspaceRoot, {
+			includeRuntimeDirectories: false
+		});
 		await this.adapter.initializeMissionEnvironment(this.missionDir);
 		await this.adapter.writeMissionDescriptor(this.missionDir, this.descriptor);
 		await this.workflowController.initialize();
@@ -166,26 +172,26 @@ export class Mission {
 		this.descriptor = nextDescriptor;
 		const document = await this.workflowController.refresh();
 		this.syncAgentSessions(document);
+		this.lastKnownActionSnapshot = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this;
 	}
 
 	public async status(): Promise<OperatorStatus> {
-		const nextDescriptor = await this.adapter.readMissionDescriptor(this.missionDir);
-		if (nextDescriptor) {
-			this.descriptor = nextDescriptor;
+		await this.runtimeLifecycleIngestionQueue;
+		if (
+			this.lastKnownStatus
+			&& this.lastKnownStatus.workflow?.lifecycle !== 'draft'
+			&& !this.hasActiveAgentSessions()
+		) {
+			return this.lastKnownStatus;
 		}
 
-		const refreshedDocument = await this.workflowController.refresh();
-		let document = refreshedDocument;
-		if (refreshedDocument) {
-			try {
-				document = await this.workflowController.reconcileSessions();
-			} catch {
-				document = refreshedDocument;
-			}
-		}
+		const document = await this.readLiveWorkflowDocument({
+			reconcileSessions: this.hasActiveAgentSessions()
+		});
 		this.syncAgentSessions(document);
+		this.lastKnownActionSnapshot = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this.lastKnownStatus;
 	}
@@ -195,25 +201,25 @@ export class Mission {
 	}
 
 	public async listAvailableActionsSnapshot(): Promise<OperatorActionListSnapshot> {
-		const nextDescriptor = await this.adapter.readMissionDescriptor(this.missionDir);
-		if (nextDescriptor) {
-			this.descriptor = nextDescriptor;
+		await this.runtimeLifecycleIngestionQueue;
+		if (
+			this.lastKnownActionSnapshot
+			&& this.lastKnownStatus?.workflow?.lifecycle !== 'draft'
+			&& !this.hasActiveAgentSessions()
+		) {
+			return this.lastKnownActionSnapshot;
 		}
 
-		const refreshedDocument = await this.workflowController.refresh();
-		let document = refreshedDocument;
-		if (refreshedDocument) {
-			try {
-				document = await this.workflowController.reconcileSessions();
-			} catch {
-				document = refreshedDocument;
-			}
-		}
+		const document = await this.readLiveWorkflowDocument({
+			reconcileSessions: this.hasActiveAgentSessions()
+		});
 		this.syncAgentSessions(document);
-		return {
+		const snapshot = {
 			actions: this.buildActionList(document),
 			revision: this.buildActionRevision(document)
 		};
+		this.lastKnownActionSnapshot = snapshot;
+		return snapshot;
 	}
 
 	public async startWorkflow(): Promise<OperatorStatus> {
@@ -387,7 +393,7 @@ export class Mission {
 			throw new Error(gate.errors.join(' | '));
 		}
 
-		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.delivered', {}));
+		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.delivered', {}));
 		await this.status();
 		return this.getRecord();
 	}
@@ -483,29 +489,29 @@ export class Mission {
 	}
 
 	public async pauseMission(): Promise<void> {
-		await this.workflowController.applyEvent(
+		await this.applyWorkflowEvent(
 			this.createWorkflowEvent('mission.paused', { reason: 'human-requested', targetType: 'mission' })
 		);
 		await this.status();
 	}
 
 	public async resumeMission(): Promise<void> {
-		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.resumed', {}));
+		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.resumed', {}));
 		await this.status();
 	}
 
 	public async panicStopMission(): Promise<void> {
-		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.panic.requested', {}));
+		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.panic.requested', {}));
 		await this.status();
 	}
 
 	public async clearMissionPanic(): Promise<void> {
-		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.panic.cleared', {}));
+		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.panic.cleared', {}));
 		await this.status();
 	}
 
 	public async restartLaunchQueue(): Promise<void> {
-		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.launch-queue.restarted', {}));
+		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.launch-queue.restarted', {}));
 		await this.status();
 	}
 
@@ -551,7 +557,7 @@ export class Mission {
 		);
 		if (
 			!generationRule
-			|| (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
+			|| (!generationRule.artifactTasks && generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
 		) {
 			throw new Error(`Stage '${stageId}' does not support task generation.`);
 		}
@@ -1172,7 +1178,7 @@ export class Mission {
 	}
 
 	private async recordStartedTaskSession(snapshot: AgentSessionSnapshot): Promise<MissionSession> {
-		await this.workflowController.applyEvent({
+		await this.applyWorkflowEvent({
 			eventId: `${this.descriptor.missionId}:session-started:${snapshot.sessionId}`,
 			type: 'session.started',
 			occurredAt: snapshot.updatedAt,
@@ -1191,7 +1197,7 @@ export class Mission {
 
 	private async recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void> {
 		const failureEventNonce = Date.now().toString(36);
-		await this.workflowController.applyEvent({
+		await this.applyWorkflowEvent({
 			eventId: `${this.descriptor.missionId}:session-launch-failed:${taskId}:${failureEventNonce}`,
 			type: 'session.launch-failed',
 			occurredAt: new Date().toISOString(),
@@ -1245,6 +1251,16 @@ export class Mission {
 		return this.requireAgentSessionRecord(sessionId);
 	}
 
+	private async completeSessionRecord(
+		sessionId: string
+	): Promise<MissionAgentSessionRecord> {
+		const record = this.requireAgentSessionRecord(sessionId);
+		await this.ensureRuntimeSessionAttached(sessionId);
+		await this.workflowController.completeRuntimeSession(sessionId, record.taskId);
+		await this.refresh();
+		return this.requireAgentSessionRecord(sessionId);
+	}
+
 	private async terminateSessionRecord(
 		sessionId: string,
 		reason?: string
@@ -1277,6 +1293,7 @@ export class Mission {
 
 	private createSession(record: MissionAgentSessionRecord): MissionSession {
 		return new MissionSession({
+			completeSessionRecord: (sessionId) => this.completeSessionRecord(sessionId),
 			sendSessionPrompt: (sessionId, prompt) => this.sendSessionPrompt(sessionId, prompt),
 			sendSessionCommand: (sessionId, command) => this.sendSessionCommand(sessionId, command),
 			cancelSessionRecord: (sessionId, reason) => this.cancelSessionRecord(sessionId, reason),
@@ -1501,10 +1518,36 @@ export class Mission {
 	private async applyWorkflowEvent(event: MissionWorkflowEvent): Promise<void> {
 		const run = this.workflowEventApplicationQueue.then(async () => {
 			await this.workflowController.applyEvent(event);
-			this.lastKnownStatus = undefined;
+			this.invalidateCachedMissionSnapshots();
 		});
 		this.workflowEventApplicationQueue = run.catch(() => undefined);
 		await run;
+	}
+
+	private async readLiveWorkflowDocument(
+		options: { reconcileSessions?: boolean } = {}
+	): Promise<MissionRuntimeRecord | undefined> {
+		const currentDocument = await this.workflowController.getPersistedDocument();
+		if (!currentDocument) {
+			return undefined;
+		}
+		if (!options.reconcileSessions) {
+			return currentDocument;
+		}
+		try {
+			return await this.workflowController.reconcileSessions();
+		} catch {
+			return currentDocument;
+		}
+	}
+
+	private hasActiveAgentSessions(): boolean {
+		return this.agentSessions.some((session) => isActiveMissionAgentSession(session.lifecycleState));
+	}
+
+	private invalidateCachedMissionSnapshots(): void {
+		this.lastKnownStatus = undefined;
+		this.lastKnownActionSnapshot = undefined;
 	}
 
 	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<void> {
@@ -1518,6 +1561,12 @@ export class Mission {
 	}
 
 	private async completeTaskExecution(taskId: string): Promise<void> {
+		for (const session of this.agentSessions.filter(
+			(candidate) => candidate.taskId === taskId && isActiveMissionAgentSession(candidate.lifecycleState)
+		)) {
+			await this.ensureRuntimeSessionAttached(session.sessionId);
+			await this.workflowController.completeRuntimeSession(session.sessionId, taskId);
+		}
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.completed', { taskId }));
 	}
 
@@ -1743,7 +1792,7 @@ function buildGenerationAction(
 	const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
 	if (
 		!generationRule
-		|| (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
+		|| (!generationRule.artifactTasks && generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
 	) {
 		return undefined;
 	}

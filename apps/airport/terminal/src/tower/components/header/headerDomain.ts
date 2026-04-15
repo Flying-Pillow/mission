@@ -38,24 +38,15 @@ export function buildHeaderTabs(
 	status: OperatorStatus,
 	missionCandidates: MissionSelectionCandidate[] = []
 ): HeaderTab[] {
-	const tabs: HeaderTab[] = [];
+	const tabs: HeaderTab[] = [
+		{
+			id: repositoryTabId,
+			label: resolveRepositoryTabLabel(status.control),
+			target: { kind: 'repository' }
+		}
+	];
 	const seenMissionIds = new Set<string>();
 	const activeMissionId = status.missionId?.trim();
-	if (activeMissionId) {
-		const activeMissionTitle = missionCandidates.find(
-			(candidate) => candidate.missionId === activeMissionId
-		)?.title || activeMissionId;
-		tabs.push({
-			id: `mission:${activeMissionId}`,
-			label: formatHeaderMissionLabel(
-				activeMissionId,
-				missionCandidates.find((candidate) => candidate.missionId === activeMissionId)?.issueId,
-				activeMissionTitle
-			),
-			target: { kind: 'mission', missionId: activeMissionId }
-		});
-		seenMissionIds.add(activeMissionId);
-	}
 	for (const candidate of missionCandidates) {
 		if (!candidate.missionId || seenMissionIds.has(candidate.missionId)) {
 			continue;
@@ -67,11 +58,20 @@ export function buildHeaderTabs(
 		});
 		seenMissionIds.add(candidate.missionId);
 	}
-	tabs.push({
-		id: repositoryTabId,
-		label: resolveRepositoryTabLabel(status.control),
-		target: { kind: 'repository' }
-	});
+	if (activeMissionId && !seenMissionIds.has(activeMissionId)) {
+		const activeMissionCandidate = missionCandidates.find(
+			(candidate) => candidate.missionId === activeMissionId
+		);
+		tabs.push({
+			id: `mission:${activeMissionId}`,
+			label: formatHeaderMissionLabel(
+				activeMissionId,
+				activeMissionCandidate?.issueId,
+				activeMissionCandidate?.title ?? activeMissionId
+			),
+			target: { kind: 'mission', missionId: activeMissionId }
+		});
+	}
 	return tabs;
 }
 

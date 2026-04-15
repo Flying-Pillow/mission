@@ -23,6 +23,7 @@ import {
 } from '../agent/events.js';
 import {
 	getMissionDirectoryPath,
+	getMissionWorkflowDefinitionPath,
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
 import type {
@@ -78,7 +79,7 @@ import type {
 	AgentPrompt
 } from '../agent/AgentRuntimeTypes.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { readSystemStatus } from '../system/SystemStatus.js';
 import {
 	WorkflowSettingsStore,
@@ -224,7 +225,7 @@ export class MissionWorkspace {
 			: undefined;
 		const missionStatus = hintedMissionStatus
 			?? (selectedMissionId
-				? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
+				? await this.resolveLoadedMissionStatus(selectedMissionId).catch(() => undefined)
 				: undefined);
 		return {
 			repositoryId: this.workspaceRoot,
@@ -251,6 +252,24 @@ export class MissionWorkspace {
 					? 'GitHub repository configuration is incomplete.'
 					: '';
 		return [
+			{
+				id: 'control.repository.init',
+				label: 'Prepare the first repository initialization mission',
+				action: '/init',
+				scope: 'mission',
+				disabled: control.initialized,
+				disabledReason: control.initialized ? 'This checkout already contains Mission control scaffolding.' : '',
+				enabled: !control.initialized,
+				ordering: { group: 'recovery' as const },
+				ui: {
+					toolbarLabel: 'INIT',
+					requiresConfirmation: true,
+					confirmationPrompt: 'Prepare the first Mission initialization worktree for this repository?'
+				},
+				...(!control.initialized
+					? { reason: 'Create the first mission worktree and scaffold repository control inside that branch-owned checkout.' }
+					: {})
+			},
 			{
 				id: 'control.setup.edit',
 				label: 'Configure repository setup',
@@ -314,6 +333,10 @@ export class MissionWorkspace {
 	}
 
 	private async executeControlAction(params: ControlActionExecute): Promise<OperatorStatus> {
+		if (params.actionId === 'control.repository.init') {
+			return this.createRepositoryInitializationMission();
+		}
+
 		if (params.actionId === 'control.setup.edit') {
 			const fieldSelection = requireSingleSelectionActionStep(params.steps ?? [], 'field');
 			const field = asControlSettingField(fieldSelection.optionIds[0]);
@@ -458,7 +481,7 @@ export class MissionWorkspace {
 			branchRef: branchRefOverride ?? branchRef
 		});
 		if (preparation.kind !== 'mission') {
-			throw new Error('Mission preparation returned a repository bootstrap result unexpectedly.');
+			throw new Error('Mission preparation returned an unexpected non-mission result.');
 		}
 
 		const selectedStatus = await this.getMissionStatus({
@@ -471,8 +494,27 @@ export class MissionWorkspace {
 			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
 			type: reconciledBrief.type,
 			branchRef: preparation.branchRef,
-			missionRootDir: preparation.missionRootDir
+			missionRootDir: preparation.missionRootDir,
+			preparation
 		};
+	}
+
+	private async createRepositoryInitializationMission(): Promise<OperatorStatus> {
+		if (await this.isRepositoryInitialized()) {
+			throw new Error('This checkout already contains Mission control scaffolding.');
+		}
+
+		return this.prepareMissionFromResolvedBrief({
+			title: 'Initialize Mission repository scaffolding',
+			body: [
+				'Prepare this repository for Mission inside the first initialization mission worktree.',
+				'',
+				'Scaffold repository control under .mission/, including settings.json and the repository-owned workflow preset under .mission/workflow/.',
+				'Keep the work reviewable on the mission branch and do not mutate the original checkout directly outside this mission flow.',
+				'When ready, commit the scaffold on this branch so it can be reviewed and merged back into the repository.'
+			].join('\n'),
+			type: 'task'
+		});
 	}
 
 	private async updateControlSettings(params: ControlSettingsUpdate): Promise<OperatorStatus> {
@@ -700,7 +742,8 @@ export class MissionWorkspace {
 		try {
 			await Promise.all([
 				fs.access(getMissionDirectoryPath(this.workspaceRoot)),
-				fs.access(getMissionDaemonSettingsPath(this.workspaceRoot))
+				fs.access(getMissionDaemonSettingsPath(this.workspaceRoot)),
+				fs.access(getMissionWorkflowDefinitionPath(this.workspaceRoot))
 			]);
 			return true;
 		} catch {
@@ -1102,6 +1145,9 @@ export class MissionWorkspace {
 		params: ControlActionDescribe
 	): Promise<OperatorActionFlowDescriptor> {
 		const control = await this.buildControlPlaneStatus();
+		if (params.actionId === 'control.repository.init') {
+			throw new Error('Repository initialization does not have a multi-step flow. Execute /init directly.');
+		}
 		if (params.actionId === 'control.setup.edit') {
 			return this.buildSetupCommandFlow(control, params.steps ?? []);
 		}
@@ -1123,7 +1169,7 @@ export class MissionWorkspace {
 	): Promise<void> {
 		if (!(await this.isRepositoryInitialized())) {
 			throw new Error(
-				'Repository settings cannot be edited locally until the repository bootstrap PR is merged and pulled.'
+				'Repository settings cannot be edited locally until the initialization mission scaffold is merged and pulled into this checkout.'
 			);
 		}
 
@@ -1320,7 +1366,6 @@ export class MissionWorkspace {
 	private async findLoadedMission(selector: MissionSelector): Promise<LoadedMission | undefined> {
 		const existingById = selector.missionId ? this.loadedMissions.get(selector.missionId) : undefined;
 		if (existingById) {
-			await existingById.mission.refresh();
 			return existingById;
 		}
 
@@ -1329,11 +1374,18 @@ export class MissionWorkspace {
 				continue;
 			}
 
-			await loadedMission.mission.refresh();
 			return loadedMission;
 		}
 
 		return undefined;
+	}
+
+	private async resolveLoadedMissionStatus(missionId: string): Promise<OperatorStatus | undefined> {
+		const loadedMission = await this.resolveLoadedMission({ missionId }, { requireMissionId: true, allowMissing: true });
+		if (!loadedMission) {
+			return undefined;
+		}
+		return loadedMission.mission.status();
 	}
 
 	private registerLoadedMission(

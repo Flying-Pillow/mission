@@ -1,4 +1,5 @@
 import {
+	type AirportPaneOverrides,
 	createDefaultPaneBindings,
 	deriveAirportProjections,
 	type AirportFocusState,
@@ -46,16 +47,17 @@ export class AirportControl {
 		if (!terminalSessionName) {
 			throw new Error('Airport control requires a repository-scoped terminal session name.');
 		}
+		const defaultPanes = createDefaultPaneBindings(repositoryId);
+		const paneOverrides = normalizePaneOverrides(persistedIntent?.panes, defaultPanes);
 
 		this.state = {
 			airportId,
 			repositoryId,
 			...(options.repositoryRootPath?.trim() ? { repositoryRootPath: options.repositoryRootPath.trim() } : {}),
 			...(options.sessionId?.trim() ? { sessionId: options.sessionId.trim() } : {}),
-			panes: {
-				...createDefaultPaneBindings(repositoryId),
-				...(persistedIntent?.panes ?? {})
-			},
+			defaultPanes,
+			paneOverrides,
+			panes: createEffectivePaneBindings(defaultPanes, paneOverrides),
 			focus: persistedIntent?.focus?.intentPaneId ? { intentPaneId: persistedIntent.focus.intentPaneId } : {},
 			clients: {},
 			substrate: options.initialSubstrateState
@@ -81,13 +83,17 @@ export class AirportControl {
 		if (sameScope) {
 			return this.getStatus();
 		}
+		const defaultPanes = createDefaultPaneBindings(repositoryId);
+		const paneOverrides = normalizePaneOverrides(this.state.paneOverrides, defaultPanes);
 
 		this.state = {
 			...this.state,
 			airportId,
 			repositoryId,
 			...(repositoryRootPath ? { repositoryRootPath } : {}),
-			panes: createDefaultPaneBindings(repositoryId),
+			defaultPanes,
+			paneOverrides,
+			panes: createEffectivePaneBindings(defaultPanes, paneOverrides),
 			substrate: {
 				...createDefaultTerminalManagerSubstrateState({ sessionName }),
 				layoutIntent: this.state.substrate.layoutIntent
@@ -207,12 +213,17 @@ export class AirportControl {
 	}
 
 	public bindPane(params: BindAirportPaneParams): AirportStatus {
+		const nextBinding = normalizePaneBinding(params.binding);
+		const paneOverrides = setPaneOverride(
+			this.state.paneOverrides,
+			params.paneId,
+			nextBinding,
+			this.state.defaultPanes
+		);
 		this.state = {
 			...this.state,
-			panes: {
-				...this.state.panes,
-				[params.paneId]: normalizePaneBinding(params.binding)
-			}
+			paneOverrides,
+			panes: createEffectivePaneBindings(this.state.defaultPanes, paneOverrides)
 		};
 		return this.getStatus();
 	}
@@ -221,14 +232,18 @@ export class AirportControl {
 		bindings: Partial<Record<AirportPaneId, PaneBinding>>,
 		options: { focusIntent?: AirportPaneId } = {}
 	): AirportStatus {
+		const defaultPanes = {
+			...this.state.defaultPanes,
+			...(bindings.tower ? { tower: normalizePaneBinding(bindings.tower) } : {}),
+			...(bindings.briefingRoom ? { briefingRoom: normalizePaneBinding(bindings.briefingRoom) } : {}),
+			...(bindings.runway ? { runway: normalizePaneBinding(bindings.runway) } : {})
+		};
+		const paneOverrides = normalizePaneOverrides(this.state.paneOverrides, defaultPanes);
 		this.state = {
 			...this.state,
-			panes: {
-				...this.state.panes,
-				...(bindings.tower ? { tower: normalizePaneBinding(bindings.tower) } : {}),
-				...(bindings.briefingRoom ? { briefingRoom: normalizePaneBinding(bindings.briefingRoom) } : {}),
-				...(bindings.runway ? { runway: normalizePaneBinding(bindings.runway) } : {})
-			},
+			defaultPanes,
+			paneOverrides,
+			panes: createEffectivePaneBindings(defaultPanes, paneOverrides),
 			focus: deriveFocusState(this.state.clients, options.focusIntent ?? this.state.focus.intentPaneId, this.state.substrate)
 		};
 		return this.getStatus();
@@ -242,6 +257,57 @@ export class AirportControl {
 		};
 		return this.getStatus();
 	}
+}
+
+function createEffectivePaneBindings(
+	defaultPanes: Record<AirportPaneId, PaneBinding>,
+	paneOverrides: AirportPaneOverrides
+): Record<AirportPaneId, PaneBinding> {
+	return {
+		...defaultPanes,
+		...(paneOverrides.briefingRoom ? { briefingRoom: paneOverrides.briefingRoom } : {}),
+		...(paneOverrides.runway ? { runway: paneOverrides.runway } : {})
+	};
+}
+
+function normalizePaneOverrides(
+	overrides: AirportPaneOverrides | undefined,
+	defaultPanes: Record<AirportPaneId, PaneBinding>
+): AirportPaneOverrides {
+	const normalizedOverrides: AirportPaneOverrides = {};
+	for (const paneId of ['briefingRoom', 'runway'] as const) {
+		const override = overrides?.[paneId];
+		if (!override) {
+			continue;
+		}
+		const normalizedOverride = normalizePaneBinding(override);
+		if (arePaneBindingsEqual(normalizedOverride, defaultPanes[paneId])) {
+			continue;
+		}
+		normalizedOverrides[paneId] = normalizedOverride;
+	}
+	return normalizedOverrides;
+}
+
+function setPaneOverride(
+	overrides: AirportPaneOverrides,
+	paneId: Exclude<AirportPaneId, 'tower'>,
+	binding: PaneBinding,
+	defaultPanes: Record<AirportPaneId, PaneBinding>
+): AirportPaneOverrides {
+	const nextOverrides = { ...overrides };
+	if (arePaneBindingsEqual(binding, defaultPanes[paneId])) {
+		delete nextOverrides[paneId];
+		return nextOverrides;
+	}
+	nextOverrides[paneId] = binding;
+	return nextOverrides;
+}
+
+function arePaneBindingsEqual(left: PaneBinding, right: PaneBinding): boolean {
+	return left.targetKind === right.targetKind
+		&& (left.targetId ?? '') === (right.targetId ?? '')
+		&& (left.mode ?? '') === (right.mode ?? '');
 }
 
 function releaseClaimedPane(

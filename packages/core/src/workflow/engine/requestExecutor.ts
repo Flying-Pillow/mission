@@ -5,9 +5,10 @@ import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
 	renderMissionProductTemplate
-} from '../templates/mission/index.js';
-import { renderMissionArtifactTitle } from '../templates/mission/common.js';
+} from '../mission/templates/index.js';
+import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../manifest.js';
+import { getMissionControlRootFromMissionDir } from '../../lib/repoConfig.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,
@@ -20,6 +21,7 @@ import {
 } from './types.js';
 import {
 	generateMissionWorkflowTasks,
+	normalizeGeneratedTaskDependencies,
 	type MissionWorkflowTaskGenerationResult
 } from './generator.js';
 import type { AgentRunner } from '../../agent/AgentRunner.js';
@@ -114,16 +116,24 @@ export class MissionWorkflowRequestExecutor {
 			switch (request.type) {
 				case 'tasks.request-generation': {
 					const stageId = String(request.payload['stageId'] ?? '') as MissionStageId;
+					const generationRule = input.configuration.workflow.taskGeneration.find(
+						(candidate) => candidate.stageId === stageId
+					);
+					if (!generationRule) {
+						throw new Error(`Workflow configuration does not define task generation for stage '${stageId}'.`);
+					}
 					await this.materializeStageArtifacts(input.descriptor, stageId as MissionStageId);
 					const generatedFromWorkflow = await generateMissionWorkflowTasks({
 						descriptor: input.descriptor,
 						configuration: input.configuration,
 						stageId
 					});
-					const generatedFromTaskArtifacts = await this.readGeneratedTasksFromStageArtifacts(
-						input.descriptor,
-						stageId
-					);
+					const generatedFromTaskArtifacts = generationRule.artifactTasks
+						? await this.readGeneratedTasksFromStageArtifacts(
+							input.descriptor,
+							stageId
+						)
+						: [];
 					const generation: MissionWorkflowTaskGenerationResult = {
 						...generatedFromWorkflow,
 						tasks: mergeGeneratedTasks(
@@ -360,6 +370,20 @@ export class MissionWorkflowRequestExecutor {
 	public async promptRuntimeSession(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<MissionWorkflowEvent[]> {
 		await this.requireRuntimeSession(sessionId).submitPrompt(prompt);
 		return this.drainRuntimeEvents();
+	}
+
+	public async completeRuntimeSession(
+		sessionId: AgentSessionId,
+		fallbackTaskId?: string
+	): Promise<MissionWorkflowEvent[]> {
+		this.rememberSessionTaskId(sessionId, fallbackTaskId);
+		const snapshot = await this.requireRuntimeSession(sessionId).done();
+		const events = this.drainRuntimeEvents();
+		if (events.length > 0) {
+			return events;
+		}
+		const translated = this.createSessionLifecycleEvent('session.completed', snapshot);
+		return translated ? [translated] : [];
 	}
 
 	public async commandRuntimeSession(sessionId: AgentSessionId, command: AgentCommand): Promise<MissionWorkflowEvent[]> {
@@ -627,6 +651,7 @@ export class MissionWorkflowRequestExecutor {
 					...(artifact.stageId ? { stage: artifact.stageId } : {})
 				},
 				body: await renderMissionProductTemplate(template, {
+					controlRoot: getMissionControlRootFromMissionDir(descriptor.missionDir),
 					brief: descriptor.brief,
 					branchRef: descriptor.branchRef
 				})
@@ -795,7 +820,9 @@ function mergeGeneratedTasks(
 		...workflowTasks.map((task) => task.taskId).filter((taskId) => !artifactTaskIds.has(taskId))
 	];
 
-	return orderedTaskIds
-		.map((taskId) => mergedByTaskId.get(taskId))
-		.filter((task): task is MissionGeneratedTaskPayload => Boolean(task));
+	return normalizeGeneratedTaskDependencies(
+		orderedTaskIds
+			.map((taskId) => mergedByTaskId.get(taskId))
+			.filter((task): task is MissionGeneratedTaskPayload => Boolean(task))
+	);
 }

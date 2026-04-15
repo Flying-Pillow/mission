@@ -50,7 +50,14 @@ export function RepositoryPanel(props: RepositoryPanelProps) {
 				{ text: props.focused ? 'focused' : 'background', tone: props.focused ? 'accent' : 'neutral' }
 			]}
 		>
-			<Show when={props.items.length > 0} fallback={<text style={{ fg: towerTheme.secondaryText }}>No missions or GitHub issues are available right now.</text>}>
+			<Show
+				when={props.items.length > 0}
+				fallback={
+					<box style={{ flexDirection: 'column' }}>
+						<text style={{ fg: towerTheme.secondaryText }}>No missions or GitHub issues are available right now.</text>
+					</box>
+				}
+			>
 				<text style={{ fg: towerTheme.secondaryText }}>
 					Choose an active mission, pick an open issue that is not already active, or start a new mission.
 				</text>

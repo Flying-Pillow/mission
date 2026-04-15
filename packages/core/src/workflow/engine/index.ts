@@ -1,5 +1,4 @@
 export * from './types.js';
-export * from './defaultWorkflow.js';
 export * from './document.js';
 export * from './policy.js';
 export * from './projection.js';

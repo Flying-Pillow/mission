@@ -8,6 +8,8 @@ import * as path from 'node:path';
 
 export const MISSION_DIRECTORY = '.mission';
 export const DEFAULT_MISSION_WORKSPACE_ROOT = 'missions';
+export const MISSION_WORKFLOW_DIRECTORY = 'workflow';
+export const MISSION_WORKFLOW_DEFINITION_FILE = 'workflow.json';
 
 export function getMissionDirectoryPath(controlRoot: string): string {
 	return path.join(controlRoot, MISSION_DIRECTORY);
@@ -15,6 +17,22 @@ export function getMissionDirectoryPath(controlRoot: string): string {
 
 export function getMissionCatalogPath(checkoutRoot: string): string {
 	return path.join(getMissionDirectoryPath(checkoutRoot), 'missions');
+}
+
+export function getMissionWorkflowPath(controlRoot: string): string {
+	return path.join(getMissionDirectoryPath(controlRoot), MISSION_WORKFLOW_DIRECTORY);
+}
+
+export function getMissionWorkflowDefinitionPath(controlRoot: string): string {
+	return path.join(getMissionWorkflowPath(controlRoot), MISSION_WORKFLOW_DEFINITION_FILE);
+}
+
+export function getMissionWorkflowTemplatesPath(controlRoot: string): string {
+	return path.join(getMissionWorkflowPath(controlRoot), 'templates');
+}
+
+export function getMissionControlRootFromMissionDir(missionDir: string): string {
+	return path.resolve(missionDir, '..', '..', '..');
 }
 
 export function resolveMissionWorkspaceRoot(

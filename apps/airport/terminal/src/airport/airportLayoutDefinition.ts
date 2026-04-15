@@ -19,7 +19,7 @@ export function buildAirportBootstrapLayout(input: {
 		pane name="BRIEFING ROOM" size="33%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 			args "-lc" "${kdlEscape(`exec ${input.briefingRoomCommand}`)}"
 		}
-		pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+		pane name="RUNWAY" size="34%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 			args "-lc" "${kdlEscape(`exec ${input.runwayCommand}`)}"
 		}
 	}

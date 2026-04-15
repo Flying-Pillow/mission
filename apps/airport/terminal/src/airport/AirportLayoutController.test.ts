@@ -16,7 +16,7 @@ describe('buildAirportBootstrapLayout', () => {
 		expect(layout).toContain('tab name="TOWER" split_direction="vertical" {');
 		expect(layout).toContain('pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {');
 		expect(layout).toContain('pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {');
-		expect(layout).toContain('pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="RUNWAY" size="34%" command="sh" cwd="/repo" {');
 	});
 
 	it('keeps explicit right-pane sizes when viewport is narrow', () => {
@@ -29,7 +29,7 @@ describe('buildAirportBootstrapLayout', () => {
 		});
 		expect(layout).toContain('pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {');
 		expect(layout).toContain('pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {');
-		expect(layout).toContain('pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="RUNWAY" size="34%" command="sh" cwd="/repo" {');
 	});
 
 	it('stacks companion panes when the terminal is narrow', () => {

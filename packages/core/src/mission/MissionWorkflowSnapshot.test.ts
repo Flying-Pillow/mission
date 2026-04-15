@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { Factory } from './Factory.js';
 import type { MissionWorkflowBindings } from './Mission.js';
 

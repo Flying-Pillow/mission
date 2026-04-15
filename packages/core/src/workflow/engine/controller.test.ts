@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionTaskState } from '../../types.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
     createMissionRuntimeRecord,
     ingestMissionWorkflowEvent,
     MissionWorkflowController,
     type MissionRuntimeRecord,
-    type MissionWorkflowEvent
+    type MissionWorkflowEvent,
+    type MissionWorkflowEventRecord
 } from './index.js';
-import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from './defaultWorkflow.js';
+import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
 
 describe('MissionWorkflowController', () => {
@@ -79,6 +81,195 @@ describe('MissionWorkflowController', () => {
         }));
         expect(executor.getExecutedRequestTypes()).toEqual(['tasks.request-generation']);
     });
+
+    it('normalizes stale generated task dependencies while loading persisted runtime state', async () => {
+        const adapter = createAdapter();
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-14T09:00:00.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+        const persisted = createMissionRuntimeRecord({
+            missionId: 'mission-42',
+            configuration,
+            createdAt: configuration.createdAt
+        });
+        persisted.runtime.tasks = [
+            {
+                taskId: 'spec/01-draft-spec',
+                stageId: 'spec',
+                title: 'Draft Spec',
+                instruction: 'Draft the spec.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                blockedByTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: '2026-04-14T09:10:00.000Z',
+                updatedAt: '2026-04-14T09:12:00.000Z',
+                completedAt: '2026-04-14T09:12:00.000Z'
+            },
+            {
+                taskId: 'spec/02-plan',
+                stageId: 'spec',
+                title: 'Plan',
+                instruction: 'Plan the implementation.',
+                dependsOn: [],
+                lifecycle: 'pending',
+                blockedByTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: '2026-04-14T09:12:05.000Z',
+                updatedAt: '2026-04-14T09:12:05.000Z'
+            }
+        ];
+        persisted.eventLog.push({
+            eventId: 'tasks.generated:spec:2026-04-14T09:12:00.000Z',
+            type: 'tasks.generated',
+            occurredAt: '2026-04-14T09:12:00.000Z',
+            source: 'daemon',
+            payload: {
+                stageId: 'spec',
+                tasks: [
+                    {
+                        taskId: 'spec/01-draft-spec',
+                        title: 'Draft Spec',
+                        instruction: 'Draft the spec.',
+                        dependsOn: []
+                    },
+                    {
+                        taskId: 'spec/02-plan',
+                        title: 'Plan',
+                        instruction: 'Plan the implementation.',
+                        dependsOn: []
+                    }
+                ]
+            }
+        } satisfies MissionWorkflowEventRecord);
+        adapter.setPersistedDocument(persisted);
+
+        const controller = new MissionWorkflowController({
+            adapter,
+            descriptor: createDescriptor(),
+            workflow: createDefaultWorkflowSettings(),
+            requestExecutor: createRequestExecutor()
+        });
+
+        const document = await controller.initialize();
+
+        expect(document?.runtime.tasks.find((task) => task.taskId === 'spec/02-plan')?.dependsOn).toEqual([
+            'spec/01-draft-spec'
+        ]);
+        expect(adapter.getPersistedDocument()?.eventLog.find((event) => event.type === 'tasks.generated')).toMatchObject({
+            payload: {
+                tasks: [
+                    { taskId: 'spec/01-draft-spec', dependsOn: [] },
+                    { taskId: 'spec/02-plan', dependsOn: ['spec/01-draft-spec'] }
+                ]
+            }
+        });
+    });
+
+    it('normalizes persisted artifact-backed generation settings from workflow defaults', async () => {
+        const adapter = createAdapter({
+            stageTasks: {
+                implementation: [createImplementationTaskArtifact()]
+            }
+        });
+        const workflow = createDefaultWorkflowSettings();
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-14T09:00:00.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow
+        });
+        configuration.workflow.taskGeneration = configuration.workflow.taskGeneration.map((rule) =>
+            rule.stageId === 'implementation'
+                ? {
+                    ...rule,
+                    artifactTasks: undefined as unknown as boolean,
+                    templateSources: [],
+                    tasks: []
+                }
+                : rule
+        );
+        const persisted = createMissionRuntimeRecord({
+            missionId: 'mission-42',
+            configuration,
+            createdAt: configuration.createdAt
+        });
+        persisted.runtime.tasks = [
+            {
+                taskId: 'prd/01-prd-from-brief',
+                stageId: 'prd',
+                title: 'Draft PRD',
+                instruction: 'Draft the PRD.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                blockedByTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: configuration.createdAt,
+                updatedAt: '2026-04-14T09:02:00.000Z',
+                completedAt: '2026-04-14T09:02:00.000Z'
+            },
+            {
+                taskId: 'spec/01-spec-from-prd',
+                stageId: 'spec',
+                title: 'Draft Spec',
+                instruction: 'Draft the spec.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                blockedByTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: '2026-04-14T09:03:00.000Z',
+                updatedAt: '2026-04-14T09:05:00.000Z',
+                completedAt: '2026-04-14T09:05:00.000Z'
+            },
+            {
+                taskId: 'spec/02-plan',
+                stageId: 'spec',
+                title: 'Plan',
+                instruction: 'Plan implementation.',
+                dependsOn: ['spec/01-spec-from-prd'],
+                lifecycle: 'running',
+                blockedByTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: '2026-04-14T09:05:00.000Z',
+                updatedAt: '2026-04-14T09:06:00.000Z'
+            }
+        ];
+        adapter.setPersistedDocument(persisted);
+
+        const executor = createRequestExecutor();
+        const controller = new MissionWorkflowController({
+            adapter,
+            descriptor: createDescriptor(),
+            workflow,
+            requestExecutor: executor
+        });
+
+        const initialized = await controller.initialize();
+        expect(initialized?.configuration.workflow.taskGeneration.find((rule) => rule.stageId === 'implementation')).toMatchObject({
+            artifactTasks: true
+        });
+
+        const document = await controller.applyEvent({
+            eventId: 'task.completed:spec/02-plan:2026-04-14T09:07:00.000Z',
+            type: 'task.completed',
+            occurredAt: '2026-04-14T09:07:00.000Z',
+            source: 'human',
+            taskId: 'spec/02-plan'
+        });
+
+        expect(document.runtime.tasks).toContainEqual(expect.objectContaining({
+            taskId: 'implementation/01-from-artifact',
+            stageId: 'implementation'
+        }));
+        expect(adapter.getPersistedDocument()?.eventLog.map((event) => event.type)).toContain('tasks.generated');
+        expect(executor.getExecutedRequestTypes()).toContain('tasks.request-generation');
+    });
 });
 
 function createDescriptor(): MissionDescriptor {
@@ -95,7 +286,9 @@ function createDescriptor(): MissionDescriptor {
     } as MissionDescriptor;
 }
 
-function createAdapter() {
+function createAdapter(options: {
+    stageTasks?: Partial<Record<string, MissionTaskState[]>>;
+} = {}) {
     let persisted: MissionRuntimeRecord | undefined;
 
     return {
@@ -103,6 +296,7 @@ function createAdapter() {
         writeMissionRuntimeRecord: async (_missionDir: string, document: MissionRuntimeRecord) => {
             persisted = document;
         },
+        listTaskStates: async (_missionDir: string, stageId: string) => options.stageTasks?.[stageId] ?? [],
         getPersistedDocument: () => persisted,
         setPersistedDocument: (document: MissionRuntimeRecord | undefined) => {
             persisted = document;
@@ -121,7 +315,10 @@ function createRequestExecutor() {
             executedRequestTypes.push(...input.requests.map((request) => request.type));
             return input.requests.flatMap((request) =>
                 request.type === 'tasks.request-generation'
-                    ? [createGeneratedTasksEvent('prd', '2026-04-14T09:00:01.000Z')]
+                    ? [createGeneratedTasksEvent(
+                        String((request as { payload?: { stageId?: string } }).payload?.stageId ?? 'prd'),
+                        '2026-04-14T09:00:01.000Z'
+                    )]
                     : []
             );
         },
@@ -152,11 +349,37 @@ function createGeneratedTasksEvent(stageId: string, occurredAt: string): Mission
         occurredAt,
         source: 'daemon',
         stageId,
-        tasks: [{
-            taskId: 'prd/01',
-            title: 'Draft PRD',
-            instruction: 'Draft the PRD.',
-            dependsOn: []
-        }]
+        tasks: stageId === 'implementation'
+            ? [{
+                taskId: 'implementation/01-from-artifact',
+                title: 'From Artifact',
+                instruction: 'Promote artifact-defined implementation task into runtime generation.',
+                dependsOn: []
+            }]
+            : [{
+                taskId: 'prd/01',
+                title: 'Draft PRD',
+                instruction: 'Draft the PRD.',
+                dependsOn: []
+            }]
+    };
+}
+
+function createImplementationTaskArtifact(): MissionTaskState {
+    return {
+        taskId: 'implementation/01-from-artifact',
+        stage: 'implementation',
+        sequence: 1,
+        subject: 'From Artifact',
+        instruction: 'Promote artifact-defined implementation task into runtime generation.',
+        body: 'Promote artifact-defined implementation task into runtime generation.',
+        dependsOn: [],
+        blockedBy: [],
+        status: 'pending',
+        agent: 'copilot',
+        retries: 0,
+        fileName: '01-from-artifact.md',
+        filePath: '/tmp/mission-42/.mission/missions/mission-42/03-IMPLEMENTATION/tasks/01-from-artifact.md',
+        relativePath: '03-IMPLEMENTATION/tasks/01-from-artifact.md'
     };
 }

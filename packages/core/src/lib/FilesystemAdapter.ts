@@ -19,7 +19,7 @@ import {
 	type MissionTaskState,
 	type MissionType
 } from '../types.js';
-import { renderMissionBriefBody } from '../workflow/templates/mission/index.js';
+import { renderMissionBriefBody } from '../workflow/mission/templates/index.js';
 import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
@@ -463,6 +463,7 @@ export class FilesystemAdapter {
 				...(descriptor.brief.url ? { url: descriptor.brief.url } : {})
 			},
 			body: await renderMissionBriefBody({
+				controlRoot: this.workspaceRoot,
 				brief: descriptor.brief,
 				branchRef: descriptor.branchRef
 			})

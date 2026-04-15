@@ -36,8 +36,9 @@ That means the operator journey is roughly:
 
 1. Launch Mission and open the Airport layout.
 2. Add or switch to the target repository.
-3. Confirm repository setup and workflow defaults.
-4. Start a mission when intake is ready; if this checkout is not initialized yet, Mission can bootstrap repository control in the first mission worktree.
+3. If the repository is not initialized yet, run `/init` to prepare the first initialization mission worktree.
+4. Review and merge that initialization mission so `.mission/` becomes repository-owned state.
+5. Start normal missions when intake is ready.
 
 ## What Mission Creates
 
@@ -46,10 +47,12 @@ Repository setup creates repository-scoped control state, not a live mission run
 | Path | Purpose |
 | --- | --- |
 | `.mission/` | Root control directory |
-| `.mission/settings.json` | Repository defaults for workflow, runtime, and tracking |
+| `.mission/settings.json` | Repository control settings for runtime, tracking, and surface defaults |
+| `.mission/workflow/workflow.json` | Repository-owned workflow definition |
+| `.mission/workflow/templates/` | Repository-owned stage and task templates used by the workflow |
 | external mission workspace root | Home for isolated mission worktrees |
 
-The important rule is that `.mission/settings.json` belongs to the repository, while `mission.json` belongs to one specific mission.
+The important rule is that `.mission/settings.json` and `.mission/workflow/` belong to the repository, while `mission.json` belongs to one specific mission.
 
 ## What Stays Clean
 
@@ -65,9 +68,9 @@ That is one of the main reasons the product feels trustworthy in real work.
 
 ## Repository Defaults That Matter
 
-The repository settings file can carry the defaults that make Mission feel tailored to a team instead of generic:
+The repository control files can carry the defaults that make Mission feel tailored to a team instead of generic:
 
-- workflow policy
+- workflow policy and templates
 - tracking provider
 - instructions and skills paths
 - default runtime and mode selection
@@ -90,7 +93,7 @@ That separation matters because Mission treats these as different concerns:
 
 This is why repository setup does not create `mission.json`. That file only appears when a real mission has been prepared.
 
-That separation does not mean the repository must already be initialized on the current checkout before the first mission can begin. In the current repository-adoption model, Mission may create `.mission/settings.json` inside the new mission worktree during first-mission preparation.
+That separation does not mean the repository must already be initialized on the current checkout before the first mission can begin. In the current repository-adoption model, `/init` prepares the first mission worktree and creates `.mission/settings.json` and `.mission/workflow/` there so the scaffold can be reviewed and merged without directly mutating the original checkout first.
 
 ## GitHub And Review-Oriented Teams
 
@@ -100,4 +103,4 @@ The product direction here is strong: Mission wants repository adoption to feel 
 
 ## Current Alpha Note
 
-There is a `mission init` implementation in source, but it is not currently part of the public routed CLI surface. For operators, repository adoption should be understood through the published Mission CLI and the Airport/Tower control flows, not through a documented `mission init` command.
+There is a `mission init` implementation in source, but it is not part of the public routed CLI surface. Repository adoption is currently modeled through the Airport/Tower control flows, where `/init` prepares the first initialization mission worktree rather than mutating the original checkout directly.

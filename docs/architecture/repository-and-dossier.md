@@ -13,7 +13,9 @@ Mission uses a repository-owned control namespace rooted at `.mission/`. That na
 
 | Location | Current implementation role | Authority |
 | --- | --- | --- |
-| `.mission/settings.json` | Repository daemon settings and workflow settings snapshot defaults | `WorkflowSettingsStore` and daemon settings writers |
+| `.mission/settings.json` | Repository daemon and control settings | daemon settings writers |
+| `.mission/workflow/workflow.json` | Repository-owned workflow definition | `WorkflowSettingsStore` |
+| `.mission/workflow/templates/` | Repository-owned workflow template corpus | repository initialization and workflow preset scaffolding |
 | `.mission/missions/<mission-id>/` | Canonical tracked mission dossier | `Mission`, `FilesystemAdapter`, workflow materializers |
 | `.mission/missions/<mission-id>/mission.json` | Mission runtime record | `MissionWorkflowController` |
 | `.mission/missions/<mission-id>/<stage>/...` | Stage artifacts and generated task files | Workflow generation/materialization path |
@@ -27,6 +29,9 @@ Mission uses a repository-owned control namespace rooted at `.mission/`. That na
 <repo>/
     .mission/
         settings.json
+        workflow/
+            workflow.json
+            templates/
         missions/
             <mission-id>/
                 BRIEF.md
@@ -42,8 +47,8 @@ Mission uses a repository-owned control namespace rooted at `.mission/`. That na
 
 | Surface | Responsibility | Important behavior |
 | --- | --- | --- |
-| `initializeMissionRepository(...)` | Low-level repository scaffolding | Creates `.mission/` and initializes workflow settings |
-| `WorkflowSettingsStore.initialize()` | Initializes repository workflow settings | Writes a normalized workflow configuration into `.mission/settings.json` |
+| `initializeMissionRepository(...)` | Low-level repository scaffolding | Creates `.mission/`, control settings, and the repository-owned workflow preset |
+| `WorkflowSettingsStore.initialize()` | Initializes repository workflow settings | Writes a normalized workflow configuration into `.mission/workflow/workflow.json` and scaffolds templates |
 | `Factory.create(...)` | Mission creation and first `Mission` hydration | Resolves mission identity, worktree path, and mission descriptor |
 
 ## Mission Identity And Paths
@@ -73,7 +78,7 @@ The implementation keeps the dossier root and the mission worktree distinct on p
 
 ## Ownership Rules
 
-1. `.mission/settings.json` is repository policy, not mission execution history.
+1. `.mission/settings.json` and `.mission/workflow/` are repository policy, not mission execution history.
 2. `mission.json` is mission execution history, not daemon-wide live state.
 3. Task markdown files are materialized mission artifacts, not the only runtime authority once `mission.json` exists.
 4. Machine-local config remembers repositories and local tool defaults; it is never the repository's source of truth.

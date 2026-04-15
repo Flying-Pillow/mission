@@ -71,7 +71,14 @@ export function SelectPanel(props: SelectPanelProps) {
 					]
 				})}
 		>
-			<Show when={props.items.length > 0} fallback={<text style={{ fg: towerTheme.secondaryText }}>{props.emptyLabel}</text>}>
+			<Show
+				when={props.items.length > 0}
+				fallback={
+					<box style={{ flexDirection: 'column' }}>
+						<text style={{ fg: towerTheme.secondaryText }}>{props.emptyLabel}</text>
+					</box>
+				}
+			>
 				<Show when={props.filterValue?.trim().length}>
 					<text style={{ fg: towerTheme.brightText }}>{`Filter: ${props.filterValue}`}</text>
 				</Show>

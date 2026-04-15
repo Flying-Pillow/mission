@@ -91,7 +91,11 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 			<text style={{ fg: towerTheme.secondaryText }}>{props.helperText}</text>
 			<Show
 				when={props.summaryItems.length > 0}
-				fallback={<text style={{ fg: towerTheme.mutedText }}>No committed steps yet.</text>}
+				fallback={
+					<box style={{ flexDirection: 'column' }}>
+						<text style={{ fg: towerTheme.mutedText }}>No committed steps yet.</text>
+					</box>
+				}
 			>
 				<box style={{ flexDirection: 'column', gap: 1 }}>
 					<For each={props.summaryItems}>
@@ -118,7 +122,11 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 					{(body) => (
 					<Show
 						when={body.items.length > 0}
-						fallback={<text style={{ fg: towerTheme.secondaryText }}>{body.emptyLabel}</text>}
+						fallback={
+							<box style={{ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+								<text style={{ fg: towerTheme.secondaryText }}>{body.emptyLabel}</text>
+							</box>
+						}
 					>
 						<select
 							focused={props.focused}

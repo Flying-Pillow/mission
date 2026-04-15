@@ -127,4 +127,4 @@ These are implementation hooks for airport layout startup. They are not part of 
 
 There is a `runInit` implementation in source, but the router does not expose `mission init` as a supported public command. It should therefore be treated as internal or legacy scaffolding code rather than as current public CLI.
 
-That distinction matters because repository bootstrap still exists as a behavior, but it is not currently published through the routed command surface under `mission init`.
+That distinction matters because repository adoption is currently exposed through Airport control actions, not through a direct repo-mutating CLI init. In practice, `/init` in the Airport command surface prepares the first initialization mission worktree and lets repository scaffolding be reviewed as normal mission work.

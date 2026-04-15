@@ -57,6 +57,7 @@ flowchart LR
 	Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
 	Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
 	Workspace --> Settings[(.mission/settings.json)]
+	Workspace --> WorkflowPreset[(.mission/workflow/*)]
 	Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
 	Airport --> Zellij[zellij substrate]
 	Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
@@ -68,7 +69,7 @@ flowchart LR
 
 | Concern | Authority | Non-authorities |
 | --- | --- | --- |
-| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json` | Airport terminal surfaces, Airport control, task markdown |
+| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json`, `.mission/workflow/` | Airport terminal surfaces, Airport control, task markdown |
 | Mission execution truth | `MissionWorkflowController` + `mission.json` | Terminal local state, airport state |
 | Semantic selection graph | `MissionControl` inside `MissionSystemController` | `mission.json`, zellij |
 | Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | surface-local routing, workflow engine |
@@ -93,7 +94,7 @@ The architecture coverage in this section reflects the five replayed architectur
 Use this order when reconciling architectural questions:
 
 1. Current implementation in `packages/mission`, `packages/core`, `packages/airport`, and `apps/airport/terminal`
-2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/missions/<mission-id>/mission.json`, user config, daemon runtime files
+2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/workflow/`, `.mission/missions/<mission-id>/mission.json`, user config, daemon runtime files
 3. Current reference docs such as `docs/reference/state-schema.md`
 4. Source specifications under `specifications/`
 5. Replayed mission dossiers under `.mission/missions/`

@@ -113,7 +113,9 @@ export function resolvePendingTaskGenerationStageId(
         return undefined;
     }
 
-    return generationRule.templateSources.length === 0 && generationRule.tasks.length === 0
+    return generationRule.artifactTasks === false
+        && generationRule.templateSources.length === 0
+        && generationRule.tasks.length === 0
         ? undefined
         : eligibleStageId;
 }

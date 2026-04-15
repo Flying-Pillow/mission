@@ -2,7 +2,7 @@ import { Mission } from './Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionSelector } from '../types.js';
 import type { MissionWorkflowBindings } from './Mission.js';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 
 export class Factory {
 	public static async create(

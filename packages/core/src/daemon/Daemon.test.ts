@@ -12,7 +12,8 @@ import { initializeMissionRepository } from '../repository/initializeMissionRepo
 import { Mission } from '../mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
+import { getMissionWorkflowDefinitionPath } from '../lib/repoConfig.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
 const temporaryDirectories = new Set<string>();
@@ -71,6 +72,55 @@ describe('Daemon', () => {
 					await daemon.close();
 				}
 			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('prepares the first initialization mission in a worktree without mutating the original checkout', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const originPath = await createTempBareRemote();
+			runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+			runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					const api = new DaemonApi(client);
+					const availableActions = await api.control.listAvailableActions();
+					const initAction = availableActions.find((action) => action.id === 'control.repository.init');
+					const status = await api.control.executeAction('control.repository.init');
+
+					expect(initAction).toMatchObject({
+						action: '/init',
+						enabled: true
+					});
+					expect(status.preparation).toMatchObject({
+						kind: 'mission',
+						missionId: expect.any(String),
+						worktreePath: expect.any(String)
+					});
+					await expect(fs.access(getMissionDaemonSettingsPath(workspaceRoot))).rejects.toThrow();
+					await expect(fs.access(getMissionWorkflowDefinitionPath(workspaceRoot))).rejects.toThrow();
+
+					const worktreePath = status.preparation?.kind === 'mission'
+						? status.preparation.worktreePath
+						: undefined;
+					if (!worktreePath) {
+						throw new Error('Expected init action to prepare a mission worktree.');
+					}
+					await expect(fs.access(path.join(worktreePath, '.mission', 'settings.json'))).resolves.toBeUndefined();
+					await expect(fs.access(path.join(worktreePath, '.mission', 'workflow', 'workflow.json'))).resolves.toBeUndefined();
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(originPath, { recursive: true, force: true });
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}
 		});
@@ -171,16 +221,13 @@ describe('Daemon', () => {
 					const api = new DaemonApi(client);
 					await api.control.initializeWorkflowSettings();
 					const initial = await api.control.getWorkflowSettings();
-					const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
-					const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
-					settings['workflow'] = {
-						...(settings['workflow'] as Record<string, unknown>),
-						execution: {
-							maxParallelTasks: 3,
-							maxParallelSessions: 1
-						}
+					const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
+					const workflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as Record<string, unknown>;
+					workflow['execution'] = {
+						maxParallelTasks: 3,
+						maxParallelSessions: 1
 					};
-					await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+					await fs.writeFile(workflowPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');
 
 					await expect(
 						api.control.updateWorkflowSettings({
@@ -613,6 +660,70 @@ describe('Daemon', () => {
 					await daemon.close();
 				}
 			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('preserves explicit Briefing Room bindings when repository observation reapplies canonical defaults', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 7, 'Preserve explicit briefing-room artifact during airport observation');
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.airport.connectPane({ paneId: 'tower', label: 'test-dashboard' });
+					await api.control.getStatus();
+
+					const missionId = seededMission.getRecord().id;
+					const selected = await api.mission.getStatus({ missionId });
+					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
+						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
+						&& typeof node.sourcePath === 'string'
+						&& node.sourcePath.length > 0
+					);
+
+					expect(artifactNode?.sourcePath).toBeTruthy();
+
+					await api.airport.bindPane({
+						paneId: 'briefingRoom',
+						binding: {
+							targetKind: 'artifact',
+							targetId: artifactNode!.sourcePath!,
+							mode: 'view'
+						}
+					});
+
+					const observed = await api.airport.observeClient({ repositoryId: workspaceRoot });
+
+					expect(observed.state.airport.defaultPanes.briefingRoom).not.toMatchObject({
+						targetId: artifactNode!.sourcePath
+					});
+					expect(observed.state.airport.paneOverrides.briefingRoom).toMatchObject({
+						targetKind: 'artifact',
+						targetId: artifactNode!.sourcePath,
+						mode: 'view'
+					});
+					expect(observed.state.airport.panes.briefingRoom).toMatchObject({
+						targetKind: 'artifact',
+						targetId: artifactNode!.sourcePath,
+						mode: 'view'
+					});
+					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(observed.airportProjections.briefingRoom.launchPath).toBe(artifactNode!.sourcePath);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
 				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}

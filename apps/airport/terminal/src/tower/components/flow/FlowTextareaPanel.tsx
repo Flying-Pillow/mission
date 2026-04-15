@@ -179,7 +179,14 @@ export function FlowTextareaPanel(props: FlowTextareaPanelProps) {
 							}
 						}}
 					>
-						<Show when={draft().trim().length > 0} fallback={<text style={{ fg: towerTheme.secondaryText }}>Nothing to preview yet.</text>}>
+						<Show
+							when={draft().trim().length > 0}
+							fallback={
+								<box style={{ flexDirection: 'column' }}>
+									<text style={{ fg: towerTheme.secondaryText }}>Nothing to preview yet.</text>
+								</box>
+							}
+						>
 							<markdown
 								content={draft()}
 								syntaxStyle={composerMarkdownSyntaxStyle}

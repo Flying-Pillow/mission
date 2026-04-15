@@ -11,13 +11,15 @@ import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
     createMissionRuntimeRecord,
+    deriveMissionWorkflowProjectionState,
     ingestMissionWorkflowEvent,
+    normalizeGeneratedTaskDependencies,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
     type MissionWorkflowRequest,
     type MissionRuntimeRecord
 } from './index.js';
-import { DEFAULT_WORKFLOW_VERSION } from './defaultWorkflow.js';
+import { DEFAULT_WORKFLOW_VERSION } from '../mission/workflow.js';
 import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
 import type { WorkflowGlobalSettings } from './types.js';
 
@@ -139,6 +141,15 @@ export class MissionWorkflowController {
     public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionRuntimeRecord> {
 		return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
 	}
+
+    public async completeRuntimeSession(
+        sessionId: string,
+        fallbackTaskId?: string
+    ): Promise<MissionRuntimeRecord> {
+        return this.ingestEmittedEvents(
+            await this.requestExecutor.completeRuntimeSession(sessionId, fallbackTaskId)
+        );
+    }
 
     public async commandRuntimeSession(sessionId: string, command: AgentCommand): Promise<MissionRuntimeRecord> {
 		return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
@@ -267,9 +278,30 @@ export class MissionWorkflowController {
 
     private async normalizePersistedDocument(document: MissionRuntimeRecord): Promise<MissionRuntimeRecord> {
         let changed = false;
+        const configuration = normalizePersistedConfiguration(document.configuration, this.resolveWorkflow(), this.workflowVersion);
+        if (configuration !== document.configuration) {
+            changed = true;
+        }
         const sessions = document.runtime.sessions.map((session) => {
             const normalized = this.requestExecutor.normalizePersistedSessionIdentity(session);
             if (normalized !== session) {
+                changed = true;
+            }
+            return normalized;
+        });
+        const normalizedSourceDocument = configuration === document.configuration
+            ? document
+            : {
+                ...document,
+                configuration
+            };
+        const tasks = normalizePersistedRuntimeTasks(normalizedSourceDocument);
+        if (tasks.some((task, index) => task !== document.runtime.tasks[index])) {
+            changed = true;
+        }
+        const eventLog = document.eventLog.map((event) => {
+            const normalized = normalizePersistedEventRecord(event);
+            if (normalized !== event) {
                 changed = true;
             }
             return normalized;
@@ -279,12 +311,28 @@ export class MissionWorkflowController {
             return document;
         }
 
+        const normalizedRuntime = {
+            ...document.runtime,
+            sessions,
+            tasks
+        };
+        const derivedProjection = deriveMissionWorkflowProjectionState(
+            normalizedRuntime,
+            configuration,
+            normalizedRuntime.updatedAt
+        );
+
         const normalizedDocument: MissionRuntimeRecord = {
             ...document,
+            configuration,
             runtime: {
-                ...document.runtime,
-                sessions
-            }
+                ...normalizedRuntime,
+                ...(derivedProjection.activeStageId ? { activeStageId: derivedProjection.activeStageId } : {}),
+                tasks: derivedProjection.tasks,
+                stages: derivedProjection.stages,
+                gates: derivedProjection.gates
+            },
+            eventLog
         };
         await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, normalizedDocument);
         return normalizedDocument;
@@ -314,4 +362,119 @@ export class MissionWorkflowController {
         }
         return nextDocument;
     }
+}
+
+function normalizePersistedConfiguration(
+    configuration: MissionWorkflowConfigurationSnapshot,
+    workflowDefaults: WorkflowGlobalSettings,
+    workflowVersion: string
+): MissionWorkflowConfigurationSnapshot {
+    let changed = configuration.workflowVersion !== workflowVersion;
+    const defaultRulesByStageId = new Map(
+        workflowDefaults.taskGeneration.map((rule) => [rule.stageId, rule])
+    );
+    const normalizedTaskGeneration = configuration.workflow.taskGeneration.map((rule) => {
+        if (typeof rule.artifactTasks === 'boolean') {
+            return rule;
+        }
+
+        changed = true;
+        const defaultRule = defaultRulesByStageId.get(rule.stageId);
+        return {
+            ...rule,
+            artifactTasks: defaultRule?.artifactTasks ?? false
+        };
+    });
+
+    if (!changed) {
+        return configuration;
+    }
+
+    return {
+        ...configuration,
+        workflowVersion,
+        workflow: {
+            ...configuration.workflow,
+            taskGeneration: normalizedTaskGeneration
+        }
+    };
+}
+
+function normalizePersistedRuntimeTasks(document: MissionRuntimeRecord): MissionRuntimeRecord['runtime']['tasks'] {
+    const normalizedDependsOnByTaskId = new Map<string, string[]>();
+    const tasksByStage = new Map<string, MissionRuntimeRecord['runtime']['tasks']>();
+
+    for (const task of document.runtime.tasks) {
+        const existing = tasksByStage.get(task.stageId);
+        if (existing) {
+            existing.push(task);
+            continue;
+        }
+        tasksByStage.set(task.stageId, [task]);
+    }
+
+    for (const stageTasks of tasksByStage.values()) {
+        const normalizedStageTasks = normalizeGeneratedTaskDependencies(stageTasks.map((task) => ({
+            taskId: task.taskId,
+            title: task.title,
+            instruction: task.instruction,
+            dependsOn: [...task.dependsOn],
+            ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
+        })));
+        for (const normalizedTask of normalizedStageTasks) {
+            normalizedDependsOnByTaskId.set(normalizedTask.taskId, normalizedTask.dependsOn);
+        }
+    }
+
+    return document.runtime.tasks.map((task) => {
+        const normalizedDependsOn = normalizedDependsOnByTaskId.get(task.taskId) ?? task.dependsOn;
+        if (sameStringArray(normalizedDependsOn, task.dependsOn)) {
+            return task;
+        }
+        return {
+            ...task,
+            dependsOn: normalizedDependsOn
+        };
+    });
+}
+
+function normalizePersistedEventRecord(event: MissionRuntimeRecord['eventLog'][number]): MissionRuntimeRecord['eventLog'][number] {
+    if (event.type !== 'tasks.generated') {
+        return event;
+    }
+
+    const payload = 'payload' in event && event.payload && typeof event.payload === 'object'
+        ? event.payload as { tasks?: Array<{ taskId: string; title: string; instruction: string; dependsOn?: string[]; agentRunner?: string }> }
+        : undefined;
+    if (!payload?.tasks || payload.tasks.length === 0) {
+        return event;
+    }
+
+    const normalizedTasks = normalizeGeneratedTaskDependencies(payload.tasks.map((task) => ({
+        taskId: task.taskId,
+        title: task.title,
+        instruction: task.instruction,
+        dependsOn: [...(task.dependsOn ?? [])],
+        ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
+    })));
+
+    const changed = normalizedTasks.some((task, index) => !sameStringArray(task.dependsOn, payload.tasks?.[index]?.dependsOn ?? []));
+    if (!changed) {
+        return event;
+    }
+
+    return {
+        ...event,
+        payload: {
+            ...payload,
+            tasks: payload.tasks.map((task, index) => ({
+                ...task,
+                dependsOn: normalizedTasks[index]?.dependsOn ?? []
+            }))
+        }
+    };
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
 }

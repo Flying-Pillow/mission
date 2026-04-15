@@ -12,7 +12,7 @@ import {
     type MissionWorkflowEvent,
     type MissionWorkflowRequest
 } from './index.js';
-import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from './defaultWorkflow.js';
+import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
 
 describe('workflow engine e2e', () => {
@@ -92,9 +92,6 @@ describe('workflow engine e2e', () => {
             'restart implementation session',
             'implementation/01'
         );
-        expect(document.runtime.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('cancelled');
-
-        document = await controller.applyEvent(createTaskReopenedEvent('implementation/01', '2026-04-14T10:04:00.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
 
         document = await controller.applyEvent({
@@ -112,9 +109,6 @@ describe('workflow engine e2e', () => {
             'stop audit and relaunch',
             'audit/01'
         );
-        expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('cancelled');
-
-        document = await controller.applyEvent(createTaskReopenedEvent('audit/01', '2026-04-14T10:05:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('running');
 
         document = await completeTask(controller, 'audit/01', executor.requireSessionId('audit/01'), '2026-04-14T10:06:00.000Z');
@@ -198,9 +192,6 @@ describe('workflow engine e2e', () => {
             'clear blocked session',
             'prd/01'
         );
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('cancelled');
-
-        document = await controller.applyEvent(createTaskReopenedEvent('prd/01', '2026-04-14T11:01:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
         document = await completeTask(controller, 'prd/01', executor.requireSessionId('prd/01'), '2026-04-14T11:02:00.000Z');
@@ -295,7 +286,7 @@ describe('workflow engine e2e', () => {
         });
 
         expect(document.runtime.lifecycle).toBe('panicked');
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('cancelled');
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('ready');
         expect(document.runtime.launchQueue).toEqual([]);
 

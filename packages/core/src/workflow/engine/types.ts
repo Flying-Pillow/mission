@@ -191,6 +191,7 @@ export interface WorkflowTaskTemplateSource {
 
 export interface WorkflowTaskGenerationRule {
     stageId: MissionStageId;
+    artifactTasks: boolean;
     templateSources: WorkflowTaskTemplateSource[];
     tasks: WorkflowGeneratedTaskDefinition[];
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { validateWorkflowSettings } from './validation.js';
 
 describe('workflow settings validation', () => {

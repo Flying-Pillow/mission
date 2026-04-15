@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import {
 	getMissionDaemonSettingsPath,
 } from '../lib/daemonConfig.js';
@@ -11,6 +12,9 @@ import { WorkflowSettingsStore } from '../settings/index.js';
 export type MissionRepositoryInitialization = {
 	controlDirectoryPath: string;
 	daemonSettingsPath: string;
+	workflowDirectoryPath: string;
+	workflowDefinitionPath: string;
+	workflowTemplatesPath: string;
 	worktreesRoot: string;
 };
 
@@ -37,10 +41,16 @@ export async function initializeMissionRepository(
 
 	await Promise.all(directoriesToCreate);
 	await new WorkflowSettingsStore(workspaceRoot).initialize();
+	const workflowDirectoryPath = path.join(controlDirectoryPath, 'workflow');
+	const workflowDefinitionPath = path.join(workflowDirectoryPath, 'workflow.json');
+	const workflowTemplatesPath = path.join(workflowDirectoryPath, 'templates');
 
 	return {
 		controlDirectoryPath,
 		daemonSettingsPath,
+		workflowDirectoryPath,
+		workflowDefinitionPath,
+		workflowTemplatesPath,
 		worktreesRoot
 	};
 }

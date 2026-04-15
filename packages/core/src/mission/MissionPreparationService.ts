@@ -74,7 +74,10 @@ export class MissionPreparationService {
 			proposalStore.stagePaths(
 				[
 					...(initialization
-						? [path.relative(proposalWorktreePath, initialization.daemonSettingsPath)]
+						? [
+							path.relative(proposalWorktreePath, initialization.daemonSettingsPath),
+							path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
+						]
 						: []),
 					path.relative(proposalWorktreePath, missionRootDir)
 				],

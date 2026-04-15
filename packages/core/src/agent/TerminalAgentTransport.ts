@@ -267,6 +267,8 @@ export class TerminalAgentTransport {
 			'new-pane',
 			'--tab-id',
 			String(agentSessionTabId),
+			'--borderless',
+			'true',
 			'--name',
 			sessionName,
 			'--cwd',

@@ -11,14 +11,19 @@ describe('initializeMissionRepository', () => {
 		try {
 			const initialization = await initializeMissionRepository(workspaceRoot);
 			const content = await fs.readFile(initialization.daemonSettingsPath, 'utf8');
+			const workflowContent = await fs.readFile(initialization.workflowDefinitionPath, 'utf8');
 			const settings = JSON.parse(content) as Record<string, unknown>;
+			const workflow = JSON.parse(workflowContent) as Record<string, unknown>;
 
 			expect(initialization.daemonSettingsPath).toBe(path.join(workspaceRoot, '.mission', 'settings.json'));
+			expect(initialization.workflowDefinitionPath).toBe(path.join(workspaceRoot, '.mission', 'workflow', 'workflow.json'));
 			expect(settings['missionWorkspaceRoot']).toBe('missions');
 			expect(settings['trackingProvider']).toBe('github');
 			expect(settings['instructionsPath']).toBe('.agents');
 			expect(settings['skillsPath']).toBe('.agents/skills');
-			expect(settings['workflow']).toBeDefined();
+			expect(settings['workflow']).toBeUndefined();
+			expect(workflow['stageOrder']).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
+			await expect(fs.access(initialization.workflowTemplatesPath)).resolves.toBeUndefined();
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

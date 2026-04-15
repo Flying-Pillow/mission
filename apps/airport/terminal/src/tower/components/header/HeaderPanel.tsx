@@ -105,6 +105,7 @@ export function HeaderPanel(props: HeaderPanelProps) {
 			backgroundColor={towerTheme.headerBackground}
 			tabs={props.tabs}
 			selectedTabId={props.selectedTabId}
+			pinnedFirstTab={true}
 			tabsFocusable={props.tabsFocusable}
 			focused={props.focused}
 			{...(props.style ? { style: props.style } : {})}

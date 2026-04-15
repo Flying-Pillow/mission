@@ -13,6 +13,7 @@ import type {
 	} from '../daemon/protocol/contracts.js';
 
 export type MissionSessionOwner = {
+	completeSessionRecord(sessionId: string): Promise<MissionAgentSessionRecord>;
 	cancelSessionRecord(sessionId: string, reason?: string): Promise<MissionAgentSessionRecord>;
 	terminateSessionRecord(sessionId: string, reason?: string): Promise<MissionAgentSessionRecord>;
 	sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<MissionAgentSessionRecord>;
@@ -252,6 +253,11 @@ export class MissionSession {
 
 	public async sendCommand(command: AgentCommand): Promise<MissionSession> {
 		const nextRecord = await this.owner.sendSessionCommand(this.record.sessionId, command);
+		return new MissionSession(this.owner, nextRecord);
+	}
+
+	public async done(): Promise<MissionSession> {
+		const nextRecord = await this.owner.completeSessionRecord(this.record.sessionId);
 		return new MissionSession(this.owner, nextRecord);
 	}
 

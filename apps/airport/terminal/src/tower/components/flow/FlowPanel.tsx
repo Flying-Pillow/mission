@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { createMemo, type JSXElement } from 'solid-js';
+import type { JSXElement } from 'solid-js';
 import { FlowSummaryPanel } from './FlowSummaryPanel.js';
 import { RepositoryFlowPanel } from './RepositoryFlowPanel.js';
 import { FlowInputPanel } from './FlowInputPanel.js';
@@ -28,7 +28,7 @@ type MissionFlowOverlayProps = {
 };
 
 export function RepositoryFlowSurface(props: RepositoryFlowSurfaceProps): JSXElement {
-	const content = createMemo<JSXElement>(() => {
+	const content = (): JSXElement => {
 		const step = props.controller.currentStep();
 		const draft = props.controller.currentDraft();
 		const flow = props.controller.flow();
@@ -188,13 +188,13 @@ export function RepositoryFlowSurface(props: RepositoryFlowSurfaceProps): JSXEle
 				body={{ kind: 'idle', emptyLabel: 'The current flow step is not ready yet.' }}
 			/>
 		);
-	});
+	};
 
 	return <>{content()}</>;
 }
 
 export function MissionFlowOverlay(props: MissionFlowOverlayProps): JSXElement | undefined {
-	const content = createMemo<JSXElement | undefined>(() => {
+	const content = (): JSXElement | undefined => {
 		const step = props.controller.currentStep();
 		const draft = props.controller.currentDraft();
 		const panelTitle = resolveFlowPanelTitle(props.controller, step?.title ?? 'FLOW');
@@ -320,7 +320,7 @@ export function MissionFlowOverlay(props: MissionFlowOverlayProps): JSXElement |
 			);
 		}
 		return undefined;
-	});
+	};
 
 	return <>{content()}</>;
 }

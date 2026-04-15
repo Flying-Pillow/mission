@@ -95,77 +95,83 @@ export function MissionControlPanel(props: MissionControlPanelProps) {
 			style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}
 			contentStyle={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}
 		>
-			<Show
-				when={lines().length > 0}
-				fallback={<text style={{ fg: towerTheme.secondaryText }}>{props.emptyLabel}</text>}
-			>
-				<scrollbox
-					ref={(value) => {
-						scrollboxRef = value;
-					}}
-					focused={props.focused}
-					onKeyDown={(event) => {
-						if (event.name === 'up') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onMoveSelection(-1);
-							return;
-						}
-						if (event.name === 'down') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onMoveSelection(1);
-							return;
-						}
-						if (event.name === 'left') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onMoveSelection(-1);
-							return;
-						}
-						if (event.name === 'right') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onMoveSelection(1);
-							return;
-						}
-						if (event.name === 'pageup') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onPageScroll(-1);
-							return;
-						}
-						if (event.name === 'pagedown') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onPageScroll(1);
-							return;
-						}
-						if (event.name === 'enter' || event.name === 'return') {
-							event.preventDefault();
-							event.stopPropagation();
-							props.onActivateSelection();
-						}
-					}}
-					style={{
-						flexGrow: 1,
-						flexShrink: 1,
-						minHeight: 0,
-						scrollbarOptions: {
-							trackOptions: {
-								foregroundColor: props.focused ? towerTheme.accent : towerTheme.border,
-								backgroundColor: towerTheme.panelBackground
-							}
-						}
-					}}
+			<box style={{ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+				<Show
+					when={lines().length > 0}
+					fallback={
+						<box style={{ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+							<text style={{ fg: towerTheme.secondaryText }}>{props.emptyLabel}</text>
+						</box>
+					}
 				>
-					<box style={{ flexDirection: 'column', minHeight: 0 }}>
-						<For each={lines()}>
-							{(line) => <MissionControlTreeRow line={line} width={treeContentWidth} />}
-						</For>
-					</box>
-				</scrollbox>
-			</Show>
+					<scrollbox
+						ref={(value) => {
+							scrollboxRef = value;
+						}}
+						focused={props.focused}
+						onKeyDown={(event) => {
+							if (event.name === 'up') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onMoveSelection(-1);
+								return;
+							}
+							if (event.name === 'down') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onMoveSelection(1);
+								return;
+							}
+							if (event.name === 'left') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onMoveSelection(-1);
+								return;
+							}
+							if (event.name === 'right') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onMoveSelection(1);
+								return;
+							}
+							if (event.name === 'pageup') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onPageScroll(-1);
+								return;
+							}
+							if (event.name === 'pagedown') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onPageScroll(1);
+								return;
+							}
+							if (event.name === 'enter' || event.name === 'return') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.onActivateSelection();
+							}
+						}}
+						style={{
+							flexGrow: 1,
+							flexShrink: 1,
+							minHeight: 0,
+							scrollbarOptions: {
+								trackOptions: {
+									foregroundColor: props.focused ? towerTheme.accent : towerTheme.border,
+									backgroundColor: towerTheme.panelBackground
+								}
+							}
+						}}
+					>
+						<box style={{ flexDirection: 'column', minHeight: 0 }}>
+							<For each={lines()}>
+								{(line) => <MissionControlTreeRow line={line} width={treeContentWidth} />}
+							</For>
+						</box>
+					</scrollbox>
+				</Show>
+			</box>
 		</Panel>
 	);
 }

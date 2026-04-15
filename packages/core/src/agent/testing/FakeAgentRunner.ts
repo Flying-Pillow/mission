@@ -126,6 +126,7 @@ export class FakeAgentRunner extends AgentRunner {
 
 	private createSessionController(sessionId: string): AgentRunnerSessionController {
 		return {
+			done: async () => this.completeSession(sessionId),
 			submitPrompt: async (prompt) => this.submitPrompt(sessionId, prompt),
 			submitCommand: async (command) => this.submitCommand(sessionId, command),
 			cancel: async (reason) => this.cancelSession(sessionId, reason),
@@ -137,6 +138,7 @@ export class FakeAgentRunner extends AgentRunner {
 		return new FakeManagedAgentSession({
 			getSnapshot: () => toLegacySnapshot(this.getManagedSnapshot(sessionId), this.transportId),
 			observe: (listener) => this.attachManagedSession(sessionId).onDidEvent(listener),
+			done: () => this.completeSession(sessionId),
 			submitPrompt: (prompt) => this.submitPrompt(sessionId, prompt),
 			submitCommand: (command) => this.submitCommand(sessionId, command),
 			cancel: (reason) => this.cancelSession(sessionId, reason),
@@ -280,7 +282,7 @@ export class FakeAgentRunner extends AgentRunner {
 		});
 	}
 
-	private completeSession(sessionId: string): void {
+	private async completeSession(sessionId: string): Promise<AgentSessionSnapshot> {
 		const endedAt = now();
 		const snapshot = this.updateSnapshot(sessionId, {
 			status: 'completed',
@@ -299,6 +301,7 @@ export class FakeAgentRunner extends AgentRunner {
 			type: 'session.completed',
 			snapshot
 		});
+		return snapshot;
 	}
 
 	private failSession(sessionId: string, reason: string): void {
@@ -332,6 +335,7 @@ export class FakeAgentRunner extends AgentRunner {
 type FakeManagedAgentSessionOptions = {
 	getSnapshot(): FakeAgentSessionSnapshot;
 	observe(listener: (event: AgentSessionEvent) => void): { dispose(): void };
+	done(): Promise<AgentSessionSnapshot>;
 	submitPrompt(prompt: AgentPrompt): Promise<AgentSessionSnapshot>;
 	submitCommand(command: AgentCommand): Promise<AgentSessionSnapshot>;
 	cancel(reason?: string): Promise<AgentSessionSnapshot>;
@@ -356,6 +360,10 @@ class FakeManagedAgentSession implements FakeAgentSession {
 
 	public onDidEvent(listener: (event: AgentSessionEvent) => void): { dispose(): void } {
 		return this.options.observe(listener);
+	}
+
+	public done(): Promise<AgentSessionSnapshot> {
+		return this.options.done();
 	}
 
 	public submitPrompt(prompt: AgentPrompt): Promise<AgentSessionSnapshot> {
@@ -387,7 +395,7 @@ class FakeManagedAgentSession implements FakeAgentSession {
 	}
 
 	public complete(): void {
-		this.options.complete();
+		void this.options.done();
 	}
 
 	public fail(reason: string): void {

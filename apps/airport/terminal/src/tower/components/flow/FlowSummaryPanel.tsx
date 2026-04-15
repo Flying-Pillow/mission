@@ -32,7 +32,14 @@ export function FlowSummaryPanel(props: FlowSummaryPanelProps) {
 			<text style={{ fg: towerTheme.brightText }}>{props.stepLabel}</text>
 			<text style={{ fg: towerTheme.secondaryText }}>{props.helperText}</text>
 
-			<Show when={props.items.length > 0} fallback={<text style={{ fg: towerTheme.secondaryText }}>Complete the current step to continue.</text>}>
+			<Show
+				when={props.items.length > 0}
+				fallback={
+					<box style={{ flexDirection: 'column' }}>
+						<text style={{ fg: towerTheme.secondaryText }}>Complete the current step to continue.</text>
+					</box>
+				}
+			>
 				<box style={{ flexDirection: 'column', marginTop: 1, gap: 1 }}>
 					<For each={props.items}>
 						{(item) => (

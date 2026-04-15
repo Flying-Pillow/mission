@@ -43,6 +43,7 @@ describe('TerminalAgentTransport', () => {
 		});
 
 		expect(observed.some((args) => args[3] === 'new-pane' && args.includes('--tab-id'))).toBe(true);
+		expect(observed.some((args) => args[3] === 'new-pane' && args.includes('--borderless') && args.includes('true'))).toBe(true);
 		expect(observed.some((args) => args[3] === 'stack-panes')).toBe(true);
 		expect(observed.some((args) => args[3] === 'focus-pane-id' && args[4] === 'terminal_4')).toBe(true);
 		expect(handle.sessionName).toBe('01-spec-from-prd-copilot-cli');
@@ -82,6 +83,7 @@ describe('TerminalAgentTransport', () => {
 
 		const newPaneCommand = observed.find((args) => args[3] === 'new-pane');
 		expect(newPaneCommand?.includes('--tab-id')).toBe(true);
+		expect(newPaneCommand?.includes('--borderless')).toBe(true);
 		expect(observed.some((args) => args[3] === 'stack-panes')).toBe(true);
 		expect(observed.some((args) => args[3] === 'focus-pane-id' && args[4] === 'terminal_4')).toBe(true);
 	});

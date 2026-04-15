@@ -4,8 +4,9 @@ import * as path from 'node:path';
 import { getMissionDirectoryPath } from './repoConfig.js';
 import { readMissionUserConfig } from './userConfig.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
+import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
 import {
-    createDefaultWorkflowSettings,
     type WorkflowGlobalSettings
 } from '../workflow/engine/index.js';
 import {
@@ -96,7 +97,12 @@ export function readMissionDaemonSettings(controlRoot = process.cwd()): MissionD
             return undefined;
         }
 
-        return JSON.parse(content) as MissionDaemonSettings;
+        const parsed = JSON.parse(content) as MissionDaemonSettings;
+        const persistedWorkflow = readMissionWorkflowDefinition(controlRoot) ?? parsed.workflow;
+        return getDefaultMissionDaemonSettingsWithOverrides({
+            ...parsed,
+            ...(persistedWorkflow ? { workflow: normalizeWorkflowSettings(persistedWorkflow) } : {})
+        });
     } catch {
         return undefined;
     }
@@ -118,11 +124,18 @@ export async function writeMissionDaemonSettings(
 ): Promise<MissionDaemonSettings> {
     const settingsPath = getMissionDaemonSettingsPath(controlRoot, options);
     const nextSettings = getDefaultMissionDaemonSettingsWithOverrides(settings);
+    const persistedSettings = omitWorkflowSettings(nextSettings);
     const temporarySettingsPath = `${settingsPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
     await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
-    await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, 'utf8');
+    await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(persistedSettings, null, 2)}\n`, 'utf8');
     await fsp.rename(temporarySettingsPath, settingsPath);
     return nextSettings;
+}
+
+function omitWorkflowSettings(settings: MissionDaemonSettings): Omit<MissionDaemonSettings, 'workflow'> {
+	const { workflow, ...persisted } = settings;
+	void workflow;
+	return persisted;
 }
 
 function resolveMissionControlRoot(controlRoot: string): string {

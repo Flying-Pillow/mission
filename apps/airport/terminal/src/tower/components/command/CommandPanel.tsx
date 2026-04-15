@@ -125,52 +125,60 @@ export function CommandPanel(props: CommandPanelProps) {
 						{props.commandResultText}
 					</text>
 				</Show>
-				<Show when={props.showCommandPicker && props.commandPickerItems.length > 0}>
-					<box style={{ height: Math.min(8, props.commandPickerItems.length), minHeight: 1, flexGrow: 1 }}>
-						<select
-							focused={pickerFocused()}
-							height="100%"
-							width="100%"
-							options={pickerOptions()}
-							selectedIndex={selectedPickerIndex()}
-							backgroundColor={towerTheme.panelBackground}
-							textColor={towerTheme.bodyText}
-							focusedBackgroundColor={towerTheme.panelBackground}
-							focusedTextColor={towerTheme.primaryText}
-							selectedBackgroundColor={towerTheme.accentSoft}
-							selectedTextColor={towerTheme.brightText}
-							descriptionColor={towerTheme.secondaryText}
-							selectedDescriptionColor={towerTheme.primaryText}
-							showDescription={false}
-							onKeyDown={(event) => {
-								if (isVerifyingCommands()) {
-									event.preventDefault();
-									event.stopPropagation();
-									return;
-								}
-								props.onCommandPickerKeyDown?.(event);
-							}}
-							onChange={(_index, option) => {
-								if (isVerifyingCommands()) {
-									return;
-								}
-								props.onCommandPickerHighlight?.(String(option?.value ?? ''));
-							}}
-							onSelect={(_index, option) => {
-								if (isVerifyingCommands()) {
-									return;
-								}
-								props.onCommandPickerSelect?.(String(option?.value ?? ''));
-							}}
-						/>
+				<Show when={props.showCommandPicker}>
+					<box style={{ flexDirection: 'column', flexGrow: 1, minHeight: 1 }}>
+						<Show
+							when={props.commandPickerItems.length > 0}
+							fallback={
+								<box style={{ flexDirection: 'column' }}>
+									<text style={{ fg: towerTheme.secondaryText }}>
+										{isVerifyingCommands()
+											? 'Verifying commands for the current selection...'
+											: 'No commands are available for the current selection.'}
+									</text>
+								</box>
+							}
+						>
+							<box style={{ height: Math.min(8, props.commandPickerItems.length), minHeight: 1, flexGrow: 1 }}>
+								<select
+									focused={pickerFocused()}
+									height="100%"
+									width="100%"
+									options={pickerOptions()}
+									selectedIndex={selectedPickerIndex()}
+									backgroundColor={towerTheme.panelBackground}
+									textColor={towerTheme.bodyText}
+									focusedBackgroundColor={towerTheme.panelBackground}
+									focusedTextColor={towerTheme.primaryText}
+									selectedBackgroundColor={towerTheme.accentSoft}
+									selectedTextColor={towerTheme.brightText}
+									descriptionColor={towerTheme.secondaryText}
+									selectedDescriptionColor={towerTheme.primaryText}
+									showDescription={false}
+									onKeyDown={(event) => {
+										if (isVerifyingCommands()) {
+											event.preventDefault();
+											event.stopPropagation();
+											return;
+										}
+										props.onCommandPickerKeyDown?.(event);
+									}}
+									onChange={(_index, option) => {
+										if (isVerifyingCommands()) {
+											return;
+										}
+										props.onCommandPickerHighlight?.(String(option?.value ?? ''));
+									}}
+									onSelect={(_index, option) => {
+										if (isVerifyingCommands()) {
+											return;
+										}
+										props.onCommandPickerSelect?.(String(option?.value ?? ''));
+									}}
+								/>
+							</box>
+						</Show>
 					</box>
-				</Show>
-				<Show when={props.showCommandPicker && props.commandPickerItems.length === 0}>
-					<text style={{ fg: towerTheme.secondaryText }}>
-						{isVerifyingCommands()
-							? 'Verifying commands for the current selection...'
-							: 'No commands are available for the current selection.'}
-					</text>
 				</Show>
 			</box>
 		</Panel>

@@ -1,11 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createMemo, type JSXElement } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSXElement } from 'solid-js';
 import { useTerminalDimensions } from '@opentui/solid';
 import type { PanelBadge, PanelBadgeTone } from './Panel.js';
+import { TAB_GAP, TAB_SCROLL_CONTROL_WIDTH, buildPagedTabWindow, estimateTabWidth } from './TabPanelDomain.js';
 import { towerTheme } from './towerTheme.js';
 
 type PanelStyle = Record<string, string | number | undefined>;
+
+const TAB_ROW_LEADING_PADDING = 2;
+const TAB_SCROLL_PREVIOUS_GLYPH = '‹';
+const TAB_SCROLL_NEXT_GLYPH = '›';
 
 export type TabPanelTab = {
 	id: string;
@@ -26,6 +31,7 @@ export type TabPanelProps = {
 	focused: boolean;
 	tabs: TabPanelTab[];
 	selectedTabId: string | undefined;
+	pinnedFirstTab?: boolean;
 	tabsFocusable?: boolean;
 	title?: string;
 	titleColor?: string;
@@ -61,56 +67,164 @@ export function TabPanel(props: TabPanelProps) {
 		props.borderColor ?? (props.focused ? towerTheme.accent : towerTheme.border)
 	);
 	const panelBackground = createMemo(() => props.backgroundColor ?? towerTheme.panelBackground);
+	const pinnedTabs = createMemo(() => (props.pinnedFirstTab === true ? props.tabs.slice(0, 1) : []));
+	const scrollableTabs = createMemo(() => (props.pinnedFirstTab === true ? props.tabs.slice(1) : props.tabs));
+	const [scrollStartIndex, setScrollStartIndex] = createSignal(0);
+	const pinnedWidth = createMemo(() => {
+		const pinnedTab = pinnedTabs()[0];
+		return pinnedTab ? estimateTabWidth(pinnedTab.label) : 0;
+	});
+	const availableScrollableWidth = createMemo(() => {
+		const hasPinnedTab = pinnedTabs().length > 0;
+		const hasScrollableTabs = scrollableTabs().length > 0;
+		const reservedWidth = hasPinnedTab
+			? pinnedWidth() + (hasScrollableTabs ? TAB_GAP : 0)
+			: 0;
+		return Math.max(panelWidth() - TAB_ROW_LEADING_PADDING - reservedWidth, 0);
+	});
 
-	const tabLayouts = createMemo(() => {
-		const layouts: Array<{ tab: TabPanelTab; x: number; width: number; renderedLabel: string }> = [];
+	const scrollViewport = createMemo(() =>
+		buildPagedTabWindow(scrollableTabs(), scrollStartIndex(), availableScrollableWidth())
+	);
+
+	createEffect(() => {
+		const tabs = scrollableTabs();
+		const currentStartIndex = scrollStartIndex();
+		const viewport = scrollViewport();
 		const selectedId = props.selectedTabId;
-		let cursor = 1;
-		for (const tab of props.tabs) {
-			if (layouts.length > 0) {
-				cursor += 2;
+		const selectedIndex = tabs.findIndex((tab) => tab.id === selectedId);
+		const maxStartIndex = Math.max(0, tabs.length - 1);
+
+		if (currentStartIndex > maxStartIndex) {
+			setScrollStartIndex(maxStartIndex);
+			return;
+		}
+		if (viewport.startIndex !== currentStartIndex) {
+			setScrollStartIndex(viewport.startIndex);
+			return;
+		}
+		if (selectedIndex < 0) {
+			return;
+		}
+		if (selectedIndex < viewport.startIndex) {
+			setScrollStartIndex(selectedIndex);
+			return;
+		}
+		if (selectedIndex > viewport.endIndex) {
+			setScrollStartIndex(Math.min(currentStartIndex + (selectedIndex - viewport.endIndex), maxStartIndex));
+		}
+	});
+
+	const renderedStrip = createMemo(() => {
+		const viewport = scrollViewport();
+		const segments: Array<{ text: string; fg: string }> = [];
+		const layouts: Array<{ tab: TabPanelTab; x: number; width: number; renderedLabel: string }> = [];
+		const rowWidth = panelWidth();
+		let rowCursor = 0;
+
+		const pushSegment = (text: string, fg: string) => {
+			if (text.length === 0) {
+				return;
 			}
-			const remainingWidth = interiorWidth() - cursor;
-			if (remainingWidth < 5) {
-				break;
+			segments.push({ text, fg });
+			rowCursor += text.length;
+		};
+
+		pushSegment(' '.repeat(Math.min(TAB_ROW_LEADING_PADDING, rowWidth)), borderColor());
+
+		const pinnedTab = pinnedTabs()[0];
+		if (pinnedTab) {
+			const remainingWidth = Math.max(rowWidth - rowCursor, 0);
+			const renderedLabel = fitTabLabel(pinnedTab.label, Math.max(1, remainingWidth - 4));
+			const tabWidth = renderedLabel.length + 4;
+			layouts.push({
+				tab: pinnedTab,
+				x: Math.max(rowCursor - 1, 0),
+				width: tabWidth,
+				renderedLabel
+			});
+
+			if (pinnedTab.id === props.selectedTabId) {
+				pushSegment('│ ', borderColor());
+				pushSegment(renderedLabel, towerTheme.brightText);
+				pushSegment(' │', borderColor());
+			} else {
+				pushSegment(`  ${renderedLabel}  `, pinnedTab.labelColor ?? towerTheme.mutedText);
 			}
-			const renderedLabel = fitTabLabel(tab.label, remainingWidth - 4);
-			const width = renderedLabel.length + 4;
-			layouts.push({ tab, x: cursor, width, renderedLabel });
-			cursor += width;
 		}
 
-		if (
-			selectedId
-			&& !layouts.some((layout) => layout.tab.id === selectedId)
-		) {
-			const selectedTab = props.tabs.find((tab) => tab.id === selectedId);
-			if (selectedTab) {
-				const selectedLabel = fitTabLabel(selectedTab.label, Math.max(interiorWidth() - 4, 1));
-				return [{
-					tab: selectedTab,
-					x: 1,
-					width: selectedLabel.length + 4,
-					renderedLabel: selectedLabel
-				}];
-			}
+		const items: Array<
+			| { kind: 'control'; glyph: string }
+			| { kind: 'tab'; tab: TabPanelTab }
+		> = [];
+		if (pinnedTab && items.length === 0 && (viewport.startIndex <= viewport.endIndex || viewport.showNextControl)) {
+			const gapWidth = Math.min(TAB_GAP, Math.max(rowWidth - rowCursor, 0));
+			pushSegment(' '.repeat(gapWidth), borderColor());
 		}
-		return layouts;
+		if (viewport.showPreviousControl) {
+			items.push({ kind: 'control', glyph: TAB_SCROLL_PREVIOUS_GLYPH });
+		}
+		for (let index = viewport.startIndex; index <= viewport.endIndex; index += 1) {
+			const tab = scrollableTabs()[index];
+			if (!tab) {
+				continue;
+			}
+			items.push({ kind: 'tab', tab });
+		}
+		if (viewport.showNextControl) {
+			items.push({ kind: 'control', glyph: TAB_SCROLL_NEXT_GLYPH });
+		}
+
+		items.forEach((item, index) => {
+			if (index > 0) {
+				const gapWidth = Math.min(TAB_GAP, Math.max(rowWidth - rowCursor, 0));
+				pushSegment(' '.repeat(gapWidth), borderColor());
+			}
+
+			const remainingWidth = Math.max(rowWidth - rowCursor, 0);
+			if (remainingWidth <= 0) {
+				return;
+			}
+
+			if (item.kind === 'control') {
+				const controlWidth = Math.min(TAB_SCROLL_CONTROL_WIDTH, remainingWidth);
+				pushSegment(
+					fitFixedWidthText(` ${item.glyph} `, controlWidth),
+					props.focused ? towerTheme.accent : towerTheme.labelText
+				);
+				return;
+			}
+
+			const renderedLabel = fitTabLabel(item.tab.label, Math.max(1, remainingWidth - 4));
+			const tabWidth = renderedLabel.length + 4;
+			layouts.push({
+				tab: item.tab,
+				x: Math.max(rowCursor - 1, 0),
+				width: tabWidth,
+				renderedLabel
+			});
+
+			if (item.tab.id === props.selectedTabId) {
+				pushSegment('│ ', borderColor());
+				pushSegment(renderedLabel, towerTheme.brightText);
+				pushSegment(' │', borderColor());
+				return;
+			}
+
+			pushSegment(`  ${renderedLabel}  `, item.tab.labelColor ?? towerTheme.mutedText);
+		});
+
+		if (rowCursor < rowWidth) {
+			pushSegment(' '.repeat(rowWidth - rowCursor), borderColor());
+		}
+
+		return { segments, layouts };
 	});
 
 	const selectedLayout = createMemo(() => {
 		const selectedId = props.selectedTabId;
-		return tabLayouts().find((layout) => layout.tab.id === selectedId) ?? tabLayouts()[0];
-	});
-
-	const renderedTabLayouts = createMemo(() => {
-		const layouts = tabLayouts();
-		return layouts.map((layout, index) => {
-			const previous = layouts[index - 1];
-			const previousEnd = previous ? previous.x + previous.width : 0;
-			const gap = index === 0 ? layout.x + 1 : Math.max(layout.x - previousEnd, 0);
-			return { ...layout, gap };
-		});
+		const layouts = renderedStrip().layouts;
+		return layouts.find((layout) => layout.tab.id === selectedId) ?? layouts[0];
 	});
 
 	const topTabLine = createMemo(() => {
@@ -136,39 +250,7 @@ export function TabPanel(props: TabPanelProps) {
 	const bottomBorderLine = createMemo(() => `╰${'─'.repeat(interiorWidth())}╯`);
 
 	const tabLabelSegments = createMemo(() => {
-		const segments: Array<{ text: string; fg: string }> = [];
-		const selectedId = selectedLayout()?.tab.id;
-		let usedWidth = 0;
-
-		for (const layout of renderedTabLayouts()) {
-			const gapText = ' '.repeat(layout.gap);
-			segments.push({ text: gapText, fg: borderColor() });
-			usedWidth += gapText.length;
-
-			if (layout.tab.id === selectedId) {
-				segments.push({ text: '│ ', fg: borderColor() });
-				segments.push({ text: layout.renderedLabel, fg: towerTheme.brightText });
-				segments.push({ text: ' │', fg: borderColor() });
-			} else {
-				segments.push({ text: `  ${layout.renderedLabel}  `, fg: layout.tab.labelColor ?? towerTheme.mutedText });
-			}
-			usedWidth += layout.width;
-		}
-		if (usedWidth < panelWidth()) {
-			segments.push({ text: ' '.repeat(panelWidth() - usedWidth), fg: borderColor() });
-		}
-
-		if (props.tabsFocusable === true) {
-			const marker = props.focused ? '<>' : '  ';
-			if (segments.length > 0) {
-				const last = segments[segments.length - 1];
-				if (last && last.text.length >= marker.length) {
-					last.text = `${last.text.slice(0, Math.max(last.text.length - marker.length, 0))}${marker}`;
-				}
-			}
-		}
-
-		return segments;
+		return renderedStrip().segments;
 	});
 
 	const visibleBodyLines = createMemo(() => {
@@ -266,6 +348,13 @@ function fitTabLabel(label: string, maxWidth: number): string {
 		return label.slice(0, safeWidth);
 	}
 	return `${label.slice(0, safeWidth - 3)}...`;
+}
+
+function fitFixedWidthText(text: string, width: number): string {
+	if (width <= 0) {
+		return '';
+	}
+	return text.slice(0, width).padEnd(width, ' ');
 }
 
 
