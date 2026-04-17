@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	airportHomeTabId,
 	buildHeaderTabs,
 	repositoryTabId,
 	resolveHeaderWorkspaceLabel
 } from './headerDomain.js';
 
 describe('buildHeaderTabs', () => {
-	it('keeps the repository tab first ahead of mission tabs', () => {
+	it('keeps the airport tab first, then the repository tab, ahead of mission tabs', () => {
 		const tabs = buildHeaderTabs(
 			{
 				missionId: '42-add-tab-strip-scrolling',
@@ -34,6 +35,7 @@ describe('buildHeaderTabs', () => {
 		);
 
 		expect(tabs.map((tab) => tab.id)).toEqual([
+			airportHomeTabId,
 			repositoryTabId,
 			'mission:42-add-tab-strip-scrolling',
 			'mission:99-fix-header-order'
@@ -68,12 +70,36 @@ describe('buildHeaderTabs', () => {
 		);
 
 		expect(tabs.map((tab) => tab.id)).toEqual([
+			airportHomeTabId,
 			repositoryTabId,
 			'mission:42-add-tab-strip-scrolling',
 			'mission:99-fix-header-order'
 		]);
 	});
+
+	it('renders the repository initialization mission tab as INIT', () => {
+		const tabs = buildHeaderTabs(
+			{
+				missionId: 'mission-init-scaffold',
+				control: {
+					trackingProvider: 'github',
+					githubRepository: 'flying-pillow/mission'
+				}
+			} as never,
+			[
+				{
+					branchRef: 'refs/heads/mission/init-scaffold',
+					createdAt: '2026-04-15T00:00:00.000Z',
+					missionId: 'mission-init-scaffold',
+					title: 'Initialize Mission repository scaffolding'
+				}
+			]
+		);
+
+		expect(tabs.find((tab) => tab.id === 'mission:mission-init-scaffold')?.label).toBe('INIT');
+	});
 });
+
 
 describe('resolveHeaderWorkspaceLabel', () => {
 	it('returns only the repository slug when githubRepository is owner/repo', () => {

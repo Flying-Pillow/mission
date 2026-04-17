@@ -347,16 +347,16 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'control.action.execute': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'mission.from-brief': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'mission.from-issue': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'mission.status': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'mission.action.list': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'mission.action.execute': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'mission.gate.evaluate': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.list': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.console.state': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.prompt': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.command': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.cancel': { includeSurfacePath: false, workspaceRoute: 'mission' },
-	'session.terminate': { includeSurfacePath: false, workspaceRoute: 'mission' }
+	'mission.status': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'mission.action.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'mission.action.execute': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'mission.gate.evaluate': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.console.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.prompt': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.command': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.cancel': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.terminate': { includeSurfacePath: true, workspaceRoute: 'mission' }
 };
 
 export type Endpoint = {

@@ -26,7 +26,7 @@ import {
 	type CommandToolbarItem,
 } from './commandDomain.js';
 
-type TowerMode = 'repository' | 'mission';
+type TowerMode = 'airport' | 'repository' | 'mission';
 type PickerMode = 'command-select';
 
 type CommandTargetDescriptor = {
@@ -69,10 +69,10 @@ export function buildAvailableActionsQueryKey(input: {
 }): string {
 	return JSON.stringify({
 		actionsInvalidationKey: input.actionsInvalidationKey,
-		commandSelectionKey: input.mode === 'mission' ? input.commandSelectionKey : undefined,
+		commandSelectionKey: input.commandSelectionKey,
 		mode: input.mode,
 		missionId: input.mode === 'mission' ? input.missionId : undefined,
-		context: input.mode === 'mission' ? input.context : undefined
+		context: input.context
 	});
 }
 
@@ -202,13 +202,13 @@ export function useCommandController(options: CommandControllerOptions) {
 		lastActionsRefreshNonce = refreshNonce;
 		const requestVersion = ++availableActionsQueryVersion;
 		setIsVerifyingAvailableActions(true);
-		const nextContext: OperatorActionQueryContext | undefined = mode === 'mission' ? context : undefined;
+		const nextContext: OperatorActionQueryContext = context;
 		void (async () => {
 			try {
 				const api = new DaemonApi(currentClient);
 				const nextActionsSnapshot = mode === 'mission'
 					? await api.mission.listAvailableActionsSnapshot({ missionId: missionId! }, nextContext)
-					: await api.control.listAvailableActionsSnapshot();
+					: await api.control.listAvailableActionsSnapshot(nextContext);
 				if (requestVersion === availableActionsQueryVersion) {
 					setAvailableActions(nextActionsSnapshot.actions);
 					setIsVerifyingAvailableActions(false);
@@ -277,7 +277,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		if (!owner) {
 			return;
 		}
-		if (owner === 'repository' && options.towerMode() !== 'repository') {
+		if (owner === 'repository' && options.towerMode() === 'mission') {
 			resetCommandFlow({ clearCommandInput: true });
 			closeCommandPicker({ clearCommandInput: true });
 			return;
@@ -352,7 +352,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		setSelectedCommandId(undefined);
 		setInputValue('');
 		options.flowController.start(definition);
-		if (options.towerMode() === 'repository') {
+		if (options.towerMode() !== 'mission') {
 			options.onFocusAreaChange('flow');
 			return;
 		}

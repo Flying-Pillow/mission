@@ -368,9 +368,7 @@ describe('Daemon', () => {
 										mode: 'control'
 									},
 									briefingRoom: {
-										targetKind: 'repository',
-										targetId: workspaceRoot,
-										mode: 'view'
+										targetKind: 'empty'
 									}
 								},
 								substrate: {
@@ -655,6 +653,35 @@ describe('Daemon', () => {
 					expect(reset.state.domain.selection.missionId).toBeUndefined();
 					expect(reset.airportProjections.tower.repositoryLabel).toBe(path.basename(workspaceRoot));
 					expect(reset.airportProjections.tower.emptyLabel).toBe('Tower is ready.');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('returns repository control actions only when the repository context is explicitly selected', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+
+					const airportActions = await api.control.listAvailableActions({});
+					const repositoryActions = await api.control.listAvailableActions({ repositoryId: workspaceRoot });
+
+					expect(airportActions).toEqual([]);
+					expect(repositoryActions.some((action) => action.id === 'control.setup.edit')).toBe(true);
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -1114,7 +1141,9 @@ describe('Daemon', () => {
 					});
 					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
 					expect(leftSnapshot.state.airport.panes.runway).toMatchObject({
-						targetKind: 'empty'
+							targetKind: 'task',
+							targetId: 'left/task',
+							mode: 'control'
 					});
 				} finally {
 					leftClient.dispose();
@@ -1125,6 +1154,92 @@ describe('Daemon', () => {
 				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 				await fs.rm(leftWorkspaceRoot, { recursive: true, force: true });
 				await fs.rm(rightWorkspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('routes mission-scoped requests by repository surface even when mission ids collide', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const leftWorkspaceRoot = await createTempRepo();
+			const rightWorkspaceRoot = await createTempRepo();
+			const sharedMissionId = 'draft-shared-routing-check';
+
+			await initializeMissionRepository(leftWorkspaceRoot);
+			await initializeMissionRepository(rightWorkspaceRoot);
+
+			const leftMission = await seedTrackedMissionWithId(leftWorkspaceRoot, {
+				missionId: sharedMissionId,
+				issueId: 501,
+				title: 'Left Shared Routing Check',
+				branchRef: 'mission/501-left-shared-routing-check'
+			});
+			const rightMission = await seedTrackedMissionWithId(rightWorkspaceRoot, {
+				missionId: sharedMissionId,
+				issueId: 601,
+				title: 'Right Shared Routing Check',
+				branchRef: 'mission/601-right-shared-routing-check'
+			});
+
+			try {
+				const daemon = await startDaemon();
+				const leftClient = new DaemonClient();
+				const rightClient = new DaemonClient();
+
+				try {
+					await leftClient.connect({ surfacePath: leftWorkspaceRoot });
+					await rightClient.connect({ surfacePath: rightWorkspaceRoot });
+					const leftApi = new DaemonApi(leftClient);
+					const rightApi = new DaemonApi(rightClient);
+
+					const leftStatus = await leftApi.mission.getStatus({ missionId: sharedMissionId });
+					const rightStatus = await rightApi.mission.getStatus({ missionId: sharedMissionId });
+
+					expect(leftStatus.missionRootDir).toBe(leftMission.getMissionDir());
+					expect(rightStatus.missionRootDir).toBe(rightMission.getMissionDir());
+					expect(leftStatus.branchRef).toBe('mission/501-left-shared-routing-check');
+					expect(rightStatus.branchRef).toBe('mission/601-right-shared-routing-check');
+				} finally {
+					leftClient.dispose();
+					rightClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				leftMission.dispose();
+				rightMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(leftWorkspaceRoot, { recursive: true, force: true });
+				await fs.rm(rightWorkspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('routes mission-scoped requests from a mission worktree surface back to the control repository', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const mission = await seedTrackedMission(workspaceRoot, 701, 'Mission worktree surface routing');
+			const missionRecord = mission.getRecord();
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: missionRecord.missionDir });
+					const api = new DaemonApi(client);
+					const status = await api.mission.getStatus({ missionId: missionRecord.id });
+
+					expect(status.missionId).toBe(missionRecord.id);
+					expect(status.missionRootDir).toBe(mission.getMissionDir());
+					expect(status.missionDir).toBe(missionRecord.missionDir);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				mission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}
 		});
 	});
@@ -1410,9 +1525,14 @@ describe('Daemon', () => {
 						expect(status).toMatchObject({
 							found: true,
 							issueId: 900,
-							type: 'refactor'
+							type: 'refactor',
+							preparation: {
+								kind: 'mission',
+								state: 'branch-prepared',
+								issueId: 900,
+								missionId: expect.any(String)
+							}
 						});
-						expect(status.preparation).toBeUndefined();
 						expect(status.missionRootDir).toContain(path.join('.mission', 'missions', status.missionId ?? ''));
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
@@ -1454,11 +1574,15 @@ describe('Daemon', () => {
 						expect(status).toMatchObject({
 							found: true,
 							issueId: 42,
-							missionId: expect.any(String)
+							missionId: expect.any(String),
+							preparation: {
+								kind: 'mission',
+								state: 'branch-prepared',
+								issueId: 42,
+								missionId: expect.any(String)
+							}
 						});
-						expect(status.preparation).toBeUndefined();
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
-							['auth', 'status'],
 							['issue', 'view']
 						]);
 					} finally {
@@ -1532,7 +1656,6 @@ describe('Daemon', () => {
 							recommendedAction: expect.stringContaining('already has mission')
 						});
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
-							['auth', 'status'],
 							['issue', 'view']
 						]);
 					} finally {
@@ -1560,6 +1683,20 @@ function createBrief(issueId: number | undefined, title: string) {
 async function seedTrackedMission(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
 	const adapter = new FilesystemAdapter(workspaceRoot);
 	const missionId = adapter.createMissionId(createBrief(issueId, title));
+	return seedTrackedMissionWithId(workspaceRoot, {
+		missionId,
+		issueId,
+		title,
+		branchRef: adapter.deriveMissionBranchName(issueId, title)
+	});
+}
+
+async function seedTrackedMissionWithId(
+	workspaceRoot: string,
+	input: { missionId: string; issueId: number; title: string; branchRef: string }
+): Promise<Mission> {
+	const adapter = new FilesystemAdapter(workspaceRoot);
+	const missionId = input.missionId;
 	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
 	const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
 	const workflow = createDefaultWorkflowSettings();
@@ -1575,7 +1712,7 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 			}
 		])
 	) as typeof workflow.stages;
-	await adapter.materializeMissionWorktree(missionWorktreePath, adapter.deriveMissionBranchName(issueId, title));
+	await adapter.materializeMissionWorktree(missionWorktreePath, input.branchRef);
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 	const mission = Mission.hydrate(
 		worktreeAdapter,
@@ -1583,8 +1720,8 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 		{
 			missionId,
 			missionDir: missionRootDir,
-			brief: createBrief(issueId, title),
-			branchRef: adapter.deriveMissionBranchName(issueId, title),
+			brief: createBrief(input.issueId, input.title),
+			branchRef: input.branchRef,
 			createdAt: new Date().toISOString()
 		},
 		{

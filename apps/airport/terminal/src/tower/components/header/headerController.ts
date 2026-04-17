@@ -12,6 +12,7 @@ type HeaderActivationOptions = {
 type HeaderControllerOptions = {
 	tabs: Accessor<HeaderTab[]>;
 	activeTabId: Accessor<string>;
+	onActivateAirportHome: (options?: HeaderActivationOptions) => Promise<void>;
 	onActivateRepository: (options?: HeaderActivationOptions) => Promise<void>;
 	onActivateMission: (missionId: string, options?: HeaderActivationOptions) => Promise<void>;
 };
@@ -41,6 +42,10 @@ export function useHeaderController(options: HeaderControllerOptions) {
 			return;
 		}
 		setSelectedTabId(tabId);
+		if (tab.target.kind === 'airport-home') {
+			await options.onActivateAirportHome(activationOptions);
+			return;
+		}
 		if (tab.target.kind === 'repository') {
 			await options.onActivateRepository(activationOptions);
 			return;

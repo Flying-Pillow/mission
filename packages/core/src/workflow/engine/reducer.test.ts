@@ -730,6 +730,7 @@ describe('workflow reducer delivery completion', () => {
         expect(result.nextState.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
         expect(result.nextState.sessions.find((session) => session.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
     });
+
 });
 
 function createGeneratedTasksEvent(

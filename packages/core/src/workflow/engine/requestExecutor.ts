@@ -311,8 +311,8 @@ export class MissionWorkflowRequestExecutor {
 				}
 				if (!hasMatchingTerminalLifecycle(document, snapshot)) {
 					const translated = this.translateTerminalSnapshot(snapshot);
-					if (translated) {
-						this.runtimeEvents.push(translated);
+					if (translated.length > 0) {
+						this.runtimeEvents.push(...translated);
 					}
 				}
 			}
@@ -363,8 +363,7 @@ export class MissionWorkflowRequestExecutor {
 		if (events.length > 0) {
 			return events;
 		}
-		const translated = this.createSessionLifecycleEvent('session.cancelled', snapshot);
-		return translated ? [translated] : [];
+		return this.createSessionLifecycleEvents('session.cancelled', snapshot);
 	}
 
 	public async promptRuntimeSession(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<MissionWorkflowEvent[]> {
@@ -382,8 +381,7 @@ export class MissionWorkflowRequestExecutor {
 		if (events.length > 0) {
 			return events;
 		}
-		const translated = this.createSessionLifecycleEvent('session.completed', snapshot);
-		return translated ? [translated] : [];
+		return this.createSessionLifecycleEvents('session.completed', snapshot);
 	}
 
 	public async commandRuntimeSession(sessionId: AgentSessionId, command: AgentCommand): Promise<MissionWorkflowEvent[]> {
@@ -402,8 +400,7 @@ export class MissionWorkflowRequestExecutor {
 		if (events.length > 0) {
 			return events;
 		}
-		const translated = this.createSessionLifecycleEvent('session.terminated', snapshot);
-		return translated ? [translated] : [];
+		return this.createSessionLifecycleEvents('session.terminated', snapshot);
 	}
 
 	private registerSession(session: AgentSession): AgentSessionSnapshot {
@@ -416,8 +413,8 @@ export class MissionWorkflowRequestExecutor {
 		const subscription = session.onDidEvent((event) => {
 			this.rememberSessionTaskId(event.snapshot.sessionId, event.snapshot.taskId);
 			const translated = this.translateRuntimeEvent(event);
-			if (translated) {
-				this.runtimeEvents.push(translated);
+			if (translated.length > 0) {
+				this.runtimeEvents.push(...translated);
 			}
 			this.fireRuntimeEvent(event);
 		});
@@ -481,48 +478,48 @@ export class MissionWorkflowRequestExecutor {
 		return drained;
 	}
 
-	private translateRuntimeEvent(event: AgentSessionEvent): MissionWorkflowEvent | undefined {
+	private translateRuntimeEvent(event: AgentSessionEvent): MissionWorkflowEvent[] {
 		switch (event.type) {
 			case 'session.completed':
-				return this.createSessionLifecycleEvent('session.completed', event.snapshot);
+				return this.createSessionLifecycleEvents('session.completed', event.snapshot);
 			case 'session.failed':
-				return this.createSessionLifecycleEvent('session.failed', event.snapshot);
+				return this.createSessionLifecycleEvents('session.failed', event.snapshot);
 			case 'session.cancelled':
-				return this.createSessionLifecycleEvent('session.cancelled', event.snapshot);
+				return this.createSessionLifecycleEvents('session.cancelled', event.snapshot);
 			case 'session.terminated':
-				return this.createSessionLifecycleEvent('session.terminated', event.snapshot);
+				return this.createSessionLifecycleEvents('session.terminated', event.snapshot);
 			default:
-				return undefined;
+				return [];
 		}
 	}
 
-	private translateTerminalSnapshot(snapshot: AgentSessionSnapshot): MissionWorkflowEvent | undefined {
+	private translateTerminalSnapshot(snapshot: AgentSessionSnapshot): MissionWorkflowEvent[] {
 		switch (snapshot.status) {
 			case 'completed':
-				return this.createSessionLifecycleEvent('session.completed', snapshot);
+				return this.createSessionLifecycleEvents('session.completed', snapshot);
 			case 'failed':
-				return this.createSessionLifecycleEvent('session.failed', snapshot);
+				return this.createSessionLifecycleEvents('session.failed', snapshot);
 			case 'cancelled':
-				return this.createSessionLifecycleEvent('session.cancelled', snapshot);
+				return this.createSessionLifecycleEvents('session.cancelled', snapshot);
 			case 'terminated':
-				return this.createSessionLifecycleEvent('session.terminated', snapshot);
+				return this.createSessionLifecycleEvents('session.terminated', snapshot);
 			default:
-				return undefined;
+				return [];
 		}
 	}
 
-	private createSessionLifecycleEvent(
+	private createSessionLifecycleEvents(
 		type: 'session.completed' | 'session.failed' | 'session.cancelled' | 'session.terminated',
 		snapshot: AgentSessionSnapshot
-	): MissionWorkflowEvent | undefined {
+	): MissionWorkflowEvent[] {
 		const taskId = this.resolveSessionTaskId(snapshot);
 		if (!taskId) {
-			return undefined;
+			return [];
 		}
 		if (isTerminalStatus(snapshot.status)) {
 			this.sessionTaskIds.delete(snapshot.sessionId);
 		}
-		return {
+		const sessionEvent: MissionWorkflowEvent = {
 			eventId: `runtime:${snapshot.sessionId}:${type}:${snapshot.updatedAt}`,
 			type,
 			occurredAt: snapshot.updatedAt,
@@ -530,6 +527,19 @@ export class MissionWorkflowRequestExecutor {
 			sessionId: snapshot.sessionId,
 			taskId
 		};
+		if (type !== 'session.completed') {
+			return [sessionEvent];
+		}
+		return [
+			sessionEvent,
+			{
+				eventId: `runtime:${snapshot.sessionId}:task.completed:${snapshot.updatedAt}`,
+				type: 'task.completed',
+				occurredAt: snapshot.updatedAt,
+				source: 'daemon',
+				taskId
+			}
+		];
 	}
 
 	private createSessionStartedEvent(

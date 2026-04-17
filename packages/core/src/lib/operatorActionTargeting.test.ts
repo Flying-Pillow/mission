@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderAvailableActions } from './operatorActionTargeting.js';
+import { orderAvailableActions, resolveAvailableActionsForTargetContext } from './operatorActionTargeting.js';
 import type { OperatorActionDescriptor } from '../types.js';
 
 describe('orderAvailableActions', () => {
@@ -75,6 +75,31 @@ describe('orderAvailableActions', () => {
 			'task.start.t1',
 			'stage.generate',
 			'mission.pause'
+		]);
+	});
+
+	it('excludes repository-targeted actions when no repository is selected', () => {
+		const actions: OperatorActionDescriptor[] = [
+			createAction({
+				id: 'control.setup.edit',
+				action: '/setup',
+				scope: 'mission',
+				presentationTargets: [{ scope: 'repository', targetId: '/repo/a' }]
+			}),
+			createAction({
+				id: 'mission.pause',
+				action: '/mission pause',
+				scope: 'mission',
+				presentationTargets: [{ scope: 'mission' }]
+			})
+		];
+
+		expect(resolveAvailableActionsForTargetContext(actions, {})).toEqual([
+			expect.objectContaining({ id: 'mission.pause' })
+		]);
+		expect(resolveAvailableActionsForTargetContext(actions, { repositoryId: '/repo/a' })).toEqual([
+			expect.objectContaining({ id: 'control.setup.edit' }),
+			expect.objectContaining({ id: 'mission.pause' })
 		]);
 	});
 });

@@ -10,7 +10,7 @@ import { towerTheme } from '../towerTheme.js';
 export type HeaderTab = {
 	id: string;
 	label: string;
-	target: { kind: 'repository' } | { kind: 'mission'; missionId: string };
+	target: { kind: 'airport-home' } | { kind: 'repository' } | { kind: 'mission'; missionId: string };
 };
 
 export type ProgressRailItemState = MissionTowerStageRailItemState;
@@ -33,12 +33,19 @@ type HeaderLine = { segments: Array<{ text: string; fg: string }> };
 type HeaderBadge = { text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean };
 
 export const repositoryTabId = 'repository';
+export const airportHomeTabId = 'airport-home';
+const repositoryInitializationMissionTitle = 'Initialize Mission repository scaffolding';
 
 export function buildHeaderTabs(
 	status: OperatorStatus,
 	missionCandidates: MissionSelectionCandidate[] = []
 ): HeaderTab[] {
 	const tabs: HeaderTab[] = [
+		{
+			id: airportHomeTabId,
+			label: 'AIRPORT',
+			target: { kind: 'airport-home' }
+		},
 		{
 			id: repositoryTabId,
 			label: resolveRepositoryTabLabel(status.control),
@@ -178,6 +185,9 @@ function extractRepositoryName(githubRepository: string): string {
 }
 
 function formatHeaderMissionLabel(missionId: string, issueId?: number, title?: string): string {
+	if (isRepositoryInitializationMissionTitle(title)) {
+		return 'INIT';
+	}
 	const summary = buildHeaderMissionSummary(missionId, issueId, title);
 	return `${summary.typeLabel} ${summary.numberLabel}`;
 }
@@ -191,12 +201,10 @@ function resolveHeaderMissionSummary(
 	selectedTab: HeaderTab | undefined,
 	missionCandidates: MissionSelectionCandidate[] = []
 ): HeaderMissionSummary | undefined {
-	if (selectedTab?.target.kind === 'repository') {
+	if (selectedTab?.target.kind !== 'mission') {
 		return undefined;
 	}
-	const selectedMissionId = selectedTab?.target.kind === 'mission'
-		? selectedTab.target.missionId
-		: status.missionId;
+	const selectedMissionId = selectedTab.target.missionId || status.missionId;
 	if (!selectedMissionId) {
 		return undefined;
 	}
@@ -232,6 +240,10 @@ function buildHeaderMissionSummary(
 function normalizeHeaderMissionTitle(title: string | undefined, missionId: string): string {
 	const normalizedTitle = title?.replace(/\s+/gu, ' ').trim();
 	return normalizedTitle && normalizedTitle.length > 0 ? normalizedTitle : missionId;
+}
+
+function isRepositoryInitializationMissionTitle(title: string | undefined): boolean {
+	return title?.replace(/\s+/gu, ' ').trim() === repositoryInitializationMissionTitle;
 }
 
 function extractHeaderMissionNumber(missionId: string): string {

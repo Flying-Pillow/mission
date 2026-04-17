@@ -49,6 +49,10 @@ export function matchesOperatorActionTargetContext(
 	command: OperatorActionDescriptor,
 	context: OperatorActionTargetContext
 ): boolean {
+	if (hasPresentationTargetsForScope(command, 'repository') && !matchesTargetScope(command, context, 'repository')) {
+		return false;
+	}
+
 	switch (command.scope) {
 		case 'session':
 			return matchesTargetScope(command, context, 'session');
@@ -65,7 +69,7 @@ export function matchesOperatorActionTargetContext(
 function matchesTargetScope(
 	command: OperatorActionDescriptor,
 	context: OperatorActionTargetContext,
-	scope: 'session' | 'task' | 'stage'
+	scope: 'repository' | 'session' | 'task' | 'stage'
 ): boolean {
 	const contextTargetId = getContextTargetId(context, scope);
 	if (!contextTargetId) {
@@ -78,6 +82,13 @@ function matchesTargetScope(
 	}
 
 	return targetIds.includes(contextTargetId);
+}
+
+function hasPresentationTargetsForScope(
+	command: OperatorActionDescriptor,
+	scope: OperatorActionPresentationScope
+): boolean {
+	return (command.presentationTargets ?? []).some((target) => target.scope === scope);
 }
 
 function matchesMissionScope(
@@ -170,6 +181,9 @@ function getContextAffinityRank(
 	if (context.stageId) {
 		affinityChain.push(['stage', context.stageId]);
 	}
+	if (context.repositoryId) {
+		affinityChain.push(['repository', context.repositoryId]);
+	}
 	affinityChain.push(['mission', undefined]);
 
 	for (let index = 0; index < affinityChain.length; index += 1) {
@@ -215,9 +229,11 @@ function compareNumber(left: number, right: number): number {
 
 function getContextTargetId(
 	context: OperatorActionTargetContext,
-	scope: 'session' | 'task' | 'stage'
+	scope: 'repository' | 'session' | 'task' | 'stage'
 ): string | undefined {
 	switch (scope) {
+		case 'repository':
+			return context.repositoryId;
 		case 'session':
 			return context.sessionId;
 		case 'task':

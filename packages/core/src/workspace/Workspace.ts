@@ -242,6 +242,7 @@ export class MissionWorkspace {
 		availableMissions: MissionSelectionCandidate[],
 		openIssues: TrackedIssueSummary[]
 	): OperatorActionDescriptor[] {
+		const repositoryPresentationTargets = [{ scope: 'repository' as const, targetId: this.workspaceRoot }];
 		const issuesCommandEnabled =
 			control.trackingProvider === 'github'
 			&& control.issuesConfigured;
@@ -266,6 +267,7 @@ export class MissionWorkspace {
 					requiresConfirmation: true,
 					confirmationPrompt: 'Prepare the first Mission initialization worktree for this repository?'
 				},
+				presentationTargets: repositoryPresentationTargets,
 				...(!control.initialized
 					? { reason: 'Create the first mission worktree and scaffold repository control inside that branch-owned checkout.' }
 					: {})
@@ -283,6 +285,7 @@ export class MissionWorkspace {
 					toolbarLabel: 'SETTINGS',
 					requiresConfirmation: false
 				},
+				presentationTargets: repositoryPresentationTargets,
 				flow: this.buildSetupCommandFlow(control)
 			},
 			{
@@ -297,6 +300,7 @@ export class MissionWorkspace {
 					toolbarLabel: 'PREPARE MISSION',
 					requiresConfirmation: false
 				},
+				presentationTargets: repositoryPresentationTargets,
 				flow: this.buildMissionStartFlow()
 			},
 			{
@@ -311,6 +315,7 @@ export class MissionWorkspace {
 					toolbarLabel: 'OPEN MISSION',
 					requiresConfirmation: false
 				},
+				presentationTargets: repositoryPresentationTargets,
 				flow: this.buildMissionSwitchFlow(availableMissions),
 				...(availableMissions.length > 0 ? {} : { reason: 'No local missions are available.' })
 			},
@@ -326,6 +331,7 @@ export class MissionWorkspace {
 					toolbarLabel: 'ISSUES',
 					requiresConfirmation: false
 				},
+				presentationTargets: repositoryPresentationTargets,
 				flow: this.buildMissionIssueFlow(openIssues),
 				...(issuesCommandEnabled ? {} : { reason: issuesCommandReason })
 			}

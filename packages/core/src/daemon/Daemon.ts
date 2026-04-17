@@ -306,7 +306,10 @@ export class Daemon {
 				request.surfacePath ? `surface=${request.surfacePath}` : undefined
 			].filter(Boolean).join(' ')
 		);
-		const snapshot = await this.systemController.bindAirportPane(params);
+		const snapshot = await this.systemController.bindAirportPane({
+			...params,
+			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
+		});
 		if (params.paneId === 'briefingRoom') {
 			this.logLine?.(
 				[

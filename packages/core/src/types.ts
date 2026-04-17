@@ -143,7 +143,7 @@ export type OperatorActionUiMetadata = {
 	confirmationPrompt?: string;
 };
 
-export type OperatorActionPresentationScope = 'mission' | 'stage' | 'task' | 'session';
+export type OperatorActionPresentationScope = 'repository' | 'mission' | 'stage' | 'task' | 'session';
 
 export type OperatorActionPresentationTarget = {
 	scope: OperatorActionPresentationScope;
@@ -151,6 +151,7 @@ export type OperatorActionPresentationTarget = {
 };
 
 export type OperatorActionTargetContext = {
+	repositoryId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
 	sessionId?: string;

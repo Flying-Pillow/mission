@@ -11,6 +11,7 @@ import type {
 	MissionSelector,
 	MissionStageId,
 	MissionSelectionCandidate,
+	MissionRepositoryCandidate,
 	TrackedIssueSummary,
 	OperatorStatus,
 	MissionWorkspaceContext,
@@ -34,6 +35,7 @@ import { useCommandController } from './tower/components/command/commandControll
 import {
 	buildHeaderFooterBadges,
 	buildHeaderStatusLines,
+	airportHomeTabId,
 	buildHeaderTabs,
 	repositoryTabId,
 	resolveHeaderWorkspaceLabel,
@@ -51,6 +53,7 @@ import { resolvePanelBindingsFromSelection } from './tower/components/mission-co
 import { resolveOperatorActionContextFromTreeTarget } from './tower/components/mission-control/commandContext.js';
 import { MissionFlowOverlay, RepositoryFlowSurface } from './tower/components/flow/FlowPanel.js';
 import { createFlowController } from './tower/components/flow/flowController.js';
+import { AirportHomePanel } from './tower/components/airport/AirportHomePanel.js';
 import { RepositoryPanel } from './tower/components/repository/RepositoryPanel.js';
 import {
 	buildCommandFlowDefinition,
@@ -76,6 +79,12 @@ import {
 	computeSelectionBindingSyncPlan,
 	computeSelectionBindingUpdates,
 } from './airportAppDomain.js';
+import {
+	airportHomeAddRepositoryItemId,
+	buildAirportHomeItems,
+	isAirportHomeNonSelectableItemId,
+	pickPreferredAirportHomeItemId,
+} from './tower/components/airport/airportHomeDomain.js';
 
 export type AirportConnection = {
 	client: DaemonClient;
@@ -95,7 +104,7 @@ export type AirportUiOptions = {
 };
 
 type AirportAppProps = AirportUiOptions;
-type TowerMode = 'repository' | 'mission';
+type TowerMode = 'airport' | 'repository' | 'mission';
 type ShellOverlay =
 	| { kind: 'none' }
 	| { kind: 'mission-flow' };
@@ -113,6 +122,7 @@ type RepositorySelectionAction =
 		actionId: 'control.mission.start';
 	  };
 type TreeSelectionPaneBindings = NonNullable<ReturnType<typeof resolvePanelBindingsFromSelection>>;
+const airportFocusOrder: FocusArea[] = ['header', 'flow', 'command'];
 const repositoryFocusOrder: FocusArea[] = ['header', 'flow', 'command'];
 const missionFocusOrder: FocusArea[] = ['header', 'tree', 'command'];
 
@@ -133,7 +143,8 @@ export function AirportApp({
 	const [lastCommandStatusText, setLastCommandStatusText] = createSignal<string | undefined>();
 	const [showCommandDebug, setShowCommandDebug] = createSignal<boolean>(false);
 	const [focusArea, setFocusArea] = createSignal<FocusArea>('command');
-	const [selectedRepositorySelectionItemId, setSelectedRepositorySelectionItemId] = createSignal<string | undefined>();
+	const [selectedAirportHomeItemId, setSelectedAirportHomeItemId] = createSignal<string | undefined>();
+	const [registeredRepositories, setRegisteredRepositories] = createSignal<MissionRepositoryCandidate[]>(initialConnection?.status.availableRepositories ?? []);
 	const runtimeController = createAirportController({
 		initialSelector,
 		...(initialConnection ? { initialConnection } : {}),
@@ -159,6 +170,7 @@ export function AirportApp({
 	const [fallbackControlBranch, setFallbackControlBranch] = createSignal<string | undefined>();
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [showIntroSplash, setShowIntroSplash] = createSignal<boolean>(initialShowIntroSplash ?? true);
+	const [selectedRepositorySelectionItemId, setSelectedRepositorySelectionItemId] = createSignal<string | undefined>();
 	const [repositoryOpenIssues, setRepositoryOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
 	const flowController = createFlowController({
 		onNotify: appendLog,
@@ -169,7 +181,7 @@ export function AirportApp({
 		onFlowRestarted: (definition) => {
 			commandController.setInputValue('');
 			const firstStep = definition.steps[0];
-			setFocusArea(towerMode() === 'repository' || firstStep?.kind === 'selection' ? 'flow' : 'command');
+			setFocusArea(towerMode() !== 'mission' || firstStep?.kind === 'selection' ? 'flow' : 'command');
 		}
 	});
 	const client = runtimeController.client;
@@ -186,24 +198,39 @@ export function AirportApp({
 	);
 	const activeHeaderTabId = createMemo(() => {
 		const missionId = currentMissionId();
-		return missionId ? `mission:${missionId}` : repositoryTabId;
+		return missionId ? `mission:${missionId}` : airportHomeTabId;
 	});
 	const headerController = useHeaderController({
 		tabs: headerTabs,
 		activeTabId: activeHeaderTabId,
-		onActivateRepository: async (options) => {
+		onActivateAirportHome: async (options) => {
 			resetMissionContextSelection();
 			if (currentMissionId()) {
-				await connectClient({});
+				await connectClient({}, currentControlRoot());
 			}
 			if (!options?.preserveFocus) {
 				setFocusArea('flow');
 			}
 		},
+		onActivateRepository: async (options) => {
+			resetMissionContextSelection();
+			if (currentMissionId()) {
+				await connectClient({}, currentControlRoot());
+			}
+			if (!options?.preserveFocus) {
+				setFocusArea('command');
+			}
+		},
 		onActivateMission: async (missionId, options) => {
 			const missionLoaded = resolveMissionOperatorView(systemSnapshot(), missionId) !== undefined;
+			const missionWorkspacePath = systemDomain()?.missions[missionId]?.workspacePath;
 			if (missionId !== currentMissionId() || !missionLoaded) {
-				await connectClient({ missionId });
+				await connectClient(
+					{ missionId },
+					missionWorkspacePath && missionWorkspacePath.trim().length > 0
+						? missionWorkspacePath
+						: undefined
+				);
 			}
 			if (!options?.preserveFocus) {
 				setFocusArea('command');
@@ -216,18 +243,27 @@ export function AirportApp({
 		if (selectedTarget) {
 			return selectedTarget;
 		}
-		return { kind: 'repository' };
+		return { kind: 'airport-home' };
 	});
 	const selectedShellTargetKey = createMemo(() => {
 		const target = selectedShellTarget();
-		return target.kind === 'mission' ? `mission:${target.missionId}` : 'repository';
+		if (target.kind === 'mission') {
+			return `mission:${target.missionId}`;
+		}
+		if (target.kind === 'repository') {
+			return 'repository';
+		}
+		return 'airport-home';
 	});
 	const towerMode = createMemo<TowerMode>(() => {
 		const target = selectedShellTarget();
 		if (target.kind === 'mission') {
 			return 'mission';
 		}
-		return 'repository';
+		if (target.kind === 'repository') {
+			return 'repository';
+		}
+		return 'airport';
 	});
 	const airportProjections = createMemo(() => systemSnapshot()?.airportProjections);
 	const towerProjection = createMemo(() => airportProjections()?.tower);
@@ -281,6 +317,9 @@ export function AirportApp({
 		}))
 	);
 	const headerPanelTitle = createMemo(() => {
+		if (towerMode() === 'airport') {
+			return 'AIRPORT';
+		}
 		const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		if (status().operationalMode === 'setup') {
 			return `SETUP ${workspaceLabel}`;
@@ -322,12 +361,20 @@ export function AirportApp({
 	);
 	const commandFlowOwner = flowController.owner;
 	const commandSelectionKey = createMemo(() => {
+		if (towerMode() === 'airport') {
+			return 'airport:home';
+		}
 		if (towerMode() !== 'mission') {
-			return `repository:${selectedHeaderTab()?.id ?? 'repository'}`;
+			return `repository:${currentControlRoot()}`;
 		}
 		return selectedTreeTarget()?.id ?? (selectedMissionId() ? `mission:${selectedMissionId()}` : 'mission:none');
 	});
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
+		if (towerMode() === 'repository') {
+			return currentControlRoot()
+				? ({ repositoryId: currentControlRoot() } as OperatorActionTargetContext)
+				: {};
+		}
 		if (towerMode() !== 'mission') {
 			return {};
 		}
@@ -414,6 +461,12 @@ export function AirportApp({
 		}
 		return { kind: 'none' };
 	});
+	const airportHomeItems = createMemo(() =>
+		buildAirportHomeItems({
+			availableRepositories: registeredRepositories(),
+			selectedRepositoryRoot: currentControlRoot()
+		})
+	);
 	const repositorySelectionItems = createMemo(() => {
 		const items: Array<{ id: string; label: string; description: string }> = [];
 		const selectCommand = commandController.availableCommandById().get('control.mission.select');
@@ -507,6 +560,15 @@ export function AirportApp({
 		return actions;
 	});
 	createEffect(() => {
+		setSelectedAirportHomeItemId((current) => {
+			const items = airportHomeItems();
+			if (items.length === 0) {
+				return undefined;
+			}
+			return pickPreferredAirportHomeItemId(items, current);
+		});
+	});
+	createEffect(() => {
 		setSelectedRepositorySelectionItemId((current) => {
 			const items = repositorySelectionItems();
 			if (items.length === 0) {
@@ -522,7 +584,9 @@ export function AirportApp({
 		buildFocusOrder({
 			baseOrder: towerMode() === 'mission'
 				? missionFocusOrder
-				: repositoryFocusOrder,
+				: towerMode() === 'airport'
+					? airportFocusOrder
+					: repositoryFocusOrder,
 			headerTabsFocusable: headerTabsFocusable(),
 			showCommandFlow: showCommandFlowOverlay(),
 			showCommandPicker: commandController.showCommandPicker(),
@@ -546,14 +610,26 @@ export function AirportApp({
 			: undefined;
 		const withDebug = (base: string) => debugSuffix ? `${base} | ${debugSuffix}` : base;
 		const step = currentCommandFlowStep();
-		if (step && towerMode() !== 'repository') {
+		if (step && towerMode() === 'mission') {
 			return withDebug(step.helperText);
+		}
+		if (towerMode() === 'airport' && step?.kind === 'selection') {
+			return withDebug('Airport home flow active. Tab to the flow panel, use up/down to browse options, and press Enter to continue.');
+		}
+		if (towerMode() === 'airport' && step?.kind === 'text') {
+			return withDebug('Airport home flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.');
+		}
+		if (towerMode() === 'airport') {
+			return withDebug('Airport home is ready. Select a registered repository or add another local checkout.');
 		}
 		if (towerMode() === 'repository' && step?.kind === 'selection') {
 			return withDebug('Repository flow active. Tab to the flow panel, use left/right to move between steps, and use up/down to browse options.');
 		}
 		if (towerMode() === 'repository' && step?.kind === 'text') {
 			return withDebug('Repository flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.');
+		}
+		if (towerMode() === 'repository') {
+			return withDebug('Selected repository is ready. Use /init, /setup, /issues, or /start from the command panel.');
 		}
 		const actions = commandController.availableActions();
 		if (actions.length === 0) {
@@ -574,6 +650,9 @@ export function AirportApp({
 		return withDebug(`Available: ${uniqueCommands.join(', ')}`);
 	});
 	const screenTitle = createMemo(() => {
+		if (towerMode() === 'airport') {
+			return 'AIRPORT';
+		}
 		if (towerMode() !== 'mission') {
 			return towerProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		}
@@ -751,32 +830,52 @@ export function AirportApp({
 			/>
 		);
 	}
+	function renderAirportHomePanel(): JSXElement {
+		return (
+			<AirportHomePanel
+				items={airportHomeItems()}
+				selectedItemId={selectedAirportHomeItemId()}
+				focused={focusArea() === 'flow'}
+				onActivateSelection={(itemId) => {
+					void activateAirportHomeSelection(itemId);
+				}}
+				onItemChange={(itemId) => {
+					if (isAirportHomeNonSelectableItemId(itemId)) {
+						return;
+					}
+					setSelectedAirportHomeItemId(itemId);
+				}}
+				onFocusCommand={() => {
+					setFocusArea('command');
+				}}
+			/>
+		);
+	}
 	function renderRepositorySelectionPanel(): JSXElement {
 		return (
-		<RepositoryPanel
-			items={repositorySelectionItems()}
-			selectedItemId={selectedRepositorySelectionItemId()}
-			focused={focusArea() === 'flow'}
-			onMoveSelection={(delta) => {
-				moveRepositorySelection(delta);
-			}}
-			onActivateSelection={(itemId) => {
-				void activateRepositorySelection(itemId);
-			}}
-			onItemChange={(itemId) => {
-				if (isRepositorySelectionNonSelectableId(itemId)) {
-					return;
-				}
-				setSelectedRepositorySelectionItemId(itemId);
-			}}
-			onFocusCommand={() => {
-				setFocusArea('command');
-			}}
-		/>
+			<RepositoryPanel
+				items={repositorySelectionItems()}
+				selectedItemId={selectedRepositorySelectionItemId()}
+				focused={focusArea() === 'flow'}
+				onActivateSelection={(itemId) => {
+					void activateRepositorySelection(itemId);
+				}}
+				onItemChange={(itemId) => {
+					if (isRepositorySelectionNonSelectableId(itemId)) {
+						return;
+					}
+					setSelectedRepositorySelectionItemId(itemId);
+				}}
+				onFocusCommand={() => {
+					setFocusArea('command');
+				}}
+			/>
 		);
 	}
 	function renderCenterContent(): JSXElement {
 		switch (towerMode()) {
+			case 'airport':
+				return currentCommandFlowStep() ? renderRepositoryFlowPanel() : renderAirportHomePanel();
 			case 'mission':
 				return renderMissionControlPanel() ?? <box />;
 			case 'repository':
@@ -800,6 +899,62 @@ export function AirportApp({
 		}
 		return undefined;
 	}
+
+	createEffect(() => {
+		const seededRepositories = status().availableRepositories;
+		if (seededRepositories && seededRepositories.length > 0) {
+			setRegisteredRepositories(seededRepositories);
+		}
+	});
+
+	createEffect(() => {
+		const currentClient = client();
+		if (!currentClient) {
+			setRepositoryOpenIssues([]);
+			return;
+		}
+		let disposed = false;
+		void new DaemonApi(currentClient).control.listRegisteredRepositories()
+			.then((repositories: MissionRepositoryCandidate[]) => {
+				if (!disposed) {
+					setRegisteredRepositories(repositories);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!disposed) {
+					appendLog(`Failed to load registered repositories: ${toErrorMessage(error)}`);
+				}
+			});
+		onCleanup(() => {
+			disposed = true;
+		});
+	});
+
+	createEffect(() => {
+		const currentClient = client();
+		status().control?.availableMissionCount;
+		status().control?.currentBranch;
+		if (!currentClient || status().control?.trackingProvider !== 'github') {
+			setRepositoryOpenIssues([]);
+			return;
+		}
+		let disposed = false;
+		void new DaemonApi(currentClient).control.listOpenIssues(100)
+			.then((issues) => {
+				if (!disposed) {
+					setRepositoryOpenIssues(issues);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!disposed) {
+					setRepositoryOpenIssues([]);
+					appendLog(`Failed to load open issues: ${toErrorMessage(error)}`);
+				}
+			});
+		onCleanup(() => {
+			disposed = true;
+		});
+	});
 
 	createEffect(() => {
 		const currentClient = client();
@@ -834,32 +989,6 @@ export function AirportApp({
 				if (!disposed) {
 					setSystemStatus(undefined);
 					appendLog(`Failed to load system status: ${toErrorMessage(error)}`);
-				}
-			});
-		onCleanup(() => {
-			disposed = true;
-		});
-	});
-
-	createEffect(() => {
-		const currentClient = client();
-		status().control?.availableMissionCount;
-		status().control?.currentBranch;
-		if (!currentClient) {
-			setRepositoryOpenIssues([]);
-			return;
-		}
-		let disposed = false;
-		void new DaemonApi(currentClient).control.listOpenIssues(100)
-			.then((issues) => {
-				if (!disposed) {
-					setRepositoryOpenIssues(issues);
-				}
-			})
-			.catch((error: unknown) => {
-				if (!disposed) {
-					setRepositoryOpenIssues([]);
-					appendLog(`Failed to load open issues: ${toErrorMessage(error)}`);
 				}
 			});
 		onCleanup(() => {
@@ -1024,24 +1153,29 @@ export function AirportApp({
 		commandController.setSelectedCommandId(undefined);
 	}
 
-	function moveRepositorySelection(delta: number): void {
-		const items = repositorySelectionItems();
-		const selectableItems = items.filter((item) => !isRepositorySelectionNonSelectableId(item.id));
-		if (selectableItems.length === 0) {
-			setSelectedRepositorySelectionItemId(undefined);
-			return;
-		}
-		const current = selectedRepositorySelectionItemId();
-		const currentIndex = Math.max(0, selectableItems.findIndex((item) => item.id === current));
-		const nextIndex = (currentIndex + delta + selectableItems.length) % selectableItems.length;
-		setSelectedRepositorySelectionItemId(selectableItems[nextIndex]?.id);
-	}
-
-	async function activateRepositorySelection(itemId: string | undefined): Promise<void> {
+	async function activateAirportHomeSelection(itemId: string | undefined): Promise<void> {
 		if (!itemId) {
 			return;
 		}
-		if (isRepositorySelectionNonSelectableId(itemId)) {
+		if (isAirportHomeNonSelectableItemId(itemId)) {
+			return;
+		}
+		if (itemId === airportHomeAddRepositoryItemId) {
+			commandController.startCommandFlow(buildAddRepositoryFlowDefinition());
+			return;
+		}
+		if (!itemId.startsWith('repository:')) {
+			return;
+		}
+		const repositoryRoot = itemId.slice('repository:'.length);
+		setSelectedAirportHomeItemId(itemId);
+		await connectClient({}, repositoryRoot);
+		await headerController.activateTab(repositoryTabId, { preserveFocus: true });
+		setFocusArea('command');
+	}
+
+	async function activateRepositorySelection(itemId: string | undefined): Promise<void> {
+		if (!itemId || isRepositorySelectionNonSelectableId(itemId)) {
 			return;
 		}
 		const action = repositorySelectionActionsByItemId().get(itemId);
@@ -1096,6 +1230,49 @@ export function AirportApp({
 		await flowController.commitCurrentStep();
 	}
 
+	function buildAddRepositoryFlowDefinition(): CommandFlowDefinition {
+		return {
+			id: 'airport.home.add-repository',
+			owner: 'repository',
+			targetLabel: 'AIRPORT',
+			actionLabel: 'ADD REPOSITORY',
+			steps: [
+				{
+					kind: 'text',
+					id: 'repositoryPath',
+					label: 'Repository path',
+					title: 'AIRPORT > ADD REPOSITORY',
+					helperText: 'Enter the local path to the git repository you want Airport to register.',
+					placeholder: '/path/to/repository',
+					initialValue: '',
+					inputMode: 'compact',
+					format: 'plain'
+				}
+			],
+			onComplete: async (result) => {
+				const repositoryPath = result.steps[0]?.kind === 'text' ? result.steps[0].value.trim() : '';
+				if (!repositoryPath) {
+					appendLog('Repository path is required.');
+					return { kind: 'close' };
+				}
+				const currentClient = client() ?? (await connectClient({}, currentControlRoot()));
+				if (!currentClient) {
+					appendLog('Unable to connect to Mission daemon.');
+					return { kind: 'close' };
+				}
+				const candidate = await new DaemonApi(currentClient).control.addRepository(repositoryPath);
+				const nextRepositories = await new DaemonApi(currentClient).control.listRegisteredRepositories();
+				setRegisteredRepositories(nextRepositories);
+				setSelectedAirportHomeItemId(`repository:${candidate.repositoryRootPath}`);
+				await connectClient({}, candidate.repositoryRootPath);
+				await headerController.activateTab(repositoryTabId, { preserveFocus: true });
+				setFocusArea('command');
+				appendLog(`Registered repository ${candidate.label}.`);
+				return { kind: 'close' };
+			}
+		};
+	}
+
 	function buildCommandFlowFromCommand(
 		command: OperatorActionDescriptor | undefined,
 		executeSelector: MissionSelector,
@@ -1125,6 +1302,12 @@ export function AirportApp({
 		const missionId = nextStatus.missionId ?? nextSelector.missionId;
 		if (!missionId) {
 			return;
+		}
+		const missionWorkspacePath = nextStatus.preparation?.kind === 'mission'
+			? nextStatus.preparation.worktreePath
+			: nextStatus.missionDir;
+		if (missionWorkspacePath?.trim()) {
+			await connectClient({ missionId }, missionWorkspacePath);
 		}
 		await headerController.activateTab(`mission:${missionId}`);
 	}
@@ -1461,5 +1644,6 @@ function noMissionSelectedMessage(status: OperatorStatus): string {
 }
 
 function isRepositorySelectionNonSelectableId(itemId: string): boolean {
-	return itemId.startsWith('separator:') || itemId.startsWith('section:');
+	return itemId.startsWith('section:') || itemId.startsWith('separator:');
 }
+

@@ -88,7 +88,7 @@ export function buildKeyHintsText(input: {
 	focusArea: FocusArea;
 	activePicker: 'command-select' | undefined;
 	currentFlowStep: CommandFlowStep | undefined;
-	towerMode: 'repository' | 'mission';
+	towerMode: 'airport' | 'repository' | 'mission';
 	commandPanelMode: 'input' | 'toolbar';
 	confirmingToolbarCommand: boolean;
 }): string {
@@ -120,7 +120,7 @@ export function buildKeyHintsText(input: {
 		}
 		return `Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 	}
-	if (input.focusArea === 'flow' && input.towerMode === 'repository') {
+	if (input.focusArea === 'flow' && (input.towerMode === 'repository' || input.towerMode === 'airport')) {
 		if (input.currentFlowStep?.kind === 'text') {
 			return `Tab/Shift+Tab focus | Ctrl+←/→ step | Enter continue${globalPaneCycleHint} | Ctrl+Q quit`;
 		}

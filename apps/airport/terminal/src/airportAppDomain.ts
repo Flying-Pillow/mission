@@ -4,7 +4,7 @@ import type {
 	PaneBinding,
 } from '@flying-pillow/mission-core';
 
-type TowerMode = 'repository' | 'mission';
+type TowerMode = 'airport' | 'repository' | 'mission';
 type TreeSelectionPaneBindings = Partial<Record<'briefingRoom' | 'runway', PaneBinding>>;
 
 export function buildMissionActionsRevision(
@@ -37,7 +37,7 @@ export function buildActionsInvalidationKey(input: {
 			?? 'mission:unresolved';
 	}
 	return JSON.stringify({
-		mode: 'repository',
+		mode: input.mode,
 		found: input.status.found,
 		operationalMode: input.status.operationalMode ?? null,
 		availableMissionCount: input.status.control?.availableMissionCount ?? null,

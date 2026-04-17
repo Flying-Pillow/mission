@@ -64,9 +64,9 @@ export class RepositoryAirportRegistry {
 			this.activeRepositoryId = repositoryId;
 			return this.ensureAirportForRepository(repositoryId, repositoryRootPath);
 		}
-		const indexedRepositoryId = this.clientRepositoryIndex.get(clientId) ?? this.activeRepositoryId;
+		const indexedRepositoryId = this.clientRepositoryIndex.get(clientId);
 		if (!indexedRepositoryId) {
-			throw new Error('Airport request requires a repository-scoped surface path or active airport selection.');
+			throw new Error('Airport request requires a repository-scoped surface path, explicit repository id, or an already scoped client binding.');
 		}
 		const airport = this.airportRegistry.get(indexedRepositoryId);
 		if (!airport) {

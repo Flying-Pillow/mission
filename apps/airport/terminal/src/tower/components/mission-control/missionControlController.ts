@@ -15,7 +15,7 @@ import {
 	type TreeTargetKind,
 } from './missionControlDomain.js';
 
-type TowerMode = 'repository' | 'mission';
+type TowerMode = 'airport' | 'repository' | 'mission';
 
 type MissionControlControllerOptions = {
 	towerMode: Accessor<TowerMode>;

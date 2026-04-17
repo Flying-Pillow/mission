@@ -378,6 +378,56 @@ describe('MissionWorkflowRequestExecutor', () => {
 		}));
 	});
 
+	it('emits task.completed when a task-scoped runtime session completes successfully', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as FilesystemAdapter,
+			runners: new Map([[runner.id, runner]])
+		});
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow: createDefaultWorkflowSettings()
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const task = createTask();
+		runtime.tasks = [task];
+
+		await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-complete-session',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		const sessionId = runner.listSessions()[0]?.reference.sessionId;
+		if (!sessionId) {
+			throw new Error('Expected a launched fake runner session.');
+		}
+
+		const events = await executor.completeRuntimeSession(sessionId, task.taskId);
+
+		expect(events).toEqual([
+			expect.objectContaining({
+				type: 'session.completed',
+				sessionId,
+				taskId: task.taskId
+			}),
+			expect.objectContaining({
+				type: 'task.completed',
+				taskId: task.taskId
+			})
+		]);
+	});
+
 	it('builds a task-artifact launch prompt when session.launch has no explicit prompt payload', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const adapter = {

@@ -8,6 +8,7 @@ import {
 	type PaneBinding,
 	type AirportPaneId
 } from '../../../../airport/build/index.js';
+import path from 'node:path';
 import type {
 	ContextGraph,
 	ContextSelection,
@@ -50,7 +51,7 @@ type MissionSystemCommand =
 	}
 	| {
 		kind: 'airport.pane.bound';
-		params: BindAirportPaneParams;
+		params: BindAirportPaneParams & { surfacePath?: string };
 	}
 	| {
 		kind: 'airport.substrate.observed';
@@ -128,6 +129,7 @@ export class MissionSystemController {
 	public async bindAirportPane(params: {
 		paneId: Exclude<AirportPaneId, 'tower'>;
 		binding: PaneBinding;
+		surfacePath?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.pane.bound', params });
 	}
@@ -176,8 +178,15 @@ export class MissionSystemController {
 	): Promise<string[]> {
 		const startedAt = performance.now();
 		const currentSelection = this.missionControl.getState().selection;
+		const scopedWorkspaceRoot = command.workspaceRoot?.trim()
+			? path.resolve(command.workspaceRoot.trim())
+			: command.surfacePath?.trim()
+				? this.workspaceManager.resolveWorkspaceRootForSurfacePath(command.surfacePath.trim())
+				: undefined;
 		const selectedMissionId = command.selectionHint?.missionId?.trim()
-			|| currentSelection.missionId?.trim();
+			|| (scopedWorkspaceRoot && currentSelection.repositoryId === scopedWorkspaceRoot
+				? currentSelection.missionId?.trim()
+				: undefined);
 		const source = await this.workspaceManager.readMissionControlSource({
 			...(command.surfacePath?.trim() ? { surfacePath: command.surfacePath.trim() } : {}),
 			...(command.workspaceRoot?.trim() ? { workspaceRoot: command.workspaceRoot.trim() } : {}),
@@ -246,8 +255,10 @@ export class MissionSystemController {
 		return [repositoryId];
 	}
 
-	private reduceAirportPaneBound(params: BindAirportPaneParams): string[] {
-		const repositoryId = this.airportRegistry.getActiveAirport().repositoryId;
+	private reduceAirportPaneBound(params: BindAirportPaneParams & { surfacePath?: string }): string[] {
+		const repositoryId = params.surfacePath?.trim()
+			? this.workspaceManager.resolveWorkspaceRootForSurfacePath(params.surfacePath.trim())
+			: this.airportRegistry.getActiveAirport().repositoryId;
 		this.airportRegistry.bindPane(repositoryId, params);
 		return [repositoryId];
 	}

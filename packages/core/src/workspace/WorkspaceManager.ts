@@ -11,11 +11,11 @@ import { MissionWorkspace } from './Workspace.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { listRegisteredMissionUserRepos, registerMissionUserRepo } from '../lib/userConfig.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
+import { resolveMissionWorkspaceContext } from '../lib/workspacePaths.js';
 import type { MissionControlSource } from '../daemon/control-plane/types.js';
 
 export class WorkspaceManager {
     private readonly workspaces = new Map<string, MissionWorkspace>();
-    private readonly missionWorkspaceRoots = new Map<string, string>();
 
     public constructor(
         private readonly runners: Map<string, AgentRunner>,
@@ -39,10 +39,6 @@ export class WorkspaceManager {
 
     public resolveWorkspaceRootForSurfacePath(surfacePath: string): string {
         return path.resolve(this.discoverSurfaceRoot(surfacePath));
-    }
-
-    public resolveWorkspaceRootForMissionId(missionId: string): string | undefined {
-        return this.missionWorkspaceRoots.get(missionId);
     }
 
     public async readMissionControlSource(input: {
@@ -69,12 +65,12 @@ export class WorkspaceManager {
     }
 
     public resolveWorkspaceRootForRequest(request: Request, result: unknown): string | undefined {
+        void result;
         const surfacePath = request.surfacePath?.trim();
         if (surfacePath) {
             return this.resolveWorkspaceRootForSurfacePath(surfacePath);
         }
-        const missionId = readMissionSelector(request.params)?.missionId ?? readMissionIdFromResult(result);
-        return missionId ? this.resolveWorkspaceRootForMissionId(missionId) : undefined;
+        return undefined;
     }
 
     public async executeMethod(request: Request): Promise<unknown> {
@@ -86,7 +82,11 @@ export class WorkspaceManager {
         if (!missionId) {
             throw new Error(`Mission method '${request.method}' requires an explicit missionId selector.`);
         }
-        return this.executeMissionMethod(missionId, request);
+        const surfacePath = request.surfacePath?.trim();
+        if (!surfacePath) {
+            throw new Error(`Mission method '${request.method}' requires a surfacePath.`);
+        }
+        return this.executeMissionMethod(surfacePath, request);
     }
 
     private async executeControlMethod(request: Request): Promise<unknown> {
@@ -119,7 +119,6 @@ export class WorkspaceManager {
         }
 
         const result = await primaryWorkspace.executeMethod(request);
-        this.registerMissionResult(discovery.primaryControlRoot, result);
         return result;
     }
 
@@ -146,11 +145,8 @@ export class WorkspaceManager {
         return registered;
     }
 
-    private async executeMissionMethod(missionId: string, request: Request): Promise<unknown> {
-        const workspaceRoot = this.missionWorkspaceRoots.get(missionId);
-        if (!workspaceRoot) {
-            throw new Error(`Mission '${missionId}' is unknown to the daemon. Discover missions from a surface path before selecting one.`);
-        }
+    private async executeMissionMethod(surfacePath: string, request: Request): Promise<unknown> {
+        const workspaceRoot = this.resolveWorkspaceRootForSurfacePath(surfacePath);
         return this.getWorkspace(workspaceRoot).executeMethod(request);
     }
 
@@ -160,21 +156,10 @@ export class WorkspaceManager {
             const workspace = this.getWorkspace(controlRoot);
             const candidates = await workspace.listMissionSelectionCandidates();
             for (const candidate of candidates) {
-                if (!this.missionWorkspaceRoots.has(candidate.missionId)) {
-                    this.missionWorkspaceRoots.set(candidate.missionId, controlRoot);
-                }
                 discovered.push(candidate);
             }
         }
         return discovered.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    }
-
-    private registerMissionResult(controlRoot: string, result: unknown): void {
-        const missionId = readMissionIdFromResult(result);
-        if (!missionId) {
-            return;
-        }
-        this.missionWorkspaceRoots.set(missionId, controlRoot);
     }
 
     private async discoverSurface(surfacePath: string): Promise<{
@@ -202,8 +187,10 @@ export class WorkspaceManager {
     }
 
     private resolveControlRootFromMissionPath(surfacePath: string): string | undefined {
-        void surfacePath;
-        return undefined;
+        const context = resolveMissionWorkspaceContext(surfacePath);
+        return context.kind === 'mission-worktree'
+            ? context.workspaceRoot
+            : undefined;
     }
 }
 
@@ -217,20 +204,4 @@ function readMissionSelector(params: unknown): { missionId?: string } | undefine
     }
     const selector = (params as { selector?: { missionId?: string } }).selector;
     return selector && typeof selector === 'object' ? selector : undefined;
-}
-
-function readMissionIdFromResult(result: unknown): string | undefined {
-    if (!result || typeof result !== 'object') {
-        return undefined;
-    }
-    if ('missionId' in result && typeof result.missionId === 'string' && result.missionId.trim()) {
-        return result.missionId;
-    }
-    if ('status' in result && result.status && typeof result.status === 'object') {
-        const status = result.status as { missionId?: string };
-        if (typeof status.missionId === 'string' && status.missionId.trim()) {
-            return status.missionId;
-        }
-    }
-    return undefined;
 }

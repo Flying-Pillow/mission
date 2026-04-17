@@ -23,20 +23,23 @@ describe('buildAvailableActionsQueryKey', () => {
 		expect(before).not.toBe(after);
 	});
 
-	it('ignores mission context when the Tower is in repository mode', () => {
-		expect(buildAvailableActionsQueryKey({
-			actionsInvalidationKey: 'revision-1',
-			mode: 'repository',
-			missionId: 'mission-42',
-			commandSelectionKey: 'tree:task:task-1',
-			context: { taskId: 'task-1' }
-		})).toBe(buildAvailableActionsQueryKey({
+	it('changes when repository command context changes outside mission mode', () => {
+		const before = buildAvailableActionsQueryKey({
 			actionsInvalidationKey: 'revision-1',
 			mode: 'repository',
 			missionId: undefined,
-			commandSelectionKey: 'tree:task:task-2',
+			commandSelectionKey: 'repository:/repo/a',
+			context: { repositoryId: '/repo/a' }
+		});
+		const after = buildAvailableActionsQueryKey({
+			actionsInvalidationKey: 'revision-1',
+			mode: 'airport',
+			missionId: undefined,
+			commandSelectionKey: 'airport:home',
 			context: {}
-		}));
+		});
+
+		expect(before).not.toBe(after);
 	});
 
 	it('changes when mission tree selection changes even if context shape is unchanged', () => {

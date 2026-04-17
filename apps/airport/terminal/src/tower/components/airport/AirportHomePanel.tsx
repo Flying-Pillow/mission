@@ -1,9 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 
+import { isAirportHomeNonSelectableItemId } from './airportHomeDomain.js';
 import { SelectPanel } from '../SelectPanel.js';
 import type { SelectItem, TowerKeyEvent } from '../types.js';
 
-type RepositoryPanelProps = {
+type AirportHomePanelProps = {
 	items: SelectItem[];
 	selectedItemId: string | undefined;
 	focused: boolean;
@@ -12,18 +13,19 @@ type RepositoryPanelProps = {
 	onFocusCommand?: () => void;
 };
 
-export function RepositoryPanel(props: RepositoryPanelProps) {
+export function AirportHomePanel(props: AirportHomePanelProps) {
 	return (
 		<SelectPanel
-			title="REPOSITORY SELECTION"
+			title="AIRPORT HOME"
 			items={props.items}
 			selectedItemId={props.selectedItemId}
 			focused={props.focused}
-			emptyLabel="No missions or GitHub issues are available right now."
-			helperText="Choose an active mission, pick an open issue that is not already active, or start a new mission."
-			isItemSelectable={(item) => !isRepositorySelectionNonSelectableId(item.id)}
+			emptyLabel="Airport is ready. Add the first repository to begin."
+			helperText="Manage the Airport repository registry here. Select a repository to open its control surface, or add a new local checkout."
+			countLabel="actions"
+			isItemSelectable={(item) => !isAirportHomeNonSelectableItemId(item.id)}
 			onKeyDown={(event) => {
-				handleRepositorySelectionKeyDown(event, props);
+				handleAirportHomeKeyDown(event, props);
 			}}
 			onItemChange={props.onItemChange}
 			onItemSelect={(itemId) => {
@@ -33,17 +35,13 @@ export function RepositoryPanel(props: RepositoryPanelProps) {
 	);
 }
 
-function handleRepositorySelectionKeyDown(
+function handleAirportHomeKeyDown(
 	event: TowerKeyEvent,
-	props: RepositoryPanelProps
+	props: AirportHomePanelProps
 ): void {
 	if (event.name === 'right') {
 		event.preventDefault();
 		event.stopPropagation();
 		props.onFocusCommand?.();
 	}
-}
-
-function isRepositorySelectionNonSelectableId(itemId: string): boolean {
-	return itemId.startsWith('section:') || itemId.startsWith('separator:');
 }
