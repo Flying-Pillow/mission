@@ -10,19 +10,21 @@
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
     "check": "tsc --noEmit -p tsconfig.json",
     "daemon:dev": "nodemon --watch src --ext ts --signal SIGTERM --exec \"tsx src/daemon/main.ts\"",
-    "lint": "eslint src --ext .ts",
-    "test": "cd ../.. && vitest run --config vitest.config.ts --project core"
+    "lint": "vp lint src",
+    "test": "vp test run --config ../../vitest.config.ts --project core"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "typescript": "./src/index.ts",
       "types": "./build/index.d.ts",
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
     "./*": {
+      "development": "./src/*",
       "typescript": "./src/*",
       "default": "./build/*"
     }
@@ -37,7 +39,7 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "nodemon": "^3.1.10",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.2"
-  },
-  "packageManager": "pnpm@10.30.3"
+  }
 }

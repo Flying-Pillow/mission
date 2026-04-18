@@ -1,13 +1,20 @@
+// /packages/core/src/daemon/control-plane/AirportProjectionService.ts: Derives panel-facing airport projections from daemon state and system status.
 import path from 'node:path';
-import type { AirportProjectionSet, AirportState, PaneBinding, AirportPaneId } from '../../../../airport/build/index.js';
-import type { ContextGraph } from '../../types.js';
+import type {
+	AirportProjectionSet,
+	AirportState,
+	PaneBinding,
+	AirportPaneId
+} from '@flying-pillow/mission-airport';
+import type { ContextGraph, SystemStatus } from '../../types.js';
 
 export function deriveSystemAirportProjections(
 	domain: ContextGraph,
-	airportState: AirportState
+	airportState: AirportState,
+	systemStatus?: SystemStatus
 ): AirportProjectionSet {
 	return {
-		tower: deriveTowerProjection(domain, airportState),
+		tower: deriveTowerProjection(domain, airportState, systemStatus),
 		briefingRoom: deriveBriefingRoomProjection(domain, airportState),
 		runway: deriveRunwayProjection(domain, airportState)
 	};
@@ -15,11 +22,13 @@ export function deriveSystemAirportProjections(
 
 function deriveTowerProjection(
 	domain: ContextGraph,
-	airportState: AirportState
+	airportState: AirportState,
+	systemStatus?: SystemStatus
 ): AirportProjectionSet['tower'] {
 	const base = createPaneProjectionBase(airportState, 'tower');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
 	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
+	const githubStatus = systemStatus?.github;
 	return {
 		...base,
 		...(repositoryId ? { repositoryId } : {}),
@@ -29,7 +38,13 @@ function deriveTowerProjection(
 		subtitle: repositoryContext?.displayLabel
 			|| airportState.repositoryRootPath
 			|| 'Repository overview',
-		emptyLabel: 'Tower is ready.'
+		emptyLabel: 'Tower is ready.',
+		github: {
+			cliAvailable: githubStatus?.cliAvailable ?? false,
+			authenticated: githubStatus?.authenticated ?? false,
+			...(githubStatus?.user ? { user: githubStatus.user } : {}),
+			...(githubStatus?.detail ? { detail: githubStatus.detail } : {})
+		}
 	};
 }
 

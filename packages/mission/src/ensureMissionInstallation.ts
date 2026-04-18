@@ -27,7 +27,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-type ManagedDependencyId = 'zellij' | 'micro' | 'bun';
+type ManagedDependencyId = 'gh';
 type ManagedDependencyArchiveType = 'tar.gz' | 'zip';
 
 type ManagedDependency = {
@@ -59,42 +59,16 @@ export async function ensureMissionInstallation(options: {
 		changed = true;
 	}
 
-	const bunBinary = await ensureBinary({
-		label: 'Bun runtime',
-		defaultValue: 'bun',
+	const ghBinary = await ensureBinary({
+		label: 'GitHub CLI',
+		defaultValue: 'gh',
 		interactive: options.interactive,
-		...(config.bunBinary ? { currentValue: config.bunBinary } : {}),
-		managedDependencyId: 'bun',
-		fallbacks: ['bun']
+		...(config.ghBinary ? { currentValue: config.ghBinary } : {}),
+		managedDependencyId: 'gh',
+		fallbacks: ['gh']
 	});
-	if (bunBinary !== config.bunBinary) {
-		config = { ...config, bunBinary };
-		changed = true;
-	}
-
-	const terminalBinary = await ensureBinary({
-		label: 'zellij terminal manager',
-		defaultValue: 'zellij',
-		interactive: options.interactive,
-		...(config.terminalBinary ? { currentValue: config.terminalBinary } : {}),
-		managedDependencyId: 'zellij',
-		fallbacks: []
-	});
-	if (terminalBinary !== config.terminalBinary) {
-		config = { ...config, terminalBinary };
-		changed = true;
-	}
-
-	const editorBinary = await ensureBinary({
-		label: 'editor',
-		defaultValue: 'micro',
-		interactive: options.interactive,
-		...(config.editorBinary ? { currentValue: config.editorBinary } : {}),
-		managedDependencyId: 'micro',
-		fallbacks: ['micro', 'nano', 'vim', 'vi']
-	});
-	if (editorBinary !== config.editorBinary) {
-		config = { ...config, editorBinary };
+	if (ghBinary !== config.ghBinary) {
+		config = { ...config, ghBinary };
 		changed = true;
 	}
 
@@ -108,9 +82,7 @@ export async function ensureMissionInstallation(options: {
 				`config: ${getMissionUserConfigPath()}`,
 				`missions: ${resolveMissionWorkspaceRoot(config.missionWorkspaceRoot)}`,
 				`runtime: ${getMissionRuntimeDirectory()}`,
-				`bun: ${config.bunBinary ?? 'bun'}`,
-				`terminal: ${config.terminalBinary ?? 'zellij'}`,
-				`editor: ${config.editorBinary ?? 'micro'}`
+				`gh: ${config.ghBinary ?? 'gh'}`
 			].join('\n'),
 			'Mission setup'
 		);
@@ -189,6 +161,13 @@ async function ensureBinary(input: {
 	if (hasExplicitOverride && !usesManagedRuntimePath && isExecutableAvailable(configuredBinary)) {
 		return configuredBinary;
 	}
+	if (isExecutableAvailable(configuredBinary)) {
+		return configuredBinary;
+	}
+	const fallbackBinary = input.fallbacks.find((candidate) => isExecutableAvailable(candidate));
+	if (fallbackBinary) {
+		return fallbackBinary;
+	}
 	if (input.managedDependencyId) {
 		try {
 			return await installManagedDependency(input.managedDependencyId, input.interactive);
@@ -201,13 +180,6 @@ async function ensureBinary(input: {
 				`Automatic ${input.label} installation failed`
 			);
 		}
-	}
-	if (isExecutableAvailable(configuredBinary)) {
-		return configuredBinary;
-	}
-	const fallbackBinary = input.fallbacks.find((candidate) => isExecutableAvailable(candidate));
-	if (fallbackBinary) {
-		return fallbackBinary;
 	}
 	if (!input.interactive) {
 		throw new Error(
@@ -327,79 +299,32 @@ function getManagedDependency(id: ManagedDependencyId): ManagedDependency {
 	if (process.platform !== 'linux') {
 		throw new Error(`Mission can only auto-install ${id} on Linux right now. Configure it manually on ${process.platform}.`);
 	}
-	if (id === 'bun') {
+	if (id === 'gh') {
 		return {
 			id,
-			label: 'Bun runtime',
-			owner: 'oven-sh',
-			repo: 'bun',
-			releaseTag: 'bun-v1.3.12',
-			executableName: 'bun',
-			archiveType: 'zip',
-			resolveAssetPattern() {
-				const libcFamily = resolveLinuxLibcFamily();
-				if (process.arch === 'x64') {
-					return libcFamily === 'musl'
-						? /^bun-linux-x64-musl-baseline\.zip$/u
-						: /^bun-linux-x64-baseline\.zip$/u;
-				}
-				if (process.arch === 'arm64') {
-					return libcFamily === 'musl'
-						? /^bun-linux-aarch64-musl\.zip$/u
-						: /^bun-linux-aarch64\.zip$/u;
-				}
-				throw new Error(`Mission cannot auto-install Bun for Linux architecture '${process.arch}'.`);
-			}
-		};
-	}
-	if (id === 'zellij') {
-		return {
-			id,
-			label: 'zellij terminal manager',
-			owner: 'zellij-org',
-			repo: 'zellij',
-			releaseTag: 'v0.44.1',
-			executableName: 'zellij',
+			label: 'GitHub CLI',
+			owner: 'cli',
+			repo: 'cli',
+			releaseTag: 'v2.90.0',
+			executableName: 'gh',
 			archiveType: 'tar.gz',
 			resolveAssetPattern() {
+				const releaseVersion = '2.90.0';
 				if (process.arch === 'x64') {
-					return /^zellij-x86_64-unknown-linux-musl\.tar\.gz$/u;
+					return new RegExp(`^gh_${releaseVersion.replace(/\./gu, '\\.')}_linux_amd64\\.tar\\.gz$`, 'u');
 				}
 				if (process.arch === 'arm64') {
-					return /^zellij-aarch64-unknown-linux-musl\.tar\.gz$/u;
+					return new RegExp(`^gh_${releaseVersion.replace(/\./gu, '\\.')}_linux_arm64\\.tar\\.gz$`, 'u');
 				}
-				throw new Error(`Mission cannot auto-install zellij for Linux architecture '${process.arch}'.`);
+				throw new Error(`Mission cannot auto-install GitHub CLI for Linux architecture '${process.arch}'.`);
 			}
 		};
 	}
-	return {
-		id,
-		label: 'micro editor',
-		owner: 'micro-editor',
-		repo: 'micro',
-		releaseTag: 'v2.0.15',
-		executableName: 'micro',
-		archiveType: 'tar.gz',
-		resolveAssetPattern() {
-			if (process.arch === 'x64') {
-				return /^micro-.*-linux64-static\.tar\.gz$/u;
-			}
-			if (process.arch === 'arm64') {
-				return /^micro-.*-linux-arm64-static\.tar\.gz$/u;
-			}
-			throw new Error(`Mission cannot auto-install micro for Linux architecture '${process.arch}'.`);
-		}
-	};
+	throw new Error(`Mission does not manage the dependency '${id}'.`);
 }
 
 function resolveManagedDependencyRoot(dependency: ManagedDependency): string {
 	return path.join(getMissionRuntimeDirectory(), dependency.id, dependency.releaseTag);
-}
-
-function resolveLinuxLibcFamily(): 'glibc' | 'musl' {
-	const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
-	const glibcVersion = report?.header?.glibcVersionRuntime;
-	return typeof glibcVersion === 'string' && glibcVersion.trim().length > 0 ? 'glibc' : 'musl';
 }
 
 function isManagedDependencyUsable(executablePath: string): boolean {

@@ -28,10 +28,10 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.30.3
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack install
 
       - name: Validate pnpm lockfile
         run: pnpm install --frozen-lockfile
@@ -48,4 +48,4 @@ jobs:
         uses: ./.github/actions/setup-environment
 
       - name: Verify Workspace
-        run: pnpm ci:verify
+        run: pnpm run ci:verify

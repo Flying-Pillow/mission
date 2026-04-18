@@ -1,8 +1,0 @@
-node_modules/
-.turbo/
-build/
-dist/
-out/
-coverage/
-*.vsix
-pnpm-lock.yaml

@@ -2,7 +2,7 @@ import * as net from 'node:net';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
-	} from '../agent/events.js';
+} from '../agent/events.js';
 import { METHOD_METADATA } from '../daemon/protocol/contracts.js';
 import type {
 	Message,
@@ -28,8 +28,13 @@ export class DaemonClient implements MissionAgentDisposable {
 	private readonly pendingRequests = new Map<string, PendingRequest>();
 	private readonly eventEmitter = new MissionAgentEventEmitter<Notification>();
 	private surfacePath = '';
+	private authToken = '';
 
 	public readonly onDidEvent = this.eventEmitter.event;
+
+	public setAuthToken(authToken: string | undefined): void {
+		this.authToken = authToken?.trim() ?? '';
+	}
 
 	public async connect(options: { surfacePath: string; socketPath?: string }): Promise<this> {
 		this.surfacePath = options.surfacePath;
@@ -56,7 +61,8 @@ export class DaemonClient implements MissionAgentDisposable {
 
 	public async request<TResult>(
 		method: Method,
-		params?: unknown
+		params?: unknown,
+		options: { authToken?: string } = {}
 	): Promise<TResult> {
 		if (!this.socket || this.socket.destroyed) {
 			throw new Error('Daemon client is not connected.');
@@ -64,11 +70,13 @@ export class DaemonClient implements MissionAgentDisposable {
 
 		const id = `request-${String(++this.nextRequestId)}`;
 		const includeSurfacePath = METHOD_METADATA[method].includeSurfacePath;
+		const resolvedAuthToken = options.authToken?.trim() ?? this.authToken;
 		const request: Request = {
 			type: 'request',
 			id,
 			method,
 			...(includeSurfacePath ? { surfacePath: this.surfacePath } : {}),
+			...(resolvedAuthToken ? { authToken: resolvedAuthToken } : {}),
 			...(params === undefined ? {} : { params })
 		};
 

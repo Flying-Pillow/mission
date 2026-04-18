@@ -266,7 +266,7 @@ export class Mission {
 				await this.status();
 				replacedStaleSession = true;
 			} else {
-			return MissionSession.cloneRecord(existingSession);
+				return MissionSession.cloneRecord(existingSession);
 			}
 		}
 
@@ -819,7 +819,7 @@ export class Mission {
 					kind: 'stage-artifact',
 					depth: 1,
 					color: this.progressTone(stage.status),
-						statusLabel: stageStatusLabel,
+					statusLabel: stageStatusLabel,
 					collapsible: false,
 					sourcePath: stageArtifactPath,
 					stageId: stage.stage
@@ -1561,13 +1561,16 @@ export class Mission {
 	}
 
 	private async completeTaskExecution(taskId: string): Promise<void> {
-		for (const session of this.agentSessions.filter(
+		const activeSessions = this.agentSessions.filter(
 			(candidate) => candidate.taskId === taskId && isActiveMissionAgentSession(candidate.lifecycleState)
-		)) {
+		);
+		for (const session of activeSessions) {
 			await this.ensureRuntimeSessionAttached(session.sessionId);
 			await this.workflowController.completeRuntimeSession(session.sessionId, taskId);
 		}
-		await this.applyWorkflowEvent(this.createWorkflowEvent('task.completed', { taskId }));
+		if (activeSessions.length === 0) {
+			await this.applyWorkflowEvent(this.createWorkflowEvent('task.completed', { taskId }));
+		}
 	}
 
 	private async blockTaskExecution(taskId: string, reason?: string): Promise<void> {

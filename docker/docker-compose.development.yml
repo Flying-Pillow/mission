@@ -1,0 +1,32 @@
+services:
+  development:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.development
+    image: mission/development:local
+    working_dir: /mission
+    container_name: mission-development
+    command: [ "tail", "-f", "/dev/null" ]
+    init: true
+    tty: true
+    stdin_open: true
+    volumes:
+      - "../:/mission"
+      - "../../flying-pillow/dev/flying-pillow:/flying-pillow"
+      - "cargo-registry:/home/dev/.cargo/registry"
+      - "cargo-git:/home/dev/.cargo/git"
+      - "rustup:/home/dev/.rustup"
+    expose:
+      - "5173"
+      - "1420"
+      - "1421"
+      - "9229"
+    ports:
+      - "5173:5173"
+      - "1420:1420"
+      - "1421:1421"
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  rustup:

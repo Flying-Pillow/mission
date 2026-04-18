@@ -563,6 +563,7 @@ export type Request = {
 	id: string;
 	method: Method;
 	surfacePath?: string;
+	authToken?: string;
 	clientId?: string;
 	params?: unknown;
 };
@@ -576,8 +577,8 @@ export type SuccessResponse = {
 	| MissionSystemSnapshot
 	| OperatorStatus
 	| ControlDocumentResponse
-		| MissionRepositoryCandidate
-		| MissionRepositoryCandidate[]
+	| MissionRepositoryCandidate
+	| MissionRepositoryCandidate[]
 	| MissionGateResult
 	| WorkflowSettingsGetResult
 	| ControlWorkflowSettingsInitializeResponse

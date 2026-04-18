@@ -1,7 +1,7 @@
 {
   "name": "@flying-pillow/mission",
   "version": "0.1.0-alpha.0",
-  "description": "Mission CLI distribution package for the mission and missiond launchers; the Airport terminal surface is provided by a separate package.",
+  "description": "Mission CLI distribution package for the mission and missiond launchers; Mission now boots the native Airport host.",
   "type": "module",
   "bin": {
     "mission": "./build/mission.js",
@@ -11,6 +11,7 @@
   "types": "build/index.d.ts",
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "typescript": "./src/index.ts",
       "types": "./build/index.d.ts",
       "import": "./build/index.js",
@@ -26,17 +27,17 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src --ext .ts",
-    "test": "vitest run --passWithNoTests"
+    "install:local:dev": "node --conditions=development --import tsx ./src/mission.ts install --json",
+    "lint": "vp lint src",
+    "test": "vp test run --passWithNoTests"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
-    "@flying-pillow/mission-airport-terminal": "workspace:*",
     "@flying-pillow/mission-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.2"
-  },
-  "packageManager": "pnpm@10.30.3"
+  }
 }

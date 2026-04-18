@@ -130,11 +130,11 @@ export class MissionWorkspace {
 			case 'control.workflow.settings.update':
 				return this.updateWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsUpdate);
 			case 'control.issues.list':
-				return this.listOpenIssues((request.params ?? {}) as ControlIssuesList);
+				return this.listOpenIssues((request.params ?? {}) as ControlIssuesList, request);
 			case 'mission.from-issue':
-				return this.createMissionFromIssue((request.params ?? {}) as MissionFromIssueRequest);
+				return this.createMissionFromIssue((request.params ?? {}) as MissionFromIssueRequest, request);
 			case 'mission.from-brief':
-				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest);
+				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest, request);
 			case 'control.action.list':
 				return this.listControlActions((request.params ?? {}) as ControlActionList);
 			case 'control.action.describe':
@@ -176,7 +176,7 @@ export class MissionWorkspace {
 		}));
 	}
 
-	private async listOpenIssues(params: ControlIssuesList = {}): Promise<TrackedIssueSummary[]> {
+	private async listOpenIssues(params: ControlIssuesList = {}, request?: Request): Promise<TrackedIssueSummary[]> {
 		const settings = getDefaultMissionDaemonSettingsWithOverrides(
 			readMissionDaemonSettings(this.workspaceRoot) ?? {}
 		);
@@ -187,12 +187,17 @@ export class MissionWorkspace {
 		if (!githubRepository) {
 			return [];
 		}
-		this.requireGitHubAuthentication();
+		this.requireGitHubAuthentication(request);
 		const requestedLimit = typeof params.limit === 'number' && Number.isFinite(params.limit)
 			? Math.floor(params.limit)
 			: 50;
 		const limit = Math.max(1, Math.min(200, requestedLimit));
-		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+		const authToken = this.readRequestAuthToken(request);
+		const adapter = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			githubRepository,
+			authToken ? { authToken } : {}
+		);
 		return adapter.listOpenIssues(limit);
 	}
 
@@ -424,11 +429,16 @@ export class MissionWorkspace {
 		};
 	}
 
-	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<OperatorStatus> {
+	private async createMissionFromBrief(params: MissionFromBriefRequest, request?: Request): Promise<OperatorStatus> {
 		const githubRepository = this.requireGitHubRepository();
-		this.requireGitHubAuthentication();
+		this.requireGitHubAuthentication(request);
 
-		const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+		const authToken = this.readRequestAuthToken(request);
+		const github = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			githubRepository,
+			authToken ? { authToken } : {}
+		);
 		const reconciledBrief = params.brief.issueId !== undefined
 			? params.brief
 			: await github.createIssue({
@@ -581,17 +591,21 @@ export class MissionWorkspace {
 	}
 
 	private async createMissionFromIssue(
-		params: MissionFromIssueRequest
+		params: MissionFromIssueRequest,
+		request?: Request
 	): Promise<OperatorStatus> {
 		const githubRepository = this.requireGitHubRepository();
-		this.requireGitHubAuthentication();
+		this.requireGitHubAuthentication(request);
 
-		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+		const authToken = this.readRequestAuthToken(request);
+		const adapter = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			githubRepository,
+			authToken ? { authToken } : {}
+		);
 		const brief = await adapter.fetchIssue(String(params.issueNumber));
 		return this.prepareMissionFromResolvedBrief(brief);
 	}
-
-
 
 	private async getMissionStatus(
 		params: MissionSelect = {}
@@ -1267,11 +1281,20 @@ export class MissionWorkspace {
 		return githubRepository;
 	}
 
-	private requireGitHubAuthentication(): void {
+	private requireGitHubAuthentication(request?: Request): void {
+		if (this.readRequestAuthToken(request)) {
+			return;
+		}
+
 		const systemStatus = readSystemStatus({ cwd: this.workspaceRoot });
 		if (!systemStatus.github.authenticated) {
 			throw new Error(systemStatus.github.detail ?? 'GitHub CLI authentication is required.');
 		}
+	}
+
+	private readRequestAuthToken(request?: Request): string | undefined {
+		const authToken = request?.authToken?.trim();
+		return authToken && authToken.length > 0 ? authToken : undefined;
 	}
 
 	private toMissionParams(params: unknown): MissionSelect {

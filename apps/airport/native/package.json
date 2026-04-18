@@ -1,0 +1,16 @@
+{
+  "name": "@flying-pillow/mission-airport-native",
+  "private": true,
+  "version": "0.1.0-alpha.0",
+  "type": "module",
+  "scripts": {
+    "frontend:dev": "pnpm --dir ../web exec vp dev --host 127.0.0.1 --strictPort",
+    "frontend:build": "pnpm --dir ../web exec vp build",
+    "dev": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/mission-airport-target tauri dev",
+    "build": "tauri build",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

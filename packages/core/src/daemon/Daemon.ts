@@ -168,8 +168,11 @@ export class Daemon {
 	private async handleLine(socket: Socket, line: string, clientId: string): Promise<void> {
 		const startedAt = performance.now();
 		try {
-			const message = JSON.parse(line) as Message;
-			if (message.type !== 'request') return;
+			const message = JSON.parse(line) as unknown;
+			if (!isProtocolRequest(message)) {
+				return;
+			}
+
 			const request: Request = {
 				...message,
 				clientId
@@ -449,7 +452,7 @@ export class Daemon {
 		};
 	}
 
-	}
+}
 
 function isOperatorStatus(value: unknown): value is import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } {
 	return Boolean(value && typeof value === 'object' && 'found' in value && typeof (value as { found?: unknown }).found === 'boolean');
@@ -551,6 +554,15 @@ function readAgentSessionIdFromResult(value: unknown): string | undefined {
 		}
 	}
 	return undefined;
+}
+
+function isProtocolRequest(value: unknown): value is Message & { type: 'request' } {
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
+
+	const candidate = value as { type?: unknown; id?: unknown; method?: unknown };
+	return candidate.type === 'request' && typeof candidate.id === 'string' && typeof candidate.method === 'string';
 }
 
 export async function startDaemon(options: DaemonOptions = {}): Promise<Daemon> {

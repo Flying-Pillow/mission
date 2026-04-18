@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
 	parseFrontmatterDocument,
 	renderFrontmatterDocument,
@@ -498,7 +499,7 @@ export class FilesystemAdapter {
 	): Promise<void> {
 		const filePath = this.getMissionRuntimeRecordPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
-		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
+		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
 		await fs.writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
 		await fs.rename(temporaryPath, filePath);
 	}

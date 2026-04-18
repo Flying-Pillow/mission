@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	ensureMissionUserConfig,
+	getMissionGitHubCliBinary,
 	getMissionRuntimeDirectory,
 	getMissionUserConfigPath,
 	listRegisteredMissionUserRepos,
@@ -30,10 +31,7 @@ describe('userConfig', () => {
 		expect(getMissionUserConfigPath()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'config.json'));
 		expect(config).toMatchObject({
 			version: 1,
-			missionWorkspaceRoot: 'missions',
-			terminalBinary: 'zellij',
-			editorBinary: 'micro',
-			bunBinary: 'bun'
+			missionWorkspaceRoot: 'missions'
 		});
 	});
 
@@ -49,16 +47,26 @@ describe('userConfig', () => {
 		await writeMissionUserConfig({
 			missionWorkspaceRoot: '/tmp/missions',
 			terminalBinary: '/usr/local/bin/zellij',
-			editorBinary: 'nano',
-			bunBinary: '/opt/bun/bin/bun'
+			ghBinary: '/opt/gh/bin/gh'
 		});
 
 		expect(readMissionUserConfig()).toMatchObject({
 			missionWorkspaceRoot: '/tmp/missions',
 			terminalBinary: '/usr/local/bin/zellij',
-			editorBinary: 'nano',
-			bunBinary: '/opt/bun/bin/bun'
+			ghBinary: '/opt/gh/bin/gh'
 		});
+	});
+
+	it('resolves the configured GitHub CLI binary when Mission install has configured one', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+
+		expect(getMissionGitHubCliBinary()).toBeUndefined();
+
+		await writeMissionUserConfig({
+			ghBinary: '/opt/gh/bin/gh'
+		});
+
+		expect(getMissionGitHubCliBinary()).toBe('/opt/gh/bin/gh');
 	});
 
 	it('does not read legacy repos-map config', async () => {
@@ -79,10 +87,7 @@ describe('userConfig', () => {
 
 		expect(readMissionUserConfig()).toEqual({
 			version: 1,
-			missionWorkspaceRoot: 'missions',
-			terminalBinary: 'zellij',
-			editorBinary: 'micro',
-			bunBinary: 'bun'
+			missionWorkspaceRoot: 'missions'
 		});
 	});
 
@@ -184,8 +189,6 @@ describe('userConfig', () => {
 				version: 1,
 				missionWorkspaceRoot: 'missions',
 				terminalBinary: 'zellij',
-				editorBinary: 'micro',
-				bunBinary: 'bun',
 				registeredRepositories: [
 					{
 						checkoutPath: '/tmp/mission-stale-repository'
@@ -200,9 +203,7 @@ describe('userConfig', () => {
 		expect(config).toEqual({
 			version: 1,
 			missionWorkspaceRoot: 'missions',
-			terminalBinary: 'zellij',
-			editorBinary: 'micro',
-			bunBinary: 'bun'
+			terminalBinary: 'zellij'
 		});
 		expect(readMissionUserConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('mission-stale-repository');

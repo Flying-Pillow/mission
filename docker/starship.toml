@@ -1,0 +1,54 @@
+add_newline = true
+command_timeout = 1000
+scan_timeout = 30
+
+format = "$username$hostname$directory$git_branch$git_status$fill$nodejs$rust$cmd_duration$line_break$character"
+
+[username]
+show_always = true
+style_user = "bold cyan"
+style_root = "bold red"
+format = "[$user]($style)@"
+
+[hostname]
+ssh_only = false
+style = "bold cyan"
+format = "[$hostname]($style) "
+
+[directory]
+style = "bold blue"
+truncate_to_repo = false
+truncation_length = 4
+format = "[$path]($style) "
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "[$symbol$branch]($style) "
+
+[git_status]
+style = "bold yellow"
+format = "([$all_status$ahead_behind]($style) )"
+
+[fill]
+symbol = " "
+
+[nodejs]
+symbol = "⬢ "
+style = "bold green"
+format = "[$symbol$version]($style) "
+
+[rust]
+symbol = "🦀 "
+style = "bold red"
+format = "[$symbol$version]($style) "
+
+[cmd_duration]
+min_time = 500
+style = "dimmed white"
+format = "took [$duration]($style)"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold blue)"

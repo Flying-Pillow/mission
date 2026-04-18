@@ -2,7 +2,7 @@ import { intro } from '@clack/prompts';
 import { getWorkspaceRoot } from '@flying-pillow/mission-core';
 import type { EntryContext, MissionEntryHandler } from './entryContext.js';
 import { ensureMissionInstallation } from './ensureMissionInstallation.js';
-import { runAirportTerminalCommand } from './runAirportTerminalCommand.js';
+import { runAirportNativeCommand } from './runAirportNativeCommand.js';
 import { runAirportStatusCommand } from './runAirportStatusCommand.js';
 import { runDaemonStopCommand } from './runDaemonStopCommand.js';
 import { runInstallCommand } from './runInstallCommand.js';
@@ -19,7 +19,7 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 		return;
 	}
 
-	if (!json && command !== '__tower__' && !command.startsWith('__')) {
+	if (!json) {
 		intro('Mission');
 	}
 
@@ -30,12 +30,12 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 		json
 	};
 
-	if (isAirportTerminalCommand(command)) {
+	if (isAirportNativeCommand(command)) {
 		await ensureMissionInstallation({
 			interactive: !json && process.stdout.isTTY,
 			verbose: false
 		});
-		await runAirportTerminalCommand(command, context);
+		await runAirportNativeCommand(command, context);
 		return;
 	}
 
@@ -50,33 +50,19 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 		throw new Error(`Unknown command '${command}'. Run 'mission help' for the supported surface.`);
 	}
 
-	if (command === 'install') {
-		await ensureMissionInstallation({
-			interactive: !json && process.stdout.isTTY,
-			verbose: false
-		});
-	}
-
 	await handler(context);
 }
 
-function isAirportTerminalCommand(
-	command: string
-): command is '__tower__' | '__airport-layout-open__' | '__airport-layout-briefing-room-pane' | '__airport-layout-runway-pane' {
-	return command === '__tower__'
-		|| command === '__airport-layout-open__'
-		|| command === '__airport-layout-briefing-room-pane'
-		|| command === '__airport-layout-runway-pane';
+function isAirportNativeCommand(command: string): command is 'native:dev' | 'native:build' {
+	return command === 'native:dev' || command === 'native:build';
 }
 
-function resolveDefaultEntryCommand(): '__tower__' | '__airport-layout-open__' {
-	return process.env['AIRPORT_PANE_ID']?.trim()
-		? '__tower__'
-		: '__airport-layout-open__';
+function resolveDefaultEntryCommand(): 'native:dev' {
+	return 'native:dev';
 }
 
 export function printHelp(): void {
 	process.stdout.write(
-		`Mission\n\nCommands:\n  mission [--hmr] [--banner] [--no-banner]\n  mission install [--json]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' opens the Mission terminal surface.\n  On POSIX shells, Mission opens the airport layout through the terminal manager when available.\n  The airport layout places Tower on the left and execution details on the right.\n  Mission resets the repository-scoped terminal-manager session at startup so each airport-layout session begins from the initial layout state for that repository.\n  Opening from a mission worktree auto-selects that mission.\n  Opening from the repository checkout opens repository mode.\n  Mission manages a pinned runtime envelope for Bun, zellij, and micro on supported Linux systems; missiond and other non-terminal Mission commands continue to run on Node.\n  Use '--hmr' to run the terminal surfaces with automatic restart on Mission surface changes; package source changes use built exports in HMR mode.\n  Mission will auto-start the daemon with 'missiond' if it is not already running.\n  Starting Mission scaffolds user config automatically and prompts only when setup cannot be inferred safely.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  Install '@flying-pillow/mission' globally if you want persistent 'mission' and 'missiond' commands.\n`
+		`Mission\n\nCommands:\n  mission\n  mission native:dev\n  mission native:build\n  mission install [--json]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' opens the Mission native Airport host.\n  The native host wraps the shared SvelteKit Airport application through Tauri.\n  Mission expects a pnpm-based workspace running on Node 24.\n  Starting Mission scaffolds user config automatically and prompts only when setup cannot be inferred safely.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  On Linux, 'mission install' provisions the Mission-managed GitHub CLI runtime when it is missing.\n  Install '@flying-pillow/mission' globally if you want persistent 'mission' and 'missiond' commands.\n`
 	);
 }

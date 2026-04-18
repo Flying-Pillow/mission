@@ -17,6 +17,7 @@ export type ConnectAirportControlOptions = {
 	runtimeFactoryModulePath?: string;
 	logLine?: (line: string) => void;
 	allowStart?: boolean;
+	authToken?: string;
 };
 
 class IncompatibleDaemonError extends Error {
@@ -50,7 +51,7 @@ export async function connectAirportControl(
 	const allowStart = options.allowStart !== false;
 
 	try {
-		return await connectCompatibleDaemon(options.surfacePath);
+		return await connectCompatibleDaemon(options.surfacePath, options.authToken);
 	} catch (error) {
 		if (!allowStart) {
 			throw error;
@@ -68,7 +69,7 @@ export async function connectAirportControl(
 	let lastError: Error | undefined;
 	while (Date.now() < timeoutAt) {
 		try {
-			return await connectCompatibleDaemon(options.surfacePath);
+			return await connectCompatibleDaemon(options.surfacePath, options.authToken);
 		} catch (error) {
 			lastError = error instanceof Error ? error : new Error(String(error));
 			await restartIncompatibleDaemon(error, options.logLine);
@@ -83,9 +84,10 @@ export async function connectAirportControl(
 	);
 }
 
-async function connectCompatibleDaemon(surfacePath: string): Promise<DaemonClient> {
+async function connectCompatibleDaemon(surfacePath: string, authToken?: string): Promise<DaemonClient> {
 	const client = new DaemonClient();
 	try {
+		client.setAuthToken(authToken);
 		await client.connect({ surfacePath });
 		const ping = await client.request<Ping>('ping');
 		if (ping.protocolVersion !== PROTOCOL_VERSION) {

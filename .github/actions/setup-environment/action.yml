@@ -1,23 +1,19 @@
 name: 'Setup Environment'
-description: 'Prepare Node, pnpm, and Bun tooling for Mission CI and release workflows.'
+description: 'Prepare Node and pnpm tooling for Mission CI and release workflows.'
 runs:
   using: 'composite'
   steps:
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v5
-      with:
-        version: 10.30.3
-
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
         node-version: 24
         cache: 'pnpm'
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: 1.3.12
+    - name: Enable Corepack
+      shell: bash
+      run: |
+        corepack enable
+        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack install
 
     - name: Install Workspace Dependencies
       shell: bash

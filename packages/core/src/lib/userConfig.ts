@@ -17,8 +17,7 @@ export type MissionUserConfig = {
 	version: 1;
 	missionWorkspaceRoot?: string;
 	terminalBinary?: string;
-	editorBinary?: string;
-	bunBinary?: string;
+	ghBinary?: string;
 	registeredRepositories?: MissionUserRegisteredRepository[];
 };
 
@@ -40,17 +39,19 @@ export function getMissionRuntimeDirectory(): string {
 export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig> = {}): MissionUserConfig {
 	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
 	const terminalBinary = normalizeOptionalString(overrides.terminalBinary);
-	const editorBinary = normalizeOptionalString(overrides.editorBinary);
-	const bunBinary = normalizeOptionalString(overrides.bunBinary);
+	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
 	return {
 		version: 1,
 		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
-		terminalBinary: terminalBinary ?? 'zellij',
-		editorBinary: editorBinary ?? 'micro',
-		bunBinary: bunBinary ?? 'bun',
+		...(terminalBinary ? { terminalBinary } : {}),
+		...(ghBinary ? { ghBinary } : {}),
 		...(registeredRepositories ? { registeredRepositories } : {})
 	};
+}
+
+export function getMissionGitHubCliBinary(): string | undefined {
+	return normalizeOptionalString(readMissionUserConfig()?.ghBinary);
 }
 
 export function readMissionUserConfig(): MissionUserConfig | undefined {
@@ -141,11 +142,8 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefi
 		...(typeof candidate['terminalBinary'] === 'string'
 			? { terminalBinary: candidate['terminalBinary'] }
 			: {}),
-		...(typeof candidate['editorBinary'] === 'string'
-			? { editorBinary: candidate['editorBinary'] }
-			: {}),
-		...(typeof candidate['bunBinary'] === 'string'
-			? { bunBinary: candidate['bunBinary'] }
+		...(typeof candidate['ghBinary'] === 'string'
+			? { ghBinary: candidate['ghBinary'] }
 			: {}),
 		...(Array.isArray(candidate['registeredRepositories'])
 			? { registeredRepositories: candidate['registeredRepositories'] as MissionUserRegisteredRepository[] }

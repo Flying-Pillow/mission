@@ -12,15 +12,6 @@ export default defineConfig({
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.ts']
 				}
-			},
-			{
-				extends: true,
-				test: {
-					name: 'adapters',
-					root: './packages/adapters',
-					environment: 'node',
-					include: ['src/**/*.{test,spec}.ts']
-				}
 			}
 		]
 	}

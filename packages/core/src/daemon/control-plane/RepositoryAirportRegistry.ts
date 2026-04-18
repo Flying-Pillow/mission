@@ -9,7 +9,7 @@ import {
 	type ConnectAirportClientParams,
 	type PaneBinding,
 	type AirportPaneId
-} from '../../../../airport/build/index.js';
+} from '@flying-pillow/mission-airport';
 
 type RepositoryAirportRecord = {
 	repositoryId: string;

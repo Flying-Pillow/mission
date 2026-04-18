@@ -1,4 +1,4 @@
-import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '../../airport/build/index.js';
+import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '@flying-pillow/mission-airport';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
 import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
@@ -484,6 +484,8 @@ export type SystemStatus = {
 		cliAvailable: boolean;
 		authenticated: boolean;
 		user?: string;
+		email?: string;
+		avatarUrl?: string;
 		detail?: string;
 	};
 };

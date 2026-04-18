@@ -30,21 +30,21 @@ Tower is one surface inside that app, not the whole terminal product. The curren
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant Entry as mission CLI entry
-	participant Airport as airport entry router
-	participant Bootstrap as bootstrapTowerPane
-	participant Connect as connectAirportControl
-	participant Daemon
-	participant UI as TowerController
+ autonumber
+ participant Entry as mission CLI entry
+ participant Airport as airport entry router
+ participant Bootstrap as bootstrapTowerPane
+ participant Connect as connectAirportControl
+ participant Daemon
+ participant UI as TowerController
 
-	Entry->>Airport: launch mission terminal
-	Airport->>Bootstrap: start tower pane
-	Bootstrap->>Connect: connect to compatible daemon
-	Connect->>Daemon: ping or start daemon process
-	Bootstrap->>Daemon: airport client connect
-	Bootstrap->>Daemon: control status and optional mission status
-	Bootstrap->>UI: mount with initial snapshot and status
+ Entry->>Airport: launch mission terminal
+ Airport->>Bootstrap: start tower pane
+ Bootstrap->>Connect: connect to compatible daemon
+ Connect->>Daemon: ping or start daemon process
+ Bootstrap->>Daemon: airport client connect
+ Bootstrap->>Daemon: control status and optional mission status
+ Bootstrap->>UI: mount with initial snapshot and status
 ```
 
 ## Local State Versus Daemon State
@@ -125,7 +125,7 @@ Each terminal surface starts with an injected `AIRPORT_PANE_ID` and claims exact
 
 ## Runtime Constraint
 
-The current Airport terminal implementation requires Bun at runtime because `@opentui/core` imports `bun:ffi`. That is a surface/runtime dependency, not a workflow dependency.
+The historical Airport terminal implementation depended on a separate terminal-specific runtime path. That dependency belongs to the deprecated terminal surface, not to the active pnpm + Node 24 Airport host.
 
 ## Non-Responsibilities
 

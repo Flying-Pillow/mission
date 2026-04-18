@@ -7,6 +7,5 @@
   "files": [
     "base.json",
     "node.json"
-  ],
-  "packageManager": "pnpm@10.30.3"
+  ]
 }

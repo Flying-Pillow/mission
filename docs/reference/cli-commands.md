@@ -7,7 +7,7 @@ nav_order: 1
 
 # CLI Commands
 
-This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the Airport layout router in `apps/airport/terminal/src/routeAirportTerminalSurfaceEntry.ts`.
+This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`.
 
 ## Public Commands
 
@@ -15,7 +15,9 @@ The current public command surface is:
 
 | Command | Status | What it does |
 | --- | --- | --- |
-| `mission` | Public | Opens the Airport layout |
+| `mission` | Public | Opens the native Airport host |
+| `mission native:dev` | Public | Starts the native Airport host in development mode |
+| `mission native:build` | Public | Builds the native Airport host |
 | `mission install` | Public | Runs user-level Mission setup and writes operator config |
 | `mission airport:status` | Public | Prints daemon airport status, or JSON with `--json` |
 | `mission daemon:stop` | Public | Stops the daemon process and reports the result |
@@ -41,24 +43,33 @@ missiond status
 ## `mission`
 
 ```bash
-mission [--hmr] [--banner] [--no-banner]
+mission
 ```
 
-Behavior verified in the current CLI package and Airport layout router:
+Behavior verified in the current CLI package:
 
-- runs the installation guard before the Airport layout starts
-- opens the Airport layout by default, with Tower as the left-side control surface
+- runs the installation guard before the native Airport host starts
+- opens the native Airport host by default
 - auto-starts the daemon when needed
-- attempts airport layout bootstrap through the terminal manager on POSIX shells when available
 - auto-selects a mission when opened from a mission worktree
 - opens repository mode when opened from the repository checkout
-- provisions or validates the Mission-managed Bun runtime envelope before opening the OpenTUI Airport terminal surfaces when defaults are in use
+- expects the repository checkout to be using pnpm on Node 24 before launching the native host
 
-Supported terminal flags are currently limited to:
+## `mission native:dev`
 
-- `--hmr`
-- `--banner`
-- `--no-banner`
+```bash
+mission native:dev
+```
+
+Starts the native Tauri Airport host in development mode.
+
+## `mission native:build`
+
+```bash
+mission native:build
+```
+
+Builds the native Tauri Airport host.
 
 ## `mission install`
 
@@ -70,9 +81,7 @@ This command performs user-level setup:
 
 - ensures Mission user config exists
 - ensures the mission workspace root exists
-- provisions or validates the pinned Bun runtime
-- provisions or validates the pinned terminal manager runtime
-- provisions or validates the pinned editor runtime
+- provisions or validates the managed GitHub CLI when the default `gh` command is unavailable
 
 With `--json`, it prints the config path, the effective config object, the resolved missions path, and the managed runtime path.
 
@@ -112,16 +121,6 @@ This bin is shipped by the same `@flying-pillow/mission` package and delegates t
 - restarting it
 - checking status
 - running it in the foreground
-
-## Internal Bootstrap Hooks
-
-The router also contains internal commands used for airport surface bootstrap:
-
-- `__airport-layout-open__`
-- `__airport-layout-briefing-room-pane`
-- `__airport-layout-runway-pane`
-
-These are implementation hooks for airport layout startup. They are not part of the supported public CLI contract and should not be documented as operator-facing commands.
 
 ## About `mission init`
 

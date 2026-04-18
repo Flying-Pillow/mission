@@ -1,0 +1,70 @@
+###############################################################################
+# Mission root dev container
+# - Node.js 24 LTS
+# - Rust stable for Tauri v2
+###############################################################################
+FROM debian:bookworm-slim
+
+ARG NODE_VERSION=24.15.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tar \
+    git \
+    sudo \
+    curl \
+    wget \
+    unzip \
+    ca-certificates \
+    xz-utils \
+    bash \
+    procps \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    file \
+    tree \
+    openssh-client \
+    python3 \
+    python3-venv \
+    python3-pip \
+    libgtk-3-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    libsoup-3.0-dev \
+    libwebkit2gtk-4.1-dev \
+    patchelf \
+    libxdo-dev \
+    webkit2gtk-driver \
+    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    | tar -xJ -C /usr/local --strip-components=1 --no-same-owner \
+    && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 1000 dev \
+    && useradd -m -u 1000 -g dev -s /bin/bash dev \
+    && usermod -aG sudo dev \
+    && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+USER dev
+ENV CARGO_HOME=/home/dev/.cargo
+ENV RUSTUP_HOME=/home/dev/.rustup
+ENV PATH=/home/dev/.local/bin:/home/dev/.cargo/bin:${PATH}
+WORKDIR /mission
+
+RUN mkdir -p /home/dev/.config
+
+COPY --chown=dev:dev ./starship.toml /home/dev/.config/starship.toml
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable \
+    && rustup component add rustfmt clippy \
+    && echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' > /home/dev/.bash_profile \
+    && echo '' >> /home/dev/.bash_profile \
+    && echo 'export DOCKER_HOST="unix:///var/run/docker.sock"' >> /home/dev/.bashrc \
+    && echo 'export PATH="/home/dev/.local/bin:/home/dev/.cargo/bin:$PATH"' >> /home/dev/.bashrc \
+    && echo 'if command -v starship >/dev/null 2>&1; then eval "$(starship init bash)"; fi' >> /home/dev/.bashrc
+
+USER root
+RUN chown -R dev:dev /home/dev
+
+USER dev
+WORKDIR /mission

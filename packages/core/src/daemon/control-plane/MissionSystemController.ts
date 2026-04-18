@@ -1,3 +1,4 @@
+// /packages/core/src/daemon/control-plane/MissionSystemController.ts: Maintains the daemon's authoritative mission and airport snapshot state.
 import {
 	planAirportSubstrateEffects,
 	type AirportProjectionSet,
@@ -7,7 +8,7 @@ import {
 	type ConnectAirportClientParams,
 	type PaneBinding,
 	type AirportPaneId
-} from '../../../../airport/build/index.js';
+} from '@flying-pillow/mission-airport';
 import path from 'node:path';
 import type {
 	ContextGraph,
@@ -16,6 +17,7 @@ import type {
 	MissionSystemState,
 	OperatorStatus
 } from '../../types.js';
+import { readSystemStatus } from '../../system/SystemStatus.js';
 import { MissionControl } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryAirportRegistry } from './RepositoryAirportRegistry.js';
@@ -329,11 +331,24 @@ export class MissionSystemController {
 				...(activeRepositoryId ? { activeRepositoryId } : {})
 			}
 		};
-		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(domain, activeAirport.control.getState());
+		const systemStatus = readSystemStatus({
+			...(activeAirport.repositoryRootPath ? { cwd: activeAirport.repositoryRootPath } : {})
+		});
+		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(
+			domain,
+			activeAirport.control.getState(),
+			systemStatus
+		);
 		const airportRegistryProjections = Object.fromEntries(
 			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
 				repositoryId,
-				deriveSystemAirportProjections(domain, record.control.getState())
+				deriveSystemAirportProjections(
+					domain,
+					record.control.getState(),
+					readSystemStatus({
+						...(record.repositoryRootPath ? { cwd: record.repositoryRootPath } : {})
+					})
+				)
 			])
 		);
 		return { state, airportProjections, airportRegistryProjections };

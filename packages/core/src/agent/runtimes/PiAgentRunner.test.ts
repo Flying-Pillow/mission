@@ -99,6 +99,7 @@ describe('PiAgentRunner', () => {
 		const copilot = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor: createExecutor(state),
+			sharedSessionMode: 'enabled',
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
 		});

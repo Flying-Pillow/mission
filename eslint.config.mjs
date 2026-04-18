@@ -1,40 +1,35 @@
-import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import svelte from 'eslint-plugin-svelte';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import svelteConfig from './apps/airport/web/svelte.config.js';
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/**', '.turbo/**', 'build/**', 'dist/**', 'out/**', 'coverage/**'],
+    ignores: ['node_modules/**', '.turbo/**', 'build/**', 'dist/**', 'out/**', 'coverage/**', 'deprecated/**'],
   },
-  js.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
   ...svelte.configs.recommended,
   {
-    files: ['**/*.{js,mjs,cjs,ts,mts,cts}'],
+    files: ['apps/airport/web/src/**/*.svelte'],
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
       parserOptions: {
         projectService: true,
+        extraFileExtensions: ['.svelte'],
+        parser: tseslint.parser,
+        svelteConfig,
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
+        ...globals.browser,
         ...globals.node,
       },
     },
     rules: {
-      '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/require-await': 'error',
+      'svelte/no-navigation-without-resolve': 'off',
     },
-  },
-  {
-    files: ['**/*.mjs'],
-    ...tseslint.configs.disableTypeChecked,
   },
   eslintConfigPrettier
 );

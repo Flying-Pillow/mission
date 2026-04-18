@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
 import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export function resolveGitHubRepositoryFromWorkspace(workspaceRoot: string): string | undefined {
@@ -41,7 +42,8 @@ function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
 export class GitHubPlatformAdapter {
 	public constructor(
 		private readonly workspaceRoot: string,
-		private readonly repository?: string
+		private readonly repository?: string,
+		private readonly options: { authToken?: string; ghBinary?: string } = {}
 	) { }
 
 	public async fetchIssue(issueId: string): Promise<MissionBrief> {
@@ -164,9 +166,9 @@ export class GitHubPlatformAdapter {
 
 	private async runJsonProcess<T>(args: string[]): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			const child = spawn('gh', args, {
+			const child = spawn(this.resolveGhBinary(), args, {
 				cwd: this.workspaceRoot,
-				env: process.env,
+				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
 
@@ -206,9 +208,9 @@ export class GitHubPlatformAdapter {
 
 	private async runTextProcess(args: string[]): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
-			const child = spawn('gh', args, {
+			const child = spawn(this.resolveGhBinary(), args, {
 				cwd: this.workspaceRoot,
-				env: process.env,
+				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
 
@@ -236,6 +238,23 @@ export class GitHubPlatformAdapter {
 				resolve(stdout.trim());
 			});
 		});
+	}
+
+	private buildProcessEnv(): NodeJS.ProcessEnv {
+		const authToken = this.options.authToken?.trim();
+		if (!authToken) {
+			return process.env;
+		}
+
+		return {
+			...process.env,
+			GH_TOKEN: authToken,
+			GITHUB_TOKEN: authToken
+		};
+	}
+
+	private resolveGhBinary(): string {
+		return this.options.ghBinary?.trim() || getMissionGitHubCliBinary() || 'gh';
 	}
 }
 

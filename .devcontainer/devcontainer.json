@@ -1,0 +1,73 @@
+{
+    "name": "mission-development",
+    "dockerComposeFile": [
+        "../docker/docker-compose.development.yml"
+    ],
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+    "service": "development",
+    "workspaceFolder": "/mission",
+    "runServices": [
+        "development"
+    ],
+    "forwardPorts": [
+        5173,
+        1420,
+        1421,
+        9229
+    ],
+    "portsAttributes": {
+        "5173": {
+            "label": "Mission web dev server",
+            "onAutoForward": "silent"
+        },
+        "1420": {
+            "label": "Tauri dev host",
+            "onAutoForward": "silent"
+        },
+        "1421": {
+            "label": "Tauri asset host",
+            "onAutoForward": "silent"
+        },
+        "9229": {
+            "label": "Node.js inspector",
+            "onAutoForward": "silent"
+        }
+    },
+    "postStartCommand": "/bin/bash /mission/scripts/dev-container-post-start.sh",
+    "remoteUser": "dev",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-from-docker:1": {
+            "version": "latest"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "containers.environment": {
+                    "DOCKER_HOST": "unix:///var/run/docker.sock"
+                },
+                "editor.formatOnSave": true,
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "typescript.tsdk": "node_modules/typescript/lib",
+                "svelte.enable-ts-plugin": true,
+                "typescript.enableProjectDiagnostics": true
+            },
+            "extensions": [
+                "github.vscode-github-actions",
+                "github.copilot-chat",
+                "github.vscode-pull-request-github",
+                "svelte.svelte-vscode",
+                "selemondevv.vscode-shadcn-svelte",
+                "ms-azuretools.vscode-docker",
+                "rust-lang.rust-analyzer",
+                "vadimcn.vscode-lldb",
+                "tamasfe.even-better-toml",
+                "yoavbls.pretty-ts-errors",
+                "davidanson.vscode-markdownlint",
+                "bierner.markdown-mermaid"
+            ]
+        }
+    }
+}

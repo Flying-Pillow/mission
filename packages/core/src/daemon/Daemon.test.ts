@@ -1141,9 +1141,9 @@ describe('Daemon', () => {
 					});
 					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
 					expect(leftSnapshot.state.airport.panes.runway).toMatchObject({
-							targetKind: 'task',
-							targetId: 'left/task',
-							mode: 'control'
+						targetKind: 'task',
+						targetId: 'left/task',
+						mode: 'control'
 					});
 				} finally {
 					leftClient.dispose();
@@ -1478,9 +1478,14 @@ describe('Daemon', () => {
 						expect(status).toMatchObject({
 							found: true,
 							issueId: 900,
-							type: 'refactor'
+							type: 'refactor',
+							preparation: {
+								kind: 'mission',
+								state: 'branch-prepared',
+								issueId: 900,
+								missionId: expect.any(String)
+							}
 						});
-						expect(status.preparation).toBeUndefined();
 						await expect(fs.access(getMissionDaemonSettingsPath(workspaceRoot))).rejects.toThrow();
 						await expect(fs.access(worktreeSettingsPath)).resolves.toBeUndefined();
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
@@ -1583,6 +1588,7 @@ describe('Daemon', () => {
 							}
 						});
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
+							['auth', 'status'],
 							['issue', 'view']
 						]);
 					} finally {
@@ -1656,6 +1662,7 @@ describe('Daemon', () => {
 							recommendedAction: expect.stringContaining('already has mission')
 						});
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
+							['auth', 'status'],
 							['issue', 'view']
 						]);
 					} finally {

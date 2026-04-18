@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readTemplateFile } from '../../engine/templates/templateRepository.js';
@@ -102,8 +103,11 @@ async function renderMissionTemplate(
 }
 
 function resolveMissionTemplateDirectory(controlRoot: string): string {
-	const repositoryTemplateDirectory = getMissionWorkflowTemplatesPath(controlRoot);
-	return path.isAbsolute(repositoryTemplateDirectory) ? repositoryTemplateDirectory : packagedTemplateDirectory;
+    const repositoryTemplateDirectory = getMissionWorkflowTemplatesPath(controlRoot);
+    if (path.isAbsolute(repositoryTemplateDirectory) && fs.existsSync(repositoryTemplateDirectory)) {
+        return repositoryTemplateDirectory;
+    }
+    return packagedTemplateDirectory;
 }
 
 export const MISSION_STAGE_TEMPLATE_DEFINITIONS: MissionStageTemplateDefinitions = {

@@ -6,28 +6,28 @@ nav_order: 1
 ---
 
 <section class="mission-home-hero">
-	<span class="mission-home-kicker">Operator-first AI Delivery</span>
-	<div class="mission-home-title">Flying Pillow Mission</div>
-	<p class="mission-home-tagline">Mission is an orchestration layer for software delivery: it controls the workflow, stages the evidence, and dispatches well-defined tasks to coding agents instead of pretending to be the agent itself.</p>
-	<div class="mission-home-actions">
-		<a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
-		<a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
-		<a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Read Tower Control</a>
-	</div>
-	<div class="mission-home-grid">
-		<div class="mission-home-card">
-			<strong>Safe By Design</strong>
-			<span>Keep agent work in isolated mission workspaces instead of your active branch.</span>
-		</div>
-		<div class="mission-home-card">
-			<strong>Structured Delivery</strong>
-			<span>Move from brief to PRD, SPEC, implementation, audit, and delivery with named artifacts.</span>
-		</div>
-		<div class="mission-home-card">
-			<strong>Runtime Freedom</strong>
-			<span>Keep the workflow stable while the runtime layer stays open to different agents and models.</span>
-		</div>
-	</div>
+ <span class="mission-home-kicker">Operator-first AI Delivery</span>
+ <div class="mission-home-title">Flying Pillow Mission</div>
+ <p class="mission-home-tagline">Mission is an orchestration layer for software delivery: it controls the workflow, stages the evidence, and dispatches well-defined tasks to coding agents instead of pretending to be the agent itself.</p>
+ <div class="mission-home-actions">
+  <a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
+  <a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
+  <a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Read Tower Control</a>
+ </div>
+ <div class="mission-home-grid">
+  <div class="mission-home-card">
+   <strong>Safe By Design</strong>
+   <span>Keep agent work in isolated mission workspaces instead of your active branch.</span>
+  </div>
+  <div class="mission-home-card">
+   <strong>Structured Delivery</strong>
+   <span>Move from brief to PRD, SPEC, implementation, audit, and delivery with named artifacts.</span>
+  </div>
+  <div class="mission-home-card">
+   <strong>Runtime Freedom</strong>
+   <span>Keep the workflow stable while the runtime layer stays open to different agents and models.</span>
+  </div>
+ </div>
 </section>
 
 Mission is for teams that want the speed of AI coding agents without giving up architectural discipline, repository safety, or human control.
@@ -67,14 +67,14 @@ Use these terms consistently while reading the docs:
 - Workflow gates such as `implement`, `verify`, `audit`, and `deliver` describe mission progression, not Airport panes.
 
 <div class="mission-status-grid">
-	<div class="mission-status-card mission-status-card--current">
-		<strong>Current implementation</strong>
-		<p>Reference pages and routed CLI pages describe the exact behavior Mission ships today: current commands, persisted state, daemon behavior, and Airport pane bindings.</p>
-	</div>
-	<div class="mission-status-card mission-status-card--target">
-		<strong>Target architecture</strong>
-		<p>Some architecture and specification pages also explain the cleaner model Mission is steering toward. When current code and target direction differ, prefer the current implementation for operational truth.</p>
-	</div>
+ <div class="mission-status-card mission-status-card--current">
+  <strong>Current implementation</strong>
+  <p>Reference pages and routed CLI pages describe the exact behavior Mission ships today: current commands, persisted state, daemon behavior, and Airport pane bindings.</p>
+ </div>
+ <div class="mission-status-card mission-status-card--target">
+  <strong>Target architecture</strong>
+  <p>Some architecture and specification pages also explain the cleaner model Mission is steering toward. When current code and target direction differ, prefer the current implementation for operational truth.</p>
+ </div>
 </div>
 
 ## What Mission Is For
@@ -152,7 +152,7 @@ Mission is already usable, but it is still an alpha product. A few current truth
 
 - the published CLI package is `@flying-pillow/mission`
 - the public CLI centers on opening the Airport layout, installing prerequisites, inspecting airport state, and stopping the daemon
-- the Airport terminal surfaces currently require Bun at runtime
+- the active workspace now expects pnpm on Node 24
 - GitHub is the tracking provider used by the implemented mission intake flows
 - repository scaffolding is real, but it is currently prepared through the Airport `/init` control flow rather than a public routed `mission init` command
 

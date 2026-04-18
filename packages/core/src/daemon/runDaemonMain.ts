@@ -33,7 +33,7 @@ async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Pro
 	const surfacePath = process.env['MISSION_SURFACE_PATH']?.trim() || process.cwd();
 	const controlRoot = resolveGitWorkspaceRoot(surfacePath) ?? surfacePath;
 
-	const loadedModule = (await import(modulePath)) as RuntimeFactoryModule;
+	const loadedModule = (await import(/* @vite-ignore */ modulePath)) as RuntimeFactoryModule;
 	if (typeof loadedModule.createConfiguredAgentRunners !== 'function') {
 		throw new Error(
 			`Mission runtime factory module '${modulePath}' does not export createConfiguredAgentRunners(...).`

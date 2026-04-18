@@ -1,41 +1,54 @@
 {
-  "$schema": "https://turborepo.com/schema.json",
-  "tasks": {
-    "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["build/**", "out/**", "dist/**", ".svelte-kit/**"]
-    },
-    "check": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": []
-    },
-    "lint": {
-      "dependsOn": ["^lint"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": []
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*", "vitest.config.ts"],
-      "outputs": []
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "clean": {
-      "cache": false
-    },
-    "//#lint:root": {
-      "inputs": ["$TURBO_DEFAULT$", "eslint.config.mjs", ".prettierrc.json", ".prettierignore"],
-      "outputs": []
-    },
-    "//#test:root": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "vitest.config.ts"],
-      "outputs": []
+    "$schema": "https://turborepo.com/schema.json",
+    "tasks": {
+        "build": {
+            "dependsOn": [
+                "^build"
+            ],
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                ".env*"
+            ],
+            "outputs": [
+                "build/**",
+                ".svelte-kit/**"
+            ]
+        },
+        "check": {
+            "dependsOn": [
+                "^build"
+            ],
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                ".env*",
+                "apps/airport/web/svelte.config.js",
+                "vitest.config.ts"
+            ],
+            "outputs": []
+        },
+        "test": {
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                ".env*",
+                "vitest.config.ts"
+            ],
+            "outputs": []
+        },
+        "lint": {
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                ".env*",
+                "eslint.config.mjs"
+            ],
+            "outputs": []
+        },
+        "dev": {
+            "cache": false,
+            "persistent": true
+        },
+        "@flying-pillow/mission-airport-native#build": {
+            "cache": false,
+            "outputs": []
+        }
     }
-  }
 }

@@ -1,3 +1,4 @@
+// /packages/airport/src/types.ts: Shared airport state and projection contracts for Mission surfaces.
 export type AirportPaneId = 'tower' | 'briefingRoom' | 'runway';
 
 export type PaneTargetKind =
@@ -89,10 +90,18 @@ export interface AirportPaneProjectionBase {
 	terminalPane?: AirportPaneState;
 }
 
+export interface TowerGitHubAuthProjection {
+	cliAvailable: boolean;
+	authenticated: boolean;
+	user?: string;
+	detail?: string;
+}
+
 export interface TowerProjection extends AirportPaneProjectionBase {
 	repositoryId?: string;
 	repositoryLabel: string;
 	emptyLabel: string;
+	github: TowerGitHubAuthProjection;
 }
 
 export interface BriefingRoomProjection extends AirportPaneProjectionBase {
@@ -225,7 +234,11 @@ function createTowerProjection(state: AirportState): TowerProjection {
 		...base,
 		...(repositoryId ? { repositoryId } : {}),
 		repositoryLabel,
-		emptyLabel: 'Tower is ready.'
+		emptyLabel: 'Tower is ready.',
+		github: {
+			cliAvailable: false,
+			authenticated: false
+		}
 	};
 }
 

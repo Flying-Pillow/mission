@@ -205,7 +205,6 @@ async function spawnDaemonRunner(options: {
 	const env = {
 		...process.env,
 		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
-		...(resolveAirportTerminalEntryPath() ? { AIRPORT_TERMINAL_ENTRY_PATH: resolveAirportTerminalEntryPath() } : {}),
 		MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
 		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
@@ -257,23 +256,6 @@ function resolveCorePackageRoot(): string {
 
 	const currentFilePath = fileURLToPath(import.meta.url);
 	return path.resolve(path.dirname(currentFilePath), '..', '..');
-}
-
-function resolveAirportTerminalEntryPath(): string | undefined {
-	const configuredEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH']?.trim();
-	if (configuredEntryPath) {
-		return configuredEntryPath;
-	}
-
-	try {
-		const require = createRequire(import.meta.url);
-		const resolvedPackageEntry = require.resolve('@flying-pillow/mission-airport-terminal');
-		return path.join(path.dirname(resolvedPackageEntry), 'index.js');
-	} catch {
-		const packageRoot = resolveCorePackageRoot();
-		const monorepoEntryPath = path.join(packageRoot, '..', '..', 'apps', 'airport', 'terminal', 'build', 'index.js');
-		return fsSync.existsSync(monorepoEntryPath) ? monorepoEntryPath : undefined;
-	}
 }
 
 function appendNodeCondition(existingOptions: string | undefined, condition: string): string {
