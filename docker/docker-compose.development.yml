@@ -14,7 +14,9 @@ services:
       - ../.env
     volumes:
       - "../:/mission"
-      - "../../flying-pillow/dev/flying-pillow:/flying-pillow"
+      - "$MISSIONS_PATH:/missions"
+      - "$CONFIG_PATH:/config"
+      - "$REPOSSITORY_PATH:/repositories"
       - "cargo-registry:/home/dev/.cargo/registry"
       - "cargo-git:/home/dev/.cargo/git"
       - "rustup:/home/dev/.rustup"
