@@ -334,8 +334,8 @@
                         Add repository
                     </h2>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Register a local git working tree so the daemon can
-                        expose it through Airport.
+                        Register a local git repository so the daemon can expose
+                        it through Airport.
                     </p>
 
                     <form

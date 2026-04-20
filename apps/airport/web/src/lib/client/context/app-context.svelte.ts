@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/client/context/app-context.svelte.ts: App-wide client context for daemon identity, repository shell state, and active Airport selection.
 import { createContext } from "svelte";
 import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types.js";
-import type { RepositorySummary } from "$lib/components/entities/types";
+import type { SidebarRepositorySummary } from "$lib/components/entities/types";
 
 export type GithubStatus = "connected" | "disconnected" | "unknown";
 
@@ -36,7 +36,7 @@ export type AppContextValue = {
     githubStatus: GithubStatus;
     user?: AppContextServerValue["user"];
     airport: {
-        repositories: RepositorySummary[];
+        repositories: SidebarRepositorySummary[];
         activeRepositoryId?: string;
         activeRepositoryRootPath?: string;
         activeMissionId?: string;
@@ -44,7 +44,7 @@ export type AppContextValue = {
         activeMissionSelectedNodeId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
-    setRepositories(repositories: RepositorySummary[]): void;
+    setRepositories(repositories: SidebarRepositorySummary[]): void;
     setActiveRepository(input?: {
         repositoryId?: string;
         repositoryRootPath?: string;
@@ -68,7 +68,7 @@ export function createAppContext(
         githubStatus: initialValue.githubStatus,
         user: initialValue.user,
         airport: {
-            repositories: [] as RepositorySummary[],
+            repositories: [] as SidebarRepositorySummary[],
             activeRepositoryId: undefined as string | undefined,
             activeRepositoryRootPath: undefined as string | undefined,
             activeMissionId: undefined as string | undefined,

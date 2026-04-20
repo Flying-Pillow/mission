@@ -28,4 +28,34 @@ describe('workflow settings validation', () => {
 			])
 		);
 	});
+
+	it('reports empty generated task fields and template source fields', () => {
+		const settings = createDefaultWorkflowSettings();
+		settings.taskGeneration = [
+			{
+				stageId: 'delivery',
+				artifactTasks: false,
+				templateSources: [{ templateId: '', path: '' }],
+				tasks: [
+					{
+						taskId: '',
+						title: '',
+						instruction: '',
+						dependsOn: ['']
+					}
+				]
+			}
+		];
+
+		expect(validateWorkflowSettings(settings)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ path: '/taskGeneration/0/templateSources/0/templateId' }),
+				expect.objectContaining({ path: '/taskGeneration/0/templateSources/0/path' }),
+				expect.objectContaining({ path: '/taskGeneration/0/tasks/0/taskId' }),
+				expect.objectContaining({ path: '/taskGeneration/0/tasks/0/title' }),
+				expect.objectContaining({ path: '/taskGeneration/0/tasks/0/instruction' }),
+				expect.objectContaining({ path: '/taskGeneration/0/tasks/0/dependsOn/0' })
+			])
+		);
+	});
 });

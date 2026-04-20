@@ -754,6 +754,73 @@ exit 1
 					);
 					const firstEnabledAction = scopedTaskActions.find((action) => action.enabled);
 
+
+			it('surfaces and executes pull-origin as a daemon-owned mission action when origin is ahead on mission open', async () => {
+				await withTemporaryDaemonConfigHome(async () => {
+					const workspaceRoot = await createTempRepo();
+					const originPath = await createTempBareRemote();
+					runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+					runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+					runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
+					await initializeMissionRepository(workspaceRoot);
+					const seededMission = await seedTrackedMission(workspaceRoot, 8, 'Pull origin daemon action');
+
+					try {
+						const missionRecord = seededMission.getRecord();
+						runGit(missionRecord.missionDir, ['push', '--set-upstream', 'origin', missionRecord.branchRef]);
+
+						const remoteCloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-remote-clone-'));
+						temporaryDirectories.add(remoteCloneRoot);
+						try {
+							runGit(workspaceRoot, ['clone', originPath, remoteCloneRoot]);
+							runGit(remoteCloneRoot, ['config', 'user.email', 'mission@example.com']);
+							runGit(remoteCloneRoot, ['config', 'user.name', 'Mission Test']);
+							runGit(remoteCloneRoot, ['checkout', missionRecord.branchRef]);
+							await fs.writeFile(path.join(remoteCloneRoot, 'REMOTE_ONLY.md'), 'remote update\n', 'utf8');
+							runGit(remoteCloneRoot, ['add', 'REMOTE_ONLY.md']);
+							runGit(remoteCloneRoot, ['commit', '-m', 'remote update']);
+							runGit(remoteCloneRoot, ['push', 'origin', missionRecord.branchRef]);
+						} finally {
+							await fs.rm(remoteCloneRoot, { recursive: true, force: true });
+						}
+
+						const daemon = await startDaemon();
+						const client = new DaemonClient();
+
+						try {
+							await client.connect({ surfacePath: workspaceRoot });
+							const api = new DaemonApi(client);
+							await api.control.getStatus();
+							const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+							const pullOriginAction = actions.find((action) => action.id === 'mission.pull-origin');
+
+							expect(pullOriginAction).toMatchObject({
+								id: 'mission.pull-origin',
+								action: '/mission pull-origin',
+								enabled: true,
+								disabled: false,
+								scope: 'mission'
+							});
+
+							await api.mission.executeAction({ missionId: missionRecord.id }, 'mission.pull-origin');
+
+							const refreshedActions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+							expect(
+								refreshedActions.find((action) => action.id === 'mission.pull-origin')
+							).toMatchObject({ enabled: false, disabled: true });
+							await expect(fs.readFile(path.join(missionRecord.missionDir, 'REMOTE_ONLY.md'), 'utf8')).resolves.toContain('remote update');
+						} finally {
+							client.dispose();
+							await daemon.close();
+						}
+					} finally {
+						seededMission.dispose();
+						await fs.rm(originPath, { recursive: true, force: true });
+						await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+						await fs.rm(workspaceRoot, { recursive: true, force: true });
+					}
+				});
+			});
 					expect(firstEnabledAction).toMatchObject({
 						id: 'mission.resume',
 						action: '/mission resume'
@@ -1863,6 +1930,75 @@ exit 1
 			});
 		});
 	});
+
+	it('surfaces and executes a delivery-gated changeset mission action from the daemon registry', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMissionInDeliveryStage(workspaceRoot, 9, 'Delivery changeset action');
+
+			try {
+				const missionRecord = seededMission.getRecord();
+				await seededMission.startWorkflow();
+
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.control.getStatus();
+					const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+					const changesetAction = actions.find((action) => action.id === 'mission.changeset.add');
+
+					expect(changesetAction).toMatchObject({
+						id: 'mission.changeset.add',
+						action: '/mission changeset',
+						enabled: true,
+						disabled: false,
+						scope: 'mission'
+					});
+					expect(changesetAction?.flow?.steps).toEqual(
+						expect.arrayContaining([
+							expect.objectContaining({ id: 'changeset.packages', kind: 'selection' }),
+							expect.objectContaining({ id: 'changeset.bump', kind: 'selection' }),
+							expect.objectContaining({ id: 'changeset.summary', kind: 'text' })
+						])
+					);
+
+					await api.mission.executeAction(
+						{ missionId: missionRecord.id },
+						'mission.changeset.add',
+						[
+							{ kind: 'selection', stepId: 'changeset.packages', optionIds: ['@flying-pillow/mission-core'] },
+							{ kind: 'selection', stepId: 'changeset.bump', optionIds: ['patch'] },
+							{ kind: 'text', stepId: 'changeset.summary', value: 'Ship the delivery-stage daemon changeset action.' }
+						]
+					);
+
+					const changesetDirectory = path.join(workspaceRoot, '.changeset');
+					const changesetFiles = (await fs.readdir(changesetDirectory))
+						.filter((entry) => entry.endsWith('.md') && entry !== 'README.md');
+					const generatedChangeset = changesetFiles.find((entry) => entry.includes(missionRecord.id.split('-')[0] ?? ''));
+
+					if (!generatedChangeset) {
+						throw new Error('Expected the daemon to generate a changeset file.');
+					}
+
+					await expect(fs.readFile(path.join(changesetDirectory, generatedChangeset), 'utf8')).resolves.toContain(
+						'"@flying-pillow/mission-core": patch\n---\n\nShip the delivery-stage daemon changeset action.'
+					);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
 });
 
 function createBrief(issueId: number | undefined, title: string) {
@@ -1883,6 +2019,51 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 		title,
 		branchRef: adapter.deriveMissionBranchName(issueId, title)
 	});
+}
+
+async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
+	const adapter = new FilesystemAdapter(workspaceRoot);
+	const missionId = adapter.createMissionId(createBrief(issueId, title));
+	const branchRef = adapter.deriveMissionBranchName(issueId, title);
+	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
+	const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
+	const workflow = createDefaultWorkflowSettings();
+	const deliveryStage = workflow.stages['delivery'];
+	if (!deliveryStage) {
+		throw new Error('Expected the default workflow to include a delivery stage.');
+	}
+	workflow.stageOrder = ['delivery'];
+	workflow.stages = {
+		delivery: {
+			...deliveryStage,
+			taskLaunchPolicy: {
+				...deliveryStage.taskLaunchPolicy,
+				defaultAutostart: false
+			}
+		}
+	};
+	workflow.taskGeneration = workflow.taskGeneration.filter((rule) => rule.stageId === 'delivery');
+	workflow.gates = workflow.gates.filter((gate) => gate.stageId === 'delivery');
+	await adapter.materializeMissionWorktree(missionWorktreePath, branchRef);
+	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
+	const mission = Mission.hydrate(
+		worktreeAdapter,
+		missionRootDir,
+		{
+			missionId,
+			missionDir: missionRootDir,
+			brief: createBrief(issueId, title),
+			branchRef,
+			createdAt: new Date().toISOString()
+		},
+		{
+			workflow,
+			resolveWorkflow: () => workflow,
+			taskRunners: new Map()
+		}
+	);
+	await mission.initialize();
+	return mission;
 }
 
 async function seedTrackedMissionWithId(

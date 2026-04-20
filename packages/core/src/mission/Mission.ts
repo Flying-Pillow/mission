@@ -583,6 +583,7 @@ export class Mission {
 			return this.buildDraftStatus();
 		}
 		const stages = await this.buildWorkflowStageStatuses(persistedDocument);
+		const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
 		const currentStageId = this.resolveCurrentStageFromWorkflow(persistedDocument);
 		const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
 		const activeTasks = this.resolveActiveTasks(currentStage);
@@ -624,6 +625,7 @@ export class Mission {
 				})),
 				tasks: persistedDocument.runtime.tasks.map((task) => ({
 					...task,
+					title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 					dependsOn: [...task.dependsOn],
 					blockedByTaskIds: [...task.blockedByTaskIds],
 					runtime: { ...task.runtime }
@@ -991,7 +993,7 @@ export class Mission {
 			taskId: task.taskId,
 			stage: task.stageId as MissionStageId,
 			sequence: fileTask?.sequence ?? index + 1,
-			subject: task.title,
+			subject: this.resolveWorkflowTaskSubject(task, fileTask, fileName),
 			instruction: task.instruction,
 			body: task.instruction,
 			dependsOn: [...task.dependsOn],
@@ -1003,6 +1005,34 @@ export class Mission {
 			filePath,
 			relativePath
 		};
+	}
+
+	private resolveWorkflowTaskSubject(
+		task: MissionRuntimeRecord['runtime']['tasks'][number],
+		fileTask: MissionTaskState | undefined,
+		fileName: string
+	): string {
+		const runtimeTitle = task.title.trim();
+		if (runtimeTitle.length > 0) {
+			return runtimeTitle;
+		}
+
+		const fileSubject = fileTask?.subject.trim();
+		if (fileSubject && fileSubject.length > 0) {
+			return fileSubject;
+		}
+
+		const taskStem = task.taskId.split('/').at(-1) ?? fileName;
+		const normalizedStem = stripTaskStemPrefix(stripMarkdownExtension(taskStem));
+		if (normalizedStem.length > 0) {
+			return normalizedStem
+				.split(/[-_]+/u)
+				.filter(Boolean)
+				.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+				.join(' ');
+		}
+
+		return task.taskId;
 	}
 
 	private resolveCurrentStageFromWorkflow(document: MissionRuntimeRecord): MissionStageId {
@@ -2162,4 +2192,12 @@ function resolveCurrentStageId(input: MissionAvailableActionsInput): MissionStag
 	return (input.runtime.activeStageId as MissionStageId | undefined)
 		?? (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
 		?? (input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined);
+}
+
+function stripTaskStemPrefix(value: string): string {
+	return value.replace(/^\d+(?:-[a-z0-9]+)?-/iu, '');
+}
+
+function stripMarkdownExtension(value: string): string {
+	return value.toLowerCase().endsWith('.md') ? value.slice(0, -3) : value;
 }

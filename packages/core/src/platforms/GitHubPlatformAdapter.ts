@@ -2,6 +2,16 @@ import { spawn, spawnSync } from 'node:child_process';
 import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
 import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
+export type GitHubBranchSyncStatus = {
+	branchRef: string;
+	trackingRef?: string;
+	status: 'up-to-date' | 'behind' | 'ahead' | 'diverged' | 'untracked';
+	aheadCount: number;
+	behindCount: number;
+	localHead?: string;
+	remoteHead?: string;
+};
+
 export function resolveGitHubRepositoryFromWorkspace(workspaceRoot: string): string | undefined {
 	const remoteNames = runGitLines(workspaceRoot, ['remote']);
 	const orderedRemoteNames = ['origin', ...remoteNames.filter((name) => name !== 'origin')];
@@ -148,6 +158,78 @@ export class GitHubPlatformAdapter {
 		]);
 	}
 
+	public fetchRemote(remoteName = 'origin'): void {
+		const normalizedRemoteName = remoteName.trim();
+		if (!normalizedRemoteName) {
+			throw new Error('GitHub remote fetch requires a remote name.');
+		}
+
+		assertGit(this.workspaceRoot, ['fetch', '--prune', normalizedRemoteName]);
+	}
+
+	public getBranchSyncStatus(branchRef: string, remoteName = 'origin'): GitHubBranchSyncStatus {
+		const normalizedBranchRef = branchRef.trim();
+		const normalizedRemoteName = remoteName.trim();
+		if (!normalizedBranchRef) {
+			throw new Error('GitHub branch sync status requires a branch ref.');
+		}
+		if (!normalizedRemoteName) {
+			throw new Error('GitHub branch sync status requires a remote name.');
+		}
+
+		const trackingRef = `refs/remotes/${normalizedRemoteName}/${normalizedBranchRef}`;
+		const remoteHead = runGitOutput(this.workspaceRoot, ['rev-parse', '--verify', trackingRef]);
+		if (!remoteHead) {
+			return {
+				branchRef: normalizedBranchRef,
+				trackingRef,
+				status: 'untracked',
+				aheadCount: 0,
+				behindCount: 0
+			};
+		}
+
+		const localHead = runGitOutput(this.workspaceRoot, ['rev-parse', 'HEAD']);
+		if (!localHead) {
+			throw new Error(`GitHub branch sync status could not resolve HEAD for '${normalizedBranchRef}'.`);
+		}
+
+		const counts = runGitOutput(this.workspaceRoot, ['rev-list', '--left-right', '--count', `HEAD...${trackingRef}`]);
+		const [aheadRaw, behindRaw] = counts.split(/\s+/u).filter(Boolean);
+		const aheadCount = Number.parseInt(aheadRaw ?? '0', 10);
+		const behindCount = Number.parseInt(behindRaw ?? '0', 10);
+		if (Number.isNaN(aheadCount) || Number.isNaN(behindCount)) {
+			throw new Error(`GitHub branch sync status returned invalid counts for '${normalizedBranchRef}'.`);
+		}
+
+		const status = behindCount > 0
+			? (aheadCount > 0 ? 'diverged' : 'behind')
+			: (aheadCount > 0 ? 'ahead' : 'up-to-date');
+
+		return {
+			branchRef: normalizedBranchRef,
+			trackingRef,
+			status,
+			aheadCount,
+			behindCount,
+			localHead,
+			remoteHead
+		};
+	}
+
+	public pullBranch(branchRef: string, remoteName = 'origin'): void {
+		const normalizedBranchRef = branchRef.trim();
+		const normalizedRemoteName = remoteName.trim();
+		if (!normalizedBranchRef) {
+			throw new Error('GitHub branch pull requires a branch ref.');
+		}
+		if (!normalizedRemoteName) {
+			throw new Error('GitHub branch pull requires a remote name.');
+		}
+
+		assertGit(this.workspaceRoot, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
+	}
+
 	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
 		const labels = (payload.labels ?? [])
 			.map((label) => String(label.name ?? '').trim())
@@ -276,6 +358,17 @@ function runGitOutput(workspaceRoot: string, args: string[]): string {
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
 	return result.status === 0 ? result.stdout.trim() : '';
+}
+
+function assertGit(workspaceRoot: string, args: string[]): void {
+	const result = spawnSync('git', args, {
+		cwd: workspaceRoot,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+	if (result.status !== 0) {
+		throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
+	}
 }
 
 function parseGitHubRepositoryFromRemote(remoteUrl: string): string | undefined {

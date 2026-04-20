@@ -41,6 +41,7 @@
     let resizeObserver: ResizeObserver | null = null;
     let terminalSocket: WebSocket | null = null;
     let pendingInput = "";
+    let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
 
@@ -174,6 +175,7 @@
     function closeTerminalSocket(): void {
         terminalSocket?.close();
         terminalSocket = null;
+        pendingTerminalResponseFragment = "";
     }
 
     async function bootstrapTerminalTransport(
@@ -377,7 +379,7 @@
             fontSize: 13,
             scrollback: 1500,
             theme: {
-                background: "#0f172a",
+                background: "#000000",
                 foreground: "#e2e8f0",
                 cursor: "#f8fafc",
                 selectionBackground: "#334155",
@@ -420,7 +422,11 @@
             if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
                 return;
             }
-            pendingInput += data;
+            const sanitizedData = sanitizeTerminalInputData(data);
+            if (sanitizedData.length === 0) {
+                return;
+            }
+            pendingInput += sanitizedData;
             if (!sendingInput) {
                 void flushPendingInput();
             }
@@ -487,6 +493,61 @@
 
     function normalizeScreen(screen: string): string {
         return screen.replace(/\r?\n/g, "\r\n");
+    }
+
+    function sanitizeTerminalInputData(data: string): string {
+        const combinedData = `${pendingTerminalResponseFragment}${data}`;
+        pendingTerminalResponseFragment = "";
+
+        let sanitizedData = "";
+        let cursor = 0;
+
+        while (cursor < combinedData.length) {
+            const sequenceStart = combinedData.indexOf("\u001b]", cursor);
+            if (sequenceStart === -1) {
+                sanitizedData += combinedData.slice(cursor);
+                break;
+            }
+
+            sanitizedData += combinedData.slice(cursor, sequenceStart);
+            if (
+                !combinedData.startsWith("\u001b]10;", sequenceStart) &&
+                !combinedData.startsWith("\u001b]11;", sequenceStart)
+            ) {
+                sanitizedData += combinedData[sequenceStart] ?? "";
+                cursor = sequenceStart + 1;
+                continue;
+            }
+
+            const bellTerminator = combinedData.indexOf(
+                "\u0007",
+                sequenceStart + 1,
+            );
+            const stringTerminator = combinedData.indexOf(
+                "\u001b\\",
+                sequenceStart + 1,
+            );
+
+            let sequenceEnd = -1;
+            if (
+                bellTerminator !== -1 &&
+                (stringTerminator === -1 || bellTerminator < stringTerminator)
+            ) {
+                sequenceEnd = bellTerminator + 1;
+            } else if (stringTerminator !== -1) {
+                sequenceEnd = stringTerminator + 2;
+            }
+
+            if (sequenceEnd === -1) {
+                pendingTerminalResponseFragment =
+                    combinedData.slice(sequenceStart);
+                break;
+            }
+
+            cursor = sequenceEnd;
+        }
+
+        return sanitizedData;
     }
 
     function appendTerminalScreen(

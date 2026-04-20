@@ -16,7 +16,6 @@ export type MissionUserRegisteredRepository = {
 export type MissionUserConfig = {
 	version: 1;
 	missionWorkspaceRoot?: string;
-	terminalBinary?: string;
 	ghBinary?: string;
 	registeredRepositories?: MissionUserRegisteredRepository[];
 };
@@ -43,13 +42,11 @@ export function getMissionRuntimeDirectory(): string {
 
 export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig> = {}): MissionUserConfig {
 	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
-	const terminalBinary = normalizeOptionalString(overrides.terminalBinary);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
 	return {
 		version: 1,
 		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
-		...(terminalBinary ? { terminalBinary } : {}),
 		...(ghBinary ? { ghBinary } : {}),
 		...(registeredRepositories ? { registeredRepositories } : {})
 	};
@@ -143,9 +140,6 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefi
 	return getDefaultMissionUserConfig({
 		...(typeof candidate['missionWorkspaceRoot'] === 'string'
 			? { missionWorkspaceRoot: candidate['missionWorkspaceRoot'] }
-			: {}),
-		...(typeof candidate['terminalBinary'] === 'string'
-			? { terminalBinary: candidate['terminalBinary'] }
 			: {}),
 		...(typeof candidate['ghBinary'] === 'string'
 			? { ghBinary: candidate['ghBinary'] }

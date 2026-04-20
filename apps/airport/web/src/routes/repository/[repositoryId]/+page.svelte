@@ -64,8 +64,22 @@
                 repository.repositoryId ===
                 repositorySurface.repository.repositoryId,
         )
-            ? data.airportRepositories
-            : [repositorySurface.repository, ...data.airportRepositories];
+            ? data.airportRepositories.map((repository) =>
+                  repository.repositoryId ===
+                  repositorySurface.repository.repositoryId
+                      ? {
+                            ...repository,
+                            missions: repositorySurface.missions,
+                        }
+                      : repository,
+              )
+            : [
+                  {
+                      ...repositorySurface.repository,
+                      missions: repositorySurface.missions,
+                  },
+                  ...data.airportRepositories,
+              ];
 
         appContext.setRepositories(repositories);
         appContext.setActiveRepository({

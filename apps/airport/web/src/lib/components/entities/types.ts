@@ -10,6 +10,9 @@ import type {
 
 export type RepositorySummary = RepositoryCandidateDto;
 export type MissionSummary = MissionSelectionCandidateDto;
+export type SidebarRepositorySummary = RepositorySummary & {
+    missions?: MissionSummary[];
+};
 export type IssueSummary = TrackedIssueSummaryDto;
 export type MissionSessionSummary = MissionAgentSessionDto;
 export type SelectedMissionSummary = MissionRuntimeSnapshotDto;

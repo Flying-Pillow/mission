@@ -135,6 +135,54 @@ describe('Mission workflow snapshot timing', () => {
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }
     });
+
+    it('falls back to a derived task title when generated workflow tasks omit title', async () => {
+        const workspaceRoot = await createTempRepo();
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const workflow = {
+                ...createDefaultWorkflowSettings(),
+                stageOrder: ['delivery'],
+                gates: [{ gateId: 'deliver', intent: 'deliver' as const, stageId: 'delivery' }],
+                taskGeneration: [
+                    {
+                        stageId: 'delivery',
+                        artifactTasks: false,
+                        templateSources: [],
+                        tasks: [
+                            {
+                                taskId: 'delivery/01-closeout',
+                                title: '',
+                                instruction: 'Close out the delivery stage.',
+                                dependsOn: []
+                            }
+                        ]
+                    }
+                ]
+            };
+            const bindings: MissionWorkflowBindings = {
+                workflow,
+                resolveWorkflow: () => workflow,
+                taskRunners: new Map()
+            };
+            const mission = await Factory.create(adapter, {
+                brief: {
+                    issueId: 109,
+                    title: 'Delivery title fallback',
+                    body: 'Ensure malformed workflow task titles do not break status payloads.',
+                    type: 'refactor'
+                },
+                branchRef: adapter.deriveMissionBranchName(109, 'Delivery title fallback')
+            }, bindings);
+
+            const status = await mission.startWorkflow();
+            expect(status.workflow?.tasks?.[0]?.title).toBe('Closeout');
+            expect(status.readyTasks?.[0]?.subject).toBe('Closeout');
+            mission.dispose();
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
 });
 
 async function createTempRepo(): Promise<string> {

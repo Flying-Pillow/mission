@@ -65,13 +65,32 @@ describe('userConfig', () => {
 
 		await writeMissionUserConfig({
 			missionWorkspaceRoot: '/tmp/missions',
-			terminalBinary: '/usr/local/bin/zellij',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 
 		expect(readMissionUserConfig()).toMatchObject({
 			missionWorkspaceRoot: '/tmp/missions',
-			terminalBinary: '/usr/local/bin/zellij',
+			ghBinary: '/opt/gh/bin/gh'
+		});
+	});
+
+	it('drops legacy terminalBinary values from existing user config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });
+		await fs.writeFile(
+			getMissionUserConfigPath(),
+			JSON.stringify({
+				version: 1,
+				missionWorkspaceRoot: '/tmp/missions',
+				terminalBinary: '/usr/local/bin/zellij',
+				ghBinary: '/opt/gh/bin/gh'
+			}, null, 2),
+			'utf8'
+		);
+
+		expect(readMissionUserConfig()).toEqual({
+			version: 1,
+			missionWorkspaceRoot: '/tmp/missions',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
@@ -221,11 +240,11 @@ describe('userConfig', () => {
 
 		expect(config).toEqual({
 			version: 1,
-			missionWorkspaceRoot: 'missions',
-			terminalBinary: 'zellij'
+			missionWorkspaceRoot: 'missions'
 		});
 		expect(readMissionUserConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('mission-stale-repository');
+		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('terminalBinary');
 	});
 });
 

@@ -71,6 +71,7 @@
     let artifactPanelMode = $state<"view" | "edit">("view");
     let leftTreeMode = $state<"control" | "files">("control");
     let rightPanelMode = $state<"terminal" | "agent">("terminal");
+    let lastSelectedAgentSessionId = $state<string | null>(null);
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
 
@@ -149,6 +150,15 @@
             ? mission.getSession(controlState.activeSessionId)
             : undefined,
     );
+
+    $effect(() => {
+        const activeSessionId = controlState.activeSessionId ?? null;
+        if (activeSessionId && activeSessionId !== lastSelectedAgentSessionId) {
+            rightPanelMode = "agent";
+        }
+
+        lastSelectedAgentSessionId = activeSessionId;
+    });
 
     $effect(() => {
         syncAppContext();
@@ -348,8 +358,21 @@
         const repositories = data.airportRepositories.some(
             (candidate) => candidate.repositoryId === repository.repositoryId,
         )
-            ? data.airportRepositories
-            : [repository, ...data.airportRepositories];
+            ? data.airportRepositories.map((candidate) =>
+                  candidate.repositoryId === repository.repositoryId
+                      ? {
+                            ...candidate,
+                            missions: repositorySurface.missions,
+                        }
+                      : candidate,
+              )
+            : [
+                  {
+                      ...repository,
+                      missions: repositorySurface.missions,
+                  },
+                  ...data.airportRepositories,
+              ];
 
         appContext.setRepositories(repositories);
         appContext.setActiveRepository({

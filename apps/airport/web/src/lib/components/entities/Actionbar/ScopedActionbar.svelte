@@ -1,5 +1,8 @@
 <script lang="ts">
+    import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import { Label } from "$lib/components/ui/label/index.js";
+    import * as Sheet from "$lib/components/ui/sheet/index.js";
     import { cn } from "$lib/utils.js";
     import AlertTriangleIcon from "@tabler/icons-svelte/icons/alert-triangle";
     import CircleCheckIcon from "@tabler/icons-svelte/icons/circle-check";
@@ -13,6 +16,8 @@
     import type {
         MissionStageId,
         OperatorActionDescriptor,
+        OperatorActionExecutionStep,
+        OperatorActionFlowStep,
         OperatorActionListSnapshot,
         OperatorActionQueryContext,
         OperatorActionTargetContext,
@@ -52,8 +57,16 @@
     let actionLoading = $state(false);
     let actionPending = $state<string | null>(null);
     let actionError = $state<string | null>(null);
+    let flowAction = $state<OperatorActionDescriptor | null>(null);
+    let flowOpen = $state(false);
+    let flowError = $state<string | null>(null);
+    let flowSelections = $state<Record<string, string[]>>({});
+    let flowTexts = $state<Record<string, string>>({});
+    let confirmationAction = $state<OperatorActionDescriptor | null>(null);
+    let confirmationOpen = $state(false);
     let loadedContextKey = $state<string | null>(null);
     let lastRefreshNonce = $state<number | null>(null);
+    let confirmationResolver: ((confirmed: boolean) => void) | null = null;
 
     const actionContext = $derived.by(
         () =>
@@ -113,6 +126,15 @@
         }
 
         void loadActions(actionContextKey, actionContext);
+    });
+
+    $effect(() => {
+        if (!confirmationOpen && confirmationResolver && confirmationAction) {
+            const resolveConfirmation = confirmationResolver;
+            confirmationResolver = null;
+            confirmationAction = null;
+            resolveConfirmation(false);
+        }
     });
 
     function actionVariant(
@@ -205,6 +227,166 @@
             return;
         }
 
+        if ((action.flow?.steps.length ?? 0) > 0) {
+            openActionFlow(action);
+            return;
+        }
+
+        if (!(await requestActionConfirmation(action))) {
+            return;
+        }
+
+        await submitAction(action, []);
+    }
+
+    async function requestActionConfirmation(
+        action: OperatorActionDescriptor,
+    ): Promise<boolean> {
+        if (!action.ui?.requiresConfirmation) {
+            return true;
+        }
+
+        if (confirmationResolver) {
+            resolveActionConfirmation(false);
+        }
+
+        confirmationAction = action;
+        confirmationOpen = true;
+
+        return await new Promise<boolean>((resolve) => {
+            confirmationResolver = resolve;
+        });
+    }
+
+    function resolveActionConfirmation(confirmed: boolean): void {
+        const resolveConfirmation = confirmationResolver;
+        confirmationResolver = null;
+        confirmationAction = null;
+        confirmationOpen = false;
+        resolveConfirmation?.(confirmed);
+    }
+
+    function openActionFlow(action: OperatorActionDescriptor): void {
+        const nextSelections: Record<string, string[]> = {};
+        const nextTexts: Record<string, string> = {};
+
+        for (const step of action.flow?.steps ?? []) {
+            if (step.kind === "selection") {
+                nextSelections[step.id] = [];
+            } else {
+                nextTexts[step.id] = step.initialValue ?? "";
+            }
+        }
+
+        flowAction = action;
+        flowSelections = nextSelections;
+        flowTexts = nextTexts;
+        flowError = null;
+        flowOpen = true;
+    }
+
+    function closeActionFlow(): void {
+        flowOpen = false;
+        flowAction = null;
+        flowSelections = {};
+        flowTexts = {};
+        flowError = null;
+    }
+
+    function isSelected(stepId: string, optionId: string): boolean {
+        return (flowSelections[stepId] ?? []).includes(optionId);
+    }
+
+    function toggleSelection(
+        step: Extract<OperatorActionFlowStep, { kind: "selection" }>,
+        optionId: string,
+    ): void {
+        const currentSelection = flowSelections[step.id] ?? [];
+        if (step.selectionMode === "single") {
+            flowSelections = {
+                ...flowSelections,
+                [step.id]: [optionId],
+            };
+            return;
+        }
+
+        flowSelections = {
+            ...flowSelections,
+            [step.id]: currentSelection.includes(optionId)
+                ? currentSelection.filter(
+                      (currentOptionId) => currentOptionId !== optionId,
+                  )
+                : [...currentSelection, optionId],
+        };
+    }
+
+    function buildFlowExecutionSteps(
+        action: OperatorActionDescriptor,
+    ): OperatorActionExecutionStep[] {
+        const steps: OperatorActionExecutionStep[] = [];
+
+        for (const step of action.flow?.steps ?? []) {
+            if (step.kind === "selection") {
+                steps.push({
+                    kind: "selection",
+                    stepId: step.id,
+                    optionIds: flowSelections[step.id] ?? [],
+                });
+            } else {
+                steps.push({
+                    kind: "text",
+                    stepId: step.id,
+                    value: flowTexts[step.id] ?? "",
+                });
+            }
+        }
+
+        return steps;
+    }
+
+    function validateFlow(action: OperatorActionDescriptor): string | null {
+        for (const step of action.flow?.steps ?? []) {
+            if (step.kind === "selection") {
+                if ((flowSelections[step.id] ?? []).length === 0) {
+                    return `${step.label}: choose at least one option.`;
+                }
+            } else if ((flowTexts[step.id] ?? "").trim().length === 0) {
+                return `${step.label}: enter a value.`;
+            }
+        }
+
+        return null;
+    }
+
+    async function submitFlowAction(): Promise<void> {
+        if (!flowAction) {
+            return;
+        }
+
+        const validationError = validateFlow(flowAction);
+        if (validationError) {
+            flowError = validationError;
+            return;
+        }
+
+        if (!(await requestActionConfirmation(flowAction))) {
+            return;
+        }
+
+        flowError = null;
+        const succeeded = await submitAction(
+            flowAction,
+            buildFlowExecutionSteps(flowAction),
+        );
+        if (succeeded) {
+            closeActionFlow();
+        }
+    }
+
+    async function submitAction(
+        action: OperatorActionDescriptor,
+        steps: OperatorActionExecutionStep[],
+    ): Promise<boolean> {
         actionPending = action.id;
         actionError = null;
         try {
@@ -218,7 +400,7 @@
                     },
                     body: JSON.stringify({
                         actionId: action.id,
-                        steps: [],
+                        ...(steps.length > 0 ? { steps } : {}),
                     }),
                 },
             );
@@ -230,16 +412,49 @@
 
             loadedContextKey = null;
             await onActionExecuted();
+            return true;
         } catch (executeError) {
-            actionError =
+            const message =
                 executeError instanceof Error
                     ? executeError.message
                     : String(executeError);
+            actionError = message;
+            flowError = message;
+            return false;
         } finally {
             actionPending = null;
         }
     }
 </script>
+
+<AlertDialog.Root bind:open={confirmationOpen}>
+    <AlertDialog.Content>
+        <AlertDialog.Header>
+            <AlertDialog.Title>Confirm action</AlertDialog.Title>
+            <AlertDialog.Description>
+                {confirmationAction?.ui?.confirmationPrompt ??
+                    (confirmationAction
+                        ? `Execute '${confirmationAction.label}'?`
+                        : "Confirm this action to continue.")}
+            </AlertDialog.Description>
+        </AlertDialog.Header>
+        <AlertDialog.Footer>
+            <AlertDialog.Cancel
+                onclick={() => resolveActionConfirmation(false)}
+            >
+                Cancel
+            </AlertDialog.Cancel>
+            <AlertDialog.Action
+                variant={confirmationAction
+                    ? actionVariant(confirmationAction)
+                    : "default"}
+                onclick={() => resolveActionConfirmation(true)}
+            >
+                Continue
+            </AlertDialog.Action>
+        </AlertDialog.Footer>
+    </AlertDialog.Content>
+</AlertDialog.Root>
 
 <div class={cn("space-y-2", className)}>
     <div class="flex min-h-9 flex-wrap items-center gap-2">
@@ -263,7 +478,7 @@
                     size="sm"
                     disabled={actionPending !== null}
                     class={buttonClass}
-                    onclick={() => executeAction(action)}
+                    onclick={() => void executeAction(action)}
                     title={action.disabledReason ||
                         action.reason ||
                         action.label}
@@ -283,3 +498,152 @@
         <p class="text-sm text-rose-600">{actionError}</p>
     {/if}
 </div>
+
+<Sheet.Root bind:open={flowOpen}>
+    <Sheet.Content
+        side="right"
+        class="w-full max-w-2xl p-0 sm:max-w-2xl"
+        onInteractOutside={() => actionPending === null && closeActionFlow()}
+    >
+        {#if flowAction}
+            <div class="flex h-full flex-col">
+                <Sheet.Header class="border-b px-6 py-5">
+                    <Sheet.Title>
+                        {flowAction.flow?.actionLabel ?? flowAction.label}
+                    </Sheet.Title>
+                    <Sheet.Description>
+                        {flowAction.flow?.targetLabel
+                            ? `Complete the daemon action flow for ${flowAction.flow.targetLabel.toLowerCase()}.`
+                            : "Complete the action flow."}
+                    </Sheet.Description>
+                </Sheet.Header>
+
+                <div class="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                    {#each flowAction.flow?.steps ?? [] as step (step.id)}
+                        <section class="space-y-3">
+                            <div class="space-y-1">
+                                <h3
+                                    class="text-sm font-semibold tracking-wide text-foreground"
+                                >
+                                    {step.title}
+                                </h3>
+                                <p class="text-sm text-muted-foreground">
+                                    {step.helperText}
+                                </p>
+                            </div>
+
+                            {#if step.kind === "selection"}
+                                <div class="space-y-2">
+                                    {#if step.options.length === 0}
+                                        <p
+                                            class="rounded-2xl border border-dashed px-4 py-3 text-sm text-muted-foreground"
+                                        >
+                                            {step.emptyLabel}
+                                        </p>
+                                    {:else}
+                                        {#each step.options as option (option.id)}
+                                            <button
+                                                type="button"
+                                                class={cn(
+                                                    "w-full rounded-3xl border px-4 py-3 text-left transition-colors",
+                                                    isSelected(
+                                                        step.id,
+                                                        option.id,
+                                                    )
+                                                        ? "border-primary bg-primary/8"
+                                                        : "border-border bg-background hover:bg-muted/40",
+                                                )}
+                                                onclick={() =>
+                                                    toggleSelection(
+                                                        step,
+                                                        option.id,
+                                                    )}
+                                            >
+                                                <div
+                                                    class="flex items-start justify-between gap-3"
+                                                >
+                                                    <div class="space-y-1">
+                                                        <div
+                                                            class="text-sm font-medium text-foreground"
+                                                        >
+                                                            {option.label}
+                                                        </div>
+                                                        <div
+                                                            class="text-sm text-muted-foreground"
+                                                        >
+                                                            {option.description}
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        class="pt-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                                                    >
+                                                        {step.selectionMode ===
+                                                        "multiple"
+                                                            ? isSelected(
+                                                                  step.id,
+                                                                  option.id,
+                                                              )
+                                                                ? "Selected"
+                                                                : "Select"
+                                                            : isSelected(
+                                                                    step.id,
+                                                                    option.id,
+                                                                )
+                                                              ? "Chosen"
+                                                              : "Choose"}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        {/each}
+                                    {/if}
+                                </div>
+                            {:else}
+                                <div class="space-y-2">
+                                    <Label for={`flow-${step.id}`}
+                                        >{step.label}</Label
+                                    >
+                                    <textarea
+                                        id={`flow-${step.id}`}
+                                        class="bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 min-h-32 w-full rounded-3xl border px-4 py-3 text-sm outline-none focus-visible:ring-[3px]"
+                                        placeholder={step.placeholder}
+                                        value={flowTexts[step.id] ?? ""}
+                                        oninput={(event) => {
+                                            flowTexts = {
+                                                ...flowTexts,
+                                                [step.id]:
+                                                    event.currentTarget.value,
+                                            };
+                                        }}
+                                    ></textarea>
+                                </div>
+                            {/if}
+                        </section>
+                    {/each}
+
+                    {#if flowError}
+                        <p class="text-sm text-rose-600">{flowError}</p>
+                    {/if}
+                </div>
+
+                <Sheet.Footer class="border-t px-6 py-4 sm:justify-between">
+                    <Button
+                        variant="outline"
+                        onclick={closeActionFlow}
+                        disabled={actionPending !== null}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onclick={() => void submitFlowAction()}
+                        disabled={actionPending !== null}
+                    >
+                        {actionPending === flowAction.id
+                            ? `${flowAction.flow?.actionLabel ?? flowAction.label}...`
+                            : (flowAction.flow?.actionLabel ??
+                              flowAction.label)}
+                    </Button>
+                </Sheet.Footer>
+            </div>
+        {/if}
+    </Sheet.Content>
+</Sheet.Root>
