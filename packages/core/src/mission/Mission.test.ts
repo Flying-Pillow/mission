@@ -748,6 +748,106 @@ describe('Mission', () => {
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }
     });
+
+    it('does not expose deliver when the delivery stage is already completed', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(210, 'Mission delivered action availability'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission delivered action availability')
+            }, createWorkflowBindings(runner));
+
+            try {
+                await mission.startWorkflow();
+
+                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                if (!persisted) {
+                    throw new Error('Expected a persisted mission runtime record.');
+                }
+
+                persisted.runtime = {
+                    ...persisted.runtime,
+                    lifecycle: 'completed',
+                    activeStageId: 'delivery',
+                    stages: persisted.runtime.stages.map((stage) => ({
+                        ...stage,
+                        lifecycle: 'completed'
+                    })),
+                    gates: persisted.runtime.gates.map((gate) => ({
+                        ...gate,
+                        state: 'passed',
+                        reasons: []
+                    })),
+                    updatedAt: '2026-04-20T16:00:00.000Z'
+                };
+                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+
+                const reloaded = await Factory.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
+                if (!reloaded) {
+                    throw new Error('Expected mission to reload.');
+                }
+
+                const actions = await reloaded.listAvailableActionsSnapshot();
+                expect(actions.actions.find((action) => action.id === 'mission.deliver')).toMatchObject({
+                    enabled: false,
+                    disabledReason: 'Mission already delivered.'
+                });
+                reloaded.dispose();
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('does not expose panic when the mission is already completed', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(211, 'Mission panic action availability'),
+                branchRef: adapter.deriveMissionBranchName(211, 'Mission panic action availability')
+            }, createWorkflowBindings(runner));
+
+            try {
+                await mission.startWorkflow();
+
+                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                if (!persisted) {
+                    throw new Error('Expected a persisted mission runtime record.');
+                }
+
+                persisted.runtime = {
+                    ...persisted.runtime,
+                    lifecycle: 'completed',
+                    updatedAt: '2026-04-20T16:05:00.000Z'
+                };
+                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+
+                const reloaded = await Factory.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
+                if (!reloaded) {
+                    throw new Error('Expected mission to reload.');
+                }
+
+                const actions = await reloaded.listAvailableActionsSnapshot();
+                expect(actions.actions.find((action) => action.id === 'mission.panic')).toMatchObject({
+                    enabled: false,
+                    disabledReason: 'Mission is already completed.'
+                });
+                reloaded.dispose();
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
 });
 
 function createWorkflowBindings(runner: FakeAgentRunner): MissionWorkflowBindings {

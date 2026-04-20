@@ -731,6 +731,24 @@ describe('workflow reducer delivery completion', () => {
         expect(result.nextState.sessions.find((session) => session.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
     });
 
+    it('rejects panic requests after mission completion', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'completed';
+
+        expect(() => validateMissionWorkflowEvent(runtime, {
+            eventId: 'mission.panic.requested:2026-04-10T15:52:00.000Z',
+            type: 'mission.panic.requested',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'human'
+        }, configuration)).toThrow(/not allowed after mission completion/);
+    });
+
 });
 
 function createGeneratedTasksEvent(

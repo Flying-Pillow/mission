@@ -1755,6 +1755,7 @@ function buildPanicStopAction(
 	const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
 	const enabled =
 		input.runtime.lifecycle !== 'draft'
+		&& input.runtime.lifecycle !== 'completed'
 		&& input.runtime.lifecycle !== 'delivered'
 		&& !input.runtime.panic.active
 		&& errors.length === 0;
@@ -1825,12 +1826,13 @@ function buildDeliverMissionAction(
 	currentStageId: MissionStageId | undefined
 ): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.delivered' });
+	const delivered = isRuntimeDelivered(input.runtime);
 	return {
 		id: MISSION_ACTION_IDS.deliver,
 		label: 'Deliver Mission',
 		action: '/mission deliver',
 		scope: 'mission',
-		...buildAvailability(errors.length === 0, errors[0]),
+		...buildAvailability(!delivered && errors.length === 0, delivered ? 'Mission already delivered.' : errors[0]),
 		ui: {
 			toolbarLabel: 'DELIVER',
 			requiresConfirmation: true,
@@ -2080,6 +2082,12 @@ function describePanicUnavailable(input: MissionAvailableActionsInput, errors: s
 	if (input.runtime.lifecycle === 'draft') {
 		return 'Start the workflow before using panic stop.';
 	}
+	if (input.runtime.lifecycle === 'completed') {
+		return 'Mission is already completed.';
+	}
+	if (input.runtime.lifecycle === 'delivered') {
+		return 'Mission already delivered.';
+	}
 	return errors[0] ?? 'Mission cannot enter panic state.';
 }
 
@@ -2192,6 +2200,10 @@ function resolveCurrentStageId(input: MissionAvailableActionsInput): MissionStag
 	return (input.runtime.activeStageId as MissionStageId | undefined)
 		?? (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
 		?? (input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined);
+}
+
+function isRuntimeDelivered(runtime: MissionRuntimeRecord['runtime']): boolean {
+	return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
 }
 
 function stripTaskStemPrefix(value: string): string {

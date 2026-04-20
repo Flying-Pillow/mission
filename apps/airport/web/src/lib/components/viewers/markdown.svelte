@@ -5,9 +5,16 @@
 
     let { source }: { source: string } = $props();
 
+    type MarkdownDocument = {
+        frontmatter: string | null;
+        body: string;
+    };
+
+    const document = $derived.by(() => splitFrontmatter(source ?? ""));
+
     const rendered = $derived.by(() =>
         sanitizeHtml(
-            marked.parse(source ?? "", { breaks: true, gfm: true }) as string,
+            marked.parse(document.body, { breaks: true, gfm: true }) as string,
             {
                 allowedTags: sanitizeHtml.defaults.allowedTags.concat([
                     "h1",
@@ -33,13 +40,58 @@
             },
         ),
     );
+
+    function splitFrontmatter(content: string): MarkdownDocument {
+        const normalized = content.replace(/\r\n/g, "\n");
+        if (!normalized.startsWith("---\n")) {
+            return { frontmatter: null, body: normalized };
+        }
+
+        const closingIndex = normalized.indexOf("\n---\n", 4);
+        if (closingIndex < 0) {
+            return { frontmatter: null, body: normalized };
+        }
+
+        return {
+            frontmatter: normalized.slice(0, closingIndex + 5).trimEnd(),
+            body: normalized.slice(closingIndex + 5),
+        };
+    }
 </script>
 
-<div class="markdown max-w-none break-words p-2 pb-6text-sm text-foreground">
-    {@html rendered}
+<div
+    class="markdown-viewer max-w-none break-words p-2 pb-6 text-sm text-foreground"
+>
+    {#if document.frontmatter}
+        <pre class="markdown-frontmatter">{document.frontmatter}</pre>
+    {/if}
+
+    <div class="markdown">
+        {@html rendered}
+    </div>
 </div>
 
 <style>
+    :global(.markdown) {
+        color: color-mix(in oklab, var(--foreground) 70%, transparent);
+        font-size: 0.98rem;
+        line-height: 1.8;
+    }
+
+    .markdown-frontmatter {
+        margin: 0 0 1rem;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        background: color-mix(in oklab, var(--muted) 72%, transparent);
+        padding: 0.625rem 0.875rem;
+        color: var(--muted-foreground);
+        font-family: "Courier New", Courier, ui-monospace, monospace;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
+
     :global(.markdown > :first-child) {
         margin-top: 0;
     }
@@ -51,6 +103,7 @@
     :global(.markdown h1) {
         margin-top: 2rem;
         scroll-margin-top: 5rem;
+        color: color-mix(in oklab, var(--primary) 80%, transparent);
         font-size: 2.25rem;
         line-height: 2.5rem;
         font-weight: 700;
@@ -63,6 +116,7 @@
         padding-bottom: 0.5rem;
         scroll-margin-top: 5rem;
         border-bottom: 1px solid var(--border);
+        color: color-mix(in oklab, var(--secondary) 80%, transparent);
         font-size: 1.875rem;
         line-height: 2.25rem;
         font-weight: 600;
@@ -72,6 +126,7 @@
     :global(.markdown h3) {
         margin-top: 2rem;
         scroll-margin-top: 5rem;
+        color: var(--foreground);
         font-size: 1.5rem;
         line-height: 2rem;
         font-weight: 600;
@@ -81,6 +136,7 @@
     :global(.markdown h4) {
         margin-top: 2rem;
         scroll-margin-top: 5rem;
+        color: var(--foreground);
         font-size: 1.25rem;
         line-height: 1.75rem;
         font-weight: 600;
@@ -90,6 +146,10 @@
     :global(.markdown p) {
         margin-top: 1.5rem;
         line-height: 1.75rem;
+    }
+
+    :global(.markdown :is(ul, ol, li, td, th)) {
+        color: color-mix(in oklab, var(--foreground) 70%, transparent);
     }
 
     :global(.markdown a) {
@@ -106,7 +166,8 @@
 
     :global(.markdown blockquote) {
         margin-top: 1.5rem;
-        border-inline-start: 2px solid var(--border);
+        border-inline-start: 3px solid
+            color-mix(in oklab, var(--primary) 35%, var(--border));
         padding-inline-start: 1.5rem;
         color: var(--muted-foreground);
         font-style: italic;
@@ -139,7 +200,7 @@
     :global(.markdown code) {
         position: relative;
         border-radius: 0.375rem;
-        background: var(--muted);
+        background: color-mix(in oklab, var(--muted) 84%, white);
         padding: 0.2rem 0.3rem;
         color: var(--foreground);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
@@ -153,9 +214,11 @@
         overflow-x: auto;
         border: 1px solid var(--border);
         border-radius: 0.75rem;
-        background: var(--muted);
+        background: color-mix(in oklab, var(--muted) 88%, white);
         color: var(--foreground);
         padding: 0.75rem 1rem;
+        box-shadow: 0 0.75rem 2rem -1.5rem color-mix(in oklab, var(--foreground)
+                    25%, transparent);
     }
 
     :global(.markdown pre code) {
@@ -173,7 +236,7 @@
 
     :global(.markdown thead tr) {
         border-top: 1px solid var(--border);
-        background: var(--muted);
+        background: color-mix(in oklab, var(--muted) 82%, white);
     }
 
     :global(.markdown tbody tr) {

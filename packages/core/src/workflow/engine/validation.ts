@@ -78,8 +78,8 @@ export function getMissionWorkflowEventValidationErrors(
             }
             break;
         case 'mission.panic.requested':
-            if (runtime.lifecycle === 'delivered') {
-                errors.push('mission.panic.requested is not allowed after delivery.');
+            if (runtime.lifecycle === 'completed' || runtime.lifecycle === 'delivered') {
+                errors.push('mission.panic.requested is not allowed after mission completion.');
             }
             break;
         case 'mission.panic.cleared':

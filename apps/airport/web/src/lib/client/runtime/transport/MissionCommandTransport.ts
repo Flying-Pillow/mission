@@ -182,6 +182,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         const payload = missionRuntimeMissionCommandSchema.parse(body);
+        const actionId = this.resolveMissionActionId(payload.action);
         const response = await this.fetcher(
             `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/actions`,
             {
@@ -190,7 +191,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
                     accept: 'application/json',
                     'content-type': 'application/json'
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ actionId })
             }
         );
 
@@ -199,6 +200,25 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         return missionRuntimeSnapshotDtoSchema.parse(await response.json());
+    }
+
+    private resolveMissionActionId(
+        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver'
+    ): string {
+        switch (action) {
+            case 'pause':
+                return 'mission.pause';
+            case 'resume':
+                return 'mission.resume';
+            case 'panic':
+                return 'mission.panic';
+            case 'clearPanic':
+                return 'mission.clear-panic';
+            case 'restartQueue':
+                return 'mission.restart-queue';
+            case 'deliver':
+                return 'mission.deliver';
+        }
     }
 
     private async sendSessionRequest(

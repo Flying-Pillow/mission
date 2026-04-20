@@ -727,6 +727,65 @@ exit 1
 		});
 	});
 
+	it('disables pull-origin when the mission worktree has local changes', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const originPath = await createTempBareRemote();
+			runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+			runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+			runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 81, 'Pull origin dirty worktree');
+
+			try {
+				const missionRecord = seededMission.getRecord();
+				runGit(missionRecord.missionDir, ['push', '--set-upstream', 'origin', missionRecord.branchRef]);
+
+				const remoteCloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-remote-clone-'));
+				temporaryDirectories.add(remoteCloneRoot);
+				try {
+					runGit(workspaceRoot, ['clone', originPath, remoteCloneRoot]);
+					runGit(remoteCloneRoot, ['config', 'user.email', 'mission@example.com']);
+					runGit(remoteCloneRoot, ['config', 'user.name', 'Mission Test']);
+					runGit(remoteCloneRoot, ['checkout', missionRecord.branchRef]);
+					await fs.writeFile(path.join(remoteCloneRoot, 'REMOTE_ONLY.md'), 'remote update\n', 'utf8');
+					runGit(remoteCloneRoot, ['add', 'REMOTE_ONLY.md']);
+					runGit(remoteCloneRoot, ['commit', '-m', 'remote update']);
+					runGit(remoteCloneRoot, ['push', 'origin', missionRecord.branchRef]);
+				} finally {
+					await fs.rm(remoteCloneRoot, { recursive: true, force: true });
+				}
+
+				await fs.writeFile(path.join(missionRecord.missionDir, 'LOCAL_ONLY.md'), 'local change\n', 'utf8');
+
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.control.getStatus();
+					const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+					const pullOriginAction = actions.find((action) => action.id === 'mission.pull-origin');
+
+					expect(pullOriginAction).toMatchObject({
+						id: 'mission.pull-origin',
+						enabled: false,
+						disabled: true,
+						disabledReason: 'Mission worktree has local changes. Commit, stash, or discard them before pulling origin.'
+					});
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it('prioritizes mission recovery actions ahead of local target actions when the mission is paused', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();

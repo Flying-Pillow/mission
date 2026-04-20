@@ -120,6 +120,7 @@ type MissionRepositorySyncState = {
 	branchRef: string;
 	checkedAt: string;
 	revision: string;
+	worktreeClean?: boolean;
 	reason?: string;
 	trackingRef?: string;
 	aheadCount?: number;
@@ -1013,6 +1014,7 @@ export class MissionWorkspace {
 				githubRepository,
 				ghBinary ? { ghBinary } : {}
 			);
+			const worktreeClean = this.store.isWorktreeClean(missionWorkspaceRoot);
 			adapter.fetchRemote('origin');
 			const sync = adapter.getBranchSyncStatus(loadedMission.branchRef, 'origin');
 			return {
@@ -1020,7 +1022,8 @@ export class MissionWorkspace {
 				status: sync.status,
 				branchRef: sync.branchRef,
 				checkedAt,
-				revision: `workspace-mission-sync:${loadedMission.missionId}:${sync.status}:${sync.remoteHead ?? 'none'}:${String(sync.aheadCount)}:${String(sync.behindCount)}`,
+				revision: `workspace-mission-sync:${loadedMission.missionId}:${sync.status}:${worktreeClean ? 'clean' : 'dirty'}:${sync.remoteHead ?? 'none'}:${String(sync.aheadCount)}:${String(sync.behindCount)}`,
+				worktreeClean,
 				aheadCount: sync.aheadCount,
 				behindCount: sync.behindCount,
 				...(sync.trackingRef ? { trackingRef: sync.trackingRef } : {}),
@@ -1111,6 +1114,9 @@ export class MissionWorkspace {
 
 	private pullMissionOrigin(loadedMission: LoadedMission): void {
 		const missionWorkspaceRoot = this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir());
+		if (!this.store.isWorktreeClean(missionWorkspaceRoot)) {
+			throw new Error('Mission worktree has local changes. Commit, stash, or discard them before pulling origin.');
+		}
 		const githubRepository = resolveGitHubRepositoryFromWorkspace(missionWorkspaceRoot)
 			?? resolveGitHubRepositoryFromWorkspace(this.workspaceRoot);
 		if (!githubRepository) {
@@ -2539,6 +2545,9 @@ const WORKSPACE_MISSION_COMMAND_DEFINITIONS: readonly MissionWorkspaceCommandDef
 			if (!repositorySync) {
 				return { enabled: false, reason: 'Repository sync state is not available for this mission.' };
 			}
+				if (repositorySync.worktreeClean === false) {
+					return { enabled: false, reason: 'Mission worktree has local changes. Commit, stash, or discard them before pulling origin.' };
+				}
 			switch (repositorySync.status) {
 				case 'behind':
 					return { enabled: true };
