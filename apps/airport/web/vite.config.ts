@@ -1,8 +1,10 @@
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import type { HttpServer } from "vite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
+import { attachTerminalWebSocketServer } from "./src/lib/server/terminal-websocket.server";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,26 +13,38 @@ const workspacePackageRoots = {
 	"@flying-pillow/mission": path.resolve(currentDirectory, "../../../packages/mission/src")
 } as const;
 
-export default defineConfig(({ command }) => {
-	const isDevServer = command === "serve";
-
+function missionTerminalWebSocketPlugin() {
 	return {
-		cacheDir: "/tmp/mission-airport-vite-cache",
-		plugins: [tailwindcss(), sveltekit()],
-		ssr: isDevServer
-			? {
-				noExternal: [
-					"@flying-pillow/mission-core",
-					"@flying-pillow/mission"
-				]
+		name: "mission-terminal-websocket",
+		configureServer(server: { httpServer?: HttpServer | null }) {
+			if (server.httpServer) {
+				attachTerminalWebSocketServer(server.httpServer);
 			}
-			: undefined,
-		server: isDevServer
-			? {
-				fs: {
-					allow: [".", ...Object.values(workspacePackageRoots)]
-				}
+		},
+		configurePreviewServer(server: { httpServer?: HttpServer | null }) {
+			if (server.httpServer) {
+				attachTerminalWebSocketServer(server.httpServer);
 			}
-			: undefined,
+		}
 	};
+}
+
+export default defineConfig({
+	cacheDir: "/tmp/mission-airport-vite-cache",
+	plugins: [
+		tailwindcss(),
+		sveltekit(),
+		missionTerminalWebSocketPlugin()
+	],
+	ssr: {
+		noExternal: [
+			"@flying-pillow/mission-core",
+			"@flying-pillow/mission"
+		]
+	},
+	server: {
+		fs: {
+			allow: [".", ...Object.values(workspacePackageRoots)]
+		}
+	}
 });

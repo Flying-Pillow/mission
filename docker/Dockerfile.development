@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     webkit2gtk-driver \
     && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     | tar -xJ -C /usr/local --strip-components=1 --no-same-owner \
+    && npm install -g @github/copilot \
     && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
     && rm -rf /var/lib/apt/lists/*
 

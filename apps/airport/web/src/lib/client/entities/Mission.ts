@@ -213,6 +213,10 @@ export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
         return this.tasks.values();
     }
 
+    public getTask(taskId: string): Task | undefined {
+        return this.tasks.get(taskId);
+    }
+
     public listTasksForStage(stageId: string): Task[] {
         return this.getStage(stageId)?.listTasks() ?? [];
     }

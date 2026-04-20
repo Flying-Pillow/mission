@@ -8,6 +8,7 @@ export const airportRuntimeEventTypeSchema = z.enum([
     'mission.actions.changed',
     'mission.status',
     'session.console',
+    'session.terminal',
     'session.event',
     'session.lifecycle'
 ]);
@@ -101,8 +102,16 @@ export const missionSessionTerminalQuerySchema = z.object({
 
 export const missionSessionTerminalInputSchema = z.object({
     missionId: z.string().trim().min(1),
-    data: z.string(),
-    literal: z.boolean().optional()
+    data: z.string().optional(),
+    literal: z.boolean().optional(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional()
+}).refine((value) => {
+    const hasData = typeof value.data === 'string';
+    const hasResize = value.cols !== undefined && value.rows !== undefined;
+    return hasData || hasResize;
+}, {
+    message: 'Terminal input requests require data or a complete cols/rows resize payload.'
 });
 
 export const repositoryRuntimeRouteParamsSchema = z.object({
@@ -259,8 +268,51 @@ export const missionSessionTerminalSnapshotDtoSchema = z.object({
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
     screen: z.string(),
+    truncated: z.boolean().optional(),
     terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
 });
+
+export const missionSessionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('input'),
+        data: z.string(),
+        literal: z.boolean().optional()
+    }),
+    z.object({
+        type: z.literal('resize'),
+        cols: z.number().int().positive(),
+        rows: z.number().int().positive()
+    })
+]);
+
+export const missionSessionTerminalOutputDtoSchema = z.object({
+    missionId: z.string().trim().min(1),
+    sessionId: z.string().trim().min(1),
+    chunk: z.string(),
+    dead: z.boolean(),
+    exitCode: z.number().int().nullable(),
+    truncated: z.boolean().optional(),
+    terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
+});
+
+export const missionSessionTerminalSocketServerMessageSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('snapshot'),
+        snapshot: missionSessionTerminalSnapshotDtoSchema
+    }),
+    z.object({
+        type: z.literal('output'),
+        output: missionSessionTerminalOutputDtoSchema
+    }),
+    z.object({
+        type: z.literal('disconnected'),
+        snapshot: missionSessionTerminalSnapshotDtoSchema
+    }),
+    z.object({
+        type: z.literal('error'),
+        message: z.string().trim().min(1)
+    })
+]);
 
 export const missionRuntimeSnapshotDtoSchema = z.object({
     missionId: z.string().trim().min(1),
@@ -283,7 +335,10 @@ export type AgentPromptDto = z.infer<typeof agentPromptSchema>;
 export type AirportHomeSnapshotDto = z.infer<typeof airportHomeSnapshotDtoSchema>;
 export type MissionAgentSessionDto = z.infer<typeof missionAgentSessionDtoSchema>;
 export type MissionSessionTerminalHandleDto = z.infer<typeof missionSessionTerminalHandleDtoSchema>;
+export type MissionSessionTerminalOutputDto = z.infer<typeof missionSessionTerminalOutputDtoSchema>;
 export type MissionSessionTerminalSnapshotDto = z.infer<typeof missionSessionTerminalSnapshotDtoSchema>;
+export type MissionSessionTerminalSocketClientMessageDto = z.infer<typeof missionSessionTerminalSocketClientMessageSchema>;
+export type MissionSessionTerminalSocketServerMessageDto = z.infer<typeof missionSessionTerminalSocketServerMessageSchema>;
 export type MissionSelectionCandidateDto = z.infer<typeof missionSelectionCandidateDtoSchema>;
 export type MissionRuntimeMissionCommandInputDto = z.infer<typeof missionRuntimeMissionCommandSchema>;
 export type MissionRuntimeSessionCommandInputDto = z.infer<typeof missionRuntimeSessionCommandSchema>;

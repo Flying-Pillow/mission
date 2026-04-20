@@ -10,6 +10,7 @@ import {
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { initializeMissionRepository } from './initializeMissionRepository.js';
 import { GitHubPlatformAdapter } from '../platforms/GitHubPlatformAdapter.js';
+import { refreshSystemStatus } from '../system/SystemStatus.js';
 import type { MissionPreparationStatus } from '../types.js';
 
 export class RepositoryPreparationService {
@@ -38,6 +39,7 @@ export class RepositoryPreparationService {
 			proposalStore.commit(this.buildCommitMessage(), proposalWorktreePath);
 			proposalStore.pushBranch(branchRef, proposalWorktreePath);
 
+			refreshSystemStatus({ cwd: proposalWorktreePath });
 			const github = new GitHubPlatformAdapter(proposalWorktreePath, this.githubRepository);
 			const pullRequestUrl = await github.createPullRequest({
 				title: 'Initialize Mission repository scaffolding',

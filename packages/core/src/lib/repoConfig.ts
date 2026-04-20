@@ -39,6 +39,10 @@ export function resolveMissionWorkspaceRoot(
 	configuredRoot = DEFAULT_MISSION_WORKSPACE_ROOT
 ): string {
 	const normalizedRoot = configuredRoot.trim() || DEFAULT_MISSION_WORKSPACE_ROOT;
+	const configuredMissionsPath = process.env['MISSIONS_PATH']?.trim();
+	if (normalizedRoot === DEFAULT_MISSION_WORKSPACE_ROOT && configuredMissionsPath) {
+		return path.resolve(configuredMissionsPath);
+	}
 	if (path.isAbsolute(normalizedRoot)) {
 		return path.resolve(normalizedRoot);
 	}

@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { enhance } from "$app/forms";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -8,10 +7,12 @@
     let {
         missions,
         missionCountLabel,
+        repositoryId,
         selectedMissionId,
     }: {
         missions: MissionSummary[];
         missionCountLabel: string;
+        repositoryId: string;
         selectedMissionId?: string;
     } = $props();
 </script>
@@ -76,20 +77,14 @@
                                     Created: {mission.createdAt}
                                 </p>
                             </div>
-                            <form
-                                method="POST"
-                                action="?/selectMission"
-                                use:enhance
-                            >
-                                <input
-                                    type="hidden"
-                                    name="missionId"
-                                    value={mission.missionId}
-                                />
-                                <Button type="submit" variant="outline"
-                                    >Select mission</Button
+                            <div class="flex flex-wrap gap-2">
+                                <Button
+                                    href={`/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`}
+                                    variant="outline"
                                 >
-                            </form>
+                                    Select mission
+                                </Button>
+                            </div>
                         </div>
                     </article>
                 {/each}

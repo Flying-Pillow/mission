@@ -22,6 +22,11 @@ export type MissionUserConfig = {
 };
 
 export function getMissionUserConfigDirectory(): string {
+	const configuredPath = resolveConfiguredMissionConfigDirectory();
+	if (configuredPath) {
+		return configuredPath;
+	}
+
 	const xdgConfigHome = process.env['XDG_CONFIG_HOME']?.trim();
 	return xdgConfigHome
 		? path.join(xdgConfigHome, MISSION_USER_CONFIG_DIRECTORY)
@@ -203,4 +208,16 @@ function buildMissionRepositoryCandidate(
 function normalizeOptionalString(value: string | undefined): string | undefined {
 	const trimmed = value?.trim();
 	return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveConfiguredMissionConfigDirectory(): string | undefined {
+	const configuredPath = normalizeOptionalString(process.env['MISSION_CONFIG_PATH']);
+	if (!configuredPath) {
+		return undefined;
+	}
+
+	const resolvedPath = path.resolve(configuredPath);
+	return path.basename(resolvedPath) === MISSION_USER_CONFIG_DIRECTORY
+		? resolvedPath
+		: path.join(resolvedPath, MISSION_USER_CONFIG_DIRECTORY);
 }

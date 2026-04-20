@@ -296,12 +296,11 @@
                                                                 () =>
                                                                     task.start(),
                                                             )}
-                                                    >
-                                                        {itemActionPending ===
+                                                        >{itemActionPending ===
                                                         `task:start:${task.taskId}`
                                                             ? "Starting..."
-                                                            : "Start"}
-                                                    </Button>
+                                                            : "Start"}</Button
+                                                    >
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -313,12 +312,11 @@
                                                                 () =>
                                                                     task.complete(),
                                                             )}
-                                                    >
-                                                        {itemActionPending ===
+                                                        >{itemActionPending ===
                                                         `task:complete:${task.taskId}`
                                                             ? "Completing..."
-                                                            : "Complete"}
-                                                    </Button>
+                                                            : "Complete"}</Button
+                                                    >
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -330,12 +328,11 @@
                                                                 () =>
                                                                     task.block(),
                                                             )}
-                                                    >
-                                                        {itemActionPending ===
+                                                        >{itemActionPending ===
                                                         `task:block:${task.taskId}`
                                                             ? "Blocking..."
-                                                            : "Block"}
-                                                    </Button>
+                                                            : "Block"}</Button
+                                                    >
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -347,12 +344,11 @@
                                                                 () =>
                                                                     task.reopen(),
                                                             )}
-                                                    >
-                                                        {itemActionPending ===
+                                                        >{itemActionPending ===
                                                         `task:reopen:${task.taskId}`
                                                             ? "Reopening..."
-                                                            : "Reopen"}
-                                                    </Button>
+                                                            : "Reopen"}</Button
+                                                    >
                                                 </div>
                                                 <p
                                                     class="mt-1 font-mono text-xs text-muted-foreground"
@@ -414,12 +410,11 @@
                                                 `session:done:${session.sessionId}`,
                                                 () => session.done(),
                                             )}
-                                    >
-                                        {itemActionPending ===
+                                        >{itemActionPending ===
                                         `session:done:${session.sessionId}`
                                             ? "Completing..."
-                                            : "Done"}
-                                    </Button>
+                                            : "Done"}</Button
+                                    >
                                     <Button
                                         size="sm"
                                         variant="outline"
@@ -429,12 +424,11 @@
                                                 `session:cancel:${session.sessionId}`,
                                                 () => session.cancel(),
                                             )}
-                                    >
-                                        {itemActionPending ===
+                                        >{itemActionPending ===
                                         `session:cancel:${session.sessionId}`
                                             ? "Cancelling..."
-                                            : "Cancel"}
-                                    </Button>
+                                            : "Cancel"}</Button
+                                    >
                                     <Button
                                         size="sm"
                                         variant="outline"
@@ -444,12 +438,11 @@
                                                 `session:terminate:${session.sessionId}`,
                                                 () => session.terminate(),
                                             )}
-                                    >
-                                        {itemActionPending ===
+                                        >{itemActionPending ===
                                         `session:terminate:${session.sessionId}`
                                             ? "Terminating..."
-                                            : "Terminate"}
-                                    </Button>
+                                            : "Terminate"}</Button
+                                    >
                                 </div>
                             </div>
                         {/each}

@@ -1,5 +1,6 @@
 // /apps/airport/web/src/lib/client/context/app-context.svelte.ts: App-wide client context for daemon identity, repository shell state, and active Airport selection.
 import { createContext } from "svelte";
+import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types.js";
 import type { RepositorySummary } from "$lib/components/entities/types";
 
 export type GithubStatus = "connected" | "disconnected" | "unknown";
@@ -11,6 +12,8 @@ export type AppContextServerValue = {
         message: string;
         endpointPath?: string;
         lastCheckedAt: string;
+        nextRetryAt?: string;
+        failureCount?: number;
     };
     githubStatus: GithubStatus;
     user?: {
@@ -19,6 +22,12 @@ export type AppContextServerValue = {
         avatarUrl?: string;
         githubStatus: GithubStatus;
     };
+};
+
+export type ActiveMissionOutline = {
+    title?: string;
+    currentStageId?: string;
+    treeNodes: MissionTowerTreeNode[];
 };
 
 export type AppContextValue = {
@@ -30,6 +39,8 @@ export type AppContextValue = {
         activeRepositoryId?: string;
         activeRepositoryRootPath?: string;
         activeMissionId?: string;
+        activeMissionOutline?: ActiveMissionOutline;
+        activeMissionSelectedNodeId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
     setRepositories(repositories: RepositorySummary[]): void;
@@ -38,6 +49,8 @@ export type AppContextValue = {
         repositoryRootPath?: string;
     }): void;
     setActiveMission(missionId?: string): void;
+    setActiveMissionOutline(next?: ActiveMissionOutline): void;
+    setActiveMissionSelectedNodeId(nodeId?: string): void;
 };
 
 const [getAppContext, setAppContext] = createContext<AppContextValue>();
@@ -58,6 +71,8 @@ export function createAppContext(
             activeRepositoryId: undefined as string | undefined,
             activeRepositoryRootPath: undefined as string | undefined,
             activeMissionId: undefined as string | undefined,
+            activeMissionOutline: undefined as ActiveMissionOutline | undefined,
+            activeMissionSelectedNodeId: undefined as string | undefined,
         },
     });
 
@@ -89,6 +104,19 @@ export function createAppContext(
         },
         setActiveMission(missionId) {
             state.airport.activeMissionId = missionId?.trim() || undefined;
+        },
+        setActiveMissionOutline(next) {
+            state.airport.activeMissionOutline = next
+                ? {
+                    title: next.title?.trim() || undefined,
+                    currentStageId: next.currentStageId?.trim() || undefined,
+                    treeNodes: [...next.treeNodes],
+                }
+                : undefined;
+        },
+        setActiveMissionSelectedNodeId(nodeId) {
+            state.airport.activeMissionSelectedNodeId =
+                nodeId?.trim() || undefined;
         },
     };
 }

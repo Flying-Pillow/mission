@@ -1,340 +1,267 @@
+import type { IPty } from 'node-pty';
 import { describe, expect, it } from 'vitest';
-import { TerminalAgentTransport, type TerminalAgentTransportOptions } from './TerminalAgentTransport.js';
+import { TerminalAgentTransport } from './TerminalAgentTransport.js';
+
+type FakePty = IPty & {
+	emitData(chunk: string): void;
+	emitExit(exitCode?: number): void;
+	writes: string[];
+	resizes: Array<{ cols: number; rows: number }>;
+	killCount: number;
+};
 
 describe('TerminalAgentTransport', () => {
-	it('opens a shared-session terminal-manager pane and returns a transport handle', async () => {
-		let activePaneTitle: string | undefined;
-		let activePaneId: string | undefined;
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						...(activePaneTitle && activePaneId
-							? [{ id: 4, title: activePaneTitle, tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }]
-							: [])
-					]),
-					stderr: ''
-				};
-			}
-			observed.push(args);
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
-				const nameFlagIndex = args.indexOf('--name');
-				activePaneTitle = args[nameFlagIndex + 1];
-				activePaneId = 'terminal_4';
-				return { stdout: `${activePaneId}\n`, stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'focus-pane-id') {
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+	it('opens a PTY-backed session and reattaches to it', async () => {
+		const ptys: FakePty[] = [];
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				const pty = createFakePty();
+				ptys.push(pty);
+				return pty;
+			}) as never
+		});
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
 		const handle = await transport.openSession({
 			workingDirectory: '/tmp/work',
 			command: 'copilot',
-			args: ['--experimental'],
+			args: ['--allow-all-tools'],
 			sessionName: '01-spec-from-prd-copilot-cli'
 		});
 
-		expect(observed.some((args) => args[3] === 'new-pane' && args.includes('--tab-id'))).toBe(true);
-		expect(observed.some((args) => args[3] === 'new-pane' && args.includes('--borderless') && args.includes('true'))).toBe(true);
-		expect(observed.some((args) => args[3] === 'stack-panes')).toBe(true);
-		expect(observed.some((args) => args[3] === 'focus-pane-id' && args[4] === 'terminal_4')).toBe(true);
-		expect(handle.sessionName).toBe('01-spec-from-prd-copilot-cli');
-		expect(handle.paneId).toBe('terminal_4');
+		expect(handle).toEqual({
+			sessionName: '01-spec-from-prd-copilot-cli',
+			paneId: 'pty'
+		});
+		expect(await transport.attachSession('01-spec-from-prd-copilot-cli')).toEqual(handle);
+		expect(ptys).toHaveLength(1);
 	});
 
-	it('uses snake_case tab_id metadata when opening a shared-session pane', async () => {
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 7, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			observed.push(args);
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
-				return { stdout: 'terminal_4\n', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'focus-pane-id') {
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+	it('adds a numeric suffix when a requested session name already exists', async () => {
+		const transport = new TerminalAgentTransport({
+			spawn: (() => createFakePty()) as never
+		});
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
 		await transport.openSession({
 			workingDirectory: '/tmp/work',
 			command: 'copilot',
-			sessionName: '01-spec-from-prd-copilot-cli'
+			sessionName: 'existing-session'
 		});
-
-		const newPaneCommand = observed.find((args) => args[3] === 'new-pane');
-		expect(newPaneCommand?.includes('--tab-id')).toBe(true);
-		expect(newPaneCommand?.includes('--borderless')).toBe(true);
-		expect(observed.some((args) => args[3] === 'stack-panes')).toBe(true);
-		expect(observed.some((args) => args[3] === 'focus-pane-id' && args[4] === 'terminal_4')).toBe(true);
-	});
-
-	it('attaches to an existing shared-session pane', async () => {
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						{ id: 5, title: 'existing-session', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
-
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
-		const handle = await transport.attachSession('existing-session');
-
-		expect(handle).toEqual({
-			sessionName: 'existing-session',
-			paneId: 'terminal_5',
-			sharedSessionName: 'mission-mission'
-		});
-	});
-
-	it('attaches to an existing shared-session pane by persisted pane id', async () => {
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						{ id: 8, title: 'renamed-session-pane', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
-
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
-		const handle = await transport.attachSession('existing-session', {
-			sharedSessionName: 'mission-mission',
-			paneId: 'terminal_8'
-		});
-
-		expect(handle).toEqual({
-			sessionName: 'existing-session',
-			paneId: 'terminal_8',
-			sharedSessionName: 'mission-mission'
-		});
-	});
-
-	it('discovers airport layout session and opens a shared-session pane when sharedSessionName is not configured', async () => {
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			observed.push(args);
-			if (args[0] === 'list-sessions') {
-				return {
-					stdout: 'flying-pillow-mission | AIRPORT [Created 5m ago]\n',
-					stderr: ''
-				};
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
-				return { stdout: 'terminal_4\n', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'focus-pane-id') {
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
-
-		const transport = new TerminalAgentTransport({ executor });
 		const handle = await transport.openSession({
 			workingDirectory: '/tmp/work',
 			command: 'copilot',
-			sessionName: '01-spec-from-prd-copilot-cli'
+			sessionName: 'existing-session'
 		});
 
-		expect(handle.sharedSessionName).toBe('flying-pillow-mission | AIRPORT');
-		expect(handle.sessionName).toBe('01-spec-from-prd-copilot-cli');
-		expect(observed.some((args) => args[0] === 'list-sessions')).toBe(true);
-		expect(observed.some((args) => args[0] === '--session' && args[1] === 'flying-pillow-mission | AIRPORT' && args[3] === 'new-pane')).toBe(true);
+		expect(handle.sessionName).toBe('existing-session-2');
 	});
 
-	it('falls back to a standalone session when the shared runway pane is missing', async () => {
-		let activeStandaloneSession: string | undefined;
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			observed.push(args);
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true }
-					]),
-					stderr: ''
-				};
-			}
-			if (args[0] === '--new-session-with-layout') {
-				activeStandaloneSession = args.at(-1);
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === 'list-sessions') {
-				return {
-					stdout: activeStandaloneSession ? `${activeStandaloneSession} [Created 1s ago]\n` : '',
-					stderr: ''
-				};
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+	it('captures PTY output and reports exit state', async () => {
+		let activePty: FakePty | undefined;
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				activePty = createFakePty();
+				return activePty;
+			}) as never
+		});
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
 		const handle = await transport.openSession({
 			workingDirectory: '/tmp/work',
 			command: 'copilot',
-			sessionName: '01-spec-from-prd-copilot-cli'
+			sessionName: 'capture-session'
 		});
+		activePty?.emitData('hello');
+		activePty?.emitData('\r\nworld');
 
-		expect(handle.sessionName).toBe('01-spec-from-prd-copilot-cli');
-		expect(handle.paneId).toBe(handle.sessionName);
-		expect(handle.sharedSessionName).toBeUndefined();
-		expect(observed.some((args) => args[0] === '--new-session-with-layout')).toBe(true);
+		expect(await transport.capturePane(handle)).toBe('hello\r\nworld');
+		expect(await transport.readPaneState(handle)).toEqual({
+			dead: false,
+			exitCode: null
+		});
+		expect(await transport.readSnapshot(handle)).toMatchObject({ truncated: false });
+
+		activePty?.emitExit(7);
+
+		expect(await transport.readPaneState(handle)).toEqual({
+			dead: true,
+			exitCode: 7
+		});
 	});
 
-	it('adds a numeric suffix when the requested session name already exists', async () => {
-		let activePaneTitle = '01-spec-from-prd-copilot-cli';
-		let activePaneId = 'terminal_4';
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						{ id: 4, title: activePaneTitle, tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
-				const nameFlagIndex = args.indexOf('--name');
-				activePaneTitle = args[nameFlagIndex + 1] as string;
-				activePaneId = 'terminal_8';
-				return { stdout: `${activePaneId}\n`, stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && (args[3] === 'stack-panes' || args[3] === 'focus-pane-id')) {
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+	it('translates control keys and resizes the PTY', async () => {
+		let activePty: FakePty | undefined;
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				activePty = createFakePty();
+				return activePty;
+			}) as never
+		});
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
 		const handle = await transport.openSession({
 			workingDirectory: '/tmp/work',
 			command: 'copilot',
-			sessionName: '01-spec-from-prd-copilot-cli'
+			sessionName: 'input-session'
 		});
+		await transport.sendKeys(handle, 'Enter');
+		await transport.sendKeys(handle, 'C-c');
+		await transport.sendKeys(handle, 'abc', { literal: true });
+		await transport.resizeSession(handle, 140, 48);
 
-		expect(handle.sessionName).toBe('01-spec-from-prd-copilot-cli-2');
+		expect(activePty?.writes).toEqual(['\r', '\x03', 'abc']);
+		expect(activePty?.resizes).toEqual([{ cols: 140, rows: 48 }]);
 	});
 
-	it('attaches to a standalone session when shared lookup is explicitly disabled', async () => {
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === 'list-sessions') {
-				return {
-					stdout: 'mission-agent-standalone [Created 1m ago]\n',
-					stderr: ''
-				};
+	it('broadcasts session updates for live terminal subscribers', async () => {
+		let activePty: FakePty | undefined;
+		const spawn = (() => {
+			activePty = createFakePty();
+			return activePty;
+		}) as never;
+		const transport = new TerminalAgentTransport({ spawn });
+		const observed: string[] = [];
+		const subscription = TerminalAgentTransport.onDidSessionUpdate((event) => {
+			if (event.sessionName === 'live-session') {
+				observed.push(event.screen);
 			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+		}, { spawn });
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
-		const handle = await transport.attachSession('mission-agent-standalone', {
-			sharedSessionName: undefined
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			sessionName: 'live-session'
 		});
+		activePty?.emitData('hello');
+		activePty?.emitData(' world');
 
-		expect(handle).toEqual({
-			sessionName: 'mission-agent-standalone',
-			paneId: 'mission-agent-standalone'
-		});
+		subscription.dispose();
+		expect(observed).toEqual(['hello', 'hello world']);
 	});
 
-	it('captures a standalone session by resolving its real pane id', async () => {
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			observed.push(args);
-			if (args[0] === '--session' && args[1] === 'mission-agent-standalone' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 0, title: '(.) - zellij:link', tab_id: 0, exited: false, exitStatus: null, is_plugin: true, is_focused: false, is_suppressed: true },
-						{ id: 0, title: 'AGENT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true, is_suppressed: false }
-					]),
-					stderr: ''
-				};
+	it('includes emitted chunks in live terminal subscriber updates', async () => {
+		let activePty: FakePty | undefined;
+		const spawn = (() => {
+			activePty = createFakePty();
+			return activePty;
+		}) as never;
+		const transport = new TerminalAgentTransport({ spawn });
+		const observed: string[] = [];
+		const subscription = TerminalAgentTransport.onDidSessionUpdate((event) => {
+			if (event.sessionName === 'chunk-session') {
+				observed.push(event.chunk);
 			}
-			if (args[0] === '--session' && args[1] === 'mission-agent-standalone' && args[3] === 'dump-screen') {
-				return { stdout: 'live output\n', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
+		}, { spawn });
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
-		const capture = await transport.capturePane({
-			sessionName: 'mission-agent-standalone',
-			paneId: 'mission-agent-standalone',
-			sharedSessionName: undefined
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			sessionName: 'chunk-session'
 		});
+		activePty?.emitData('hello');
+		activePty?.emitData(' world');
 
-		expect(capture).toBe('live output\n');
-		expect(observed).toEqual([
-			['--session', 'mission-agent-standalone', 'action', 'list-panes', '--json', '--all'],
-			['--session', 'mission-agent-standalone', 'action', 'dump-screen', '--pane-id', 'terminal_0']
-		]);
+		subscription.dispose();
+		expect(observed).toEqual(['hello', ' world']);
 	});
 
-	it('sends literal text to the shared-session pane process', async () => {
-		const observed: string[][] = [];
-		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
-						{ id: 5, title: 'existing-session', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				};
-			}
-			observed.push(args);
-			return { stdout: '', stderr: '' };
-		};
+	it('marks snapshots as truncated when scrollback exceeds the buffer limit', async () => {
+		let activePty: FakePty | undefined;
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				activePty = createFakePty();
+				return activePty;
+			}) as never
+		});
 
-		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
-		await transport.sendKeys({ sessionName: 'existing-session', paneId: 'terminal_5' }, 'hello', { literal: true });
+		const handle = await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			sessionName: 'truncated-session'
+		});
+		activePty?.emitData('a'.repeat(210_000));
 
-		expect(observed).toEqual([
-			['--session', 'mission-mission', 'action', 'focus-pane-id', 'terminal_5'],
-			['--session', 'mission-mission', 'action', 'write-chars', 'hello'],
-			['--session', 'mission-mission', 'action', 'focus-pane-id', 'terminal_2']
-		]);
+		const snapshot = await transport.readSnapshot(handle);
+		expect(snapshot.truncated).toBe(true);
+		expect(snapshot.screen).toHaveLength(200_000);
 	});
 });
+
+function createFakePty(): FakePty {
+	let onDataListener: ((chunk: string) => void) | undefined;
+	let onExitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined;
+	const fakePty = {
+		pid: 1,
+		process: 'fake-shell',
+		cols: 120,
+		rows: 32,
+		handleFlowControl: false,
+		write(data: string) {
+			fakePty.writes.push(data);
+		},
+		resize(cols: number, rows: number) {
+			fakePty.cols = cols;
+			fakePty.rows = rows;
+			fakePty.resizes.push({ cols, rows });
+		},
+		kill() {
+			fakePty.killCount += 1;
+		},
+		clear() { },
+		onData(listener: (chunk: string) => void) {
+			onDataListener = listener;
+			return { dispose() { } };
+		},
+		onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+			onExitListener = listener;
+			return { dispose() { } };
+		},
+		emitData(chunk: string) {
+			onDataListener?.(chunk);
+		},
+		emitExit(exitCode = 0) {
+			onExitListener?.({ exitCode });
+		},
+		pause() { },
+		resume() { },
+		setEncoding() { },
+		addListener() {
+			return fakePty;
+		},
+		removeListener() {
+			return fakePty;
+		},
+		off() {
+			return fakePty;
+		},
+		emit() {
+			return true;
+		},
+		removeAllListeners() {
+			return fakePty;
+		},
+		once() {
+			return fakePty;
+		},
+		listeners() {
+			return [];
+		},
+		rawListeners() {
+			return [];
+		},
+		listenerCount() {
+			return 0;
+		},
+		prependListener() {
+			return fakePty;
+		},
+		prependOnceListener() {
+			return fakePty;
+		},
+		eventNames() {
+			return [];
+		},
+		writes: [] as string[],
+		resizes: [] as Array<{ cols: number; rows: number }>,
+		killCount: 0
+	};
+
+	return fakePty as unknown as FakePty;
+}

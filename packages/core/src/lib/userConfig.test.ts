@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
 	ensureMissionUserConfig,
 	getMissionGitHubCliBinary,
@@ -15,12 +15,17 @@ import {
 } from './userConfig.js';
 
 describe('userConfig', () => {
+	beforeEach(() => {
+		delete process.env['MISSION_CONFIG_PATH'];
+	});
+
 	afterEach(async () => {
 		const configHome = process.env['XDG_CONFIG_HOME'];
 		if (configHome) {
 			await fs.rm(configHome, { recursive: true, force: true });
 			delete process.env['XDG_CONFIG_HOME'];
 		}
+		delete process.env['MISSION_CONFIG_PATH'];
 	});
 
 	it('scaffolds a default user config in XDG config home', async () => {
@@ -39,6 +44,20 @@ describe('userConfig', () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
 
 		expect(getMissionRuntimeDirectory()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'runtime'));
+	});
+
+	it('prefers MISSION_CONFIG_PATH when present and resolves the Mission config beneath it', () => {
+		process.env['MISSION_CONFIG_PATH'] = '/config';
+
+		expect(getMissionUserConfigPath()).toBe('/config/mission/config.json');
+		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
+	});
+
+	it('accepts MISSION_CONFIG_PATH values that already point at the Mission config directory', () => {
+		process.env['MISSION_CONFIG_PATH'] = '/config/mission';
+
+		expect(getMissionUserConfigPath()).toBe('/config/mission/config.json');
+		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
 	});
 
 	it('persists user-level overrides', async () => {

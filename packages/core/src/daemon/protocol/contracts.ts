@@ -36,6 +36,21 @@ export type MissionAgentConsoleState = {
 	sessionId?: string;
 };
 
+export type MissionAgentTerminalState = {
+	sessionId: string;
+	connected: boolean;
+	dead: boolean;
+	exitCode: number | null;
+	screen: string;
+	truncated?: boolean;
+	chunk?: string;
+	terminalHandle?: {
+		sessionName: string;
+		paneId: string;
+		sharedSessionName?: string;
+	};
+};
+
 export type MissionAgentConsoleEvent =
 	| {
 		type: 'reset';
@@ -283,10 +298,11 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 19;
+export const PROTOCOL_VERSION = 20;
 
 export type Method =
 	| 'ping'
+	| 'event.subscribe'
 	| 'system.status'
 	| 'airport.status'
 	| 'airport.client.connect'
@@ -313,6 +329,8 @@ export type Method =
 	| 'mission.gate.evaluate'
 	| 'session.list'
 	| 'session.console.state'
+	| 'session.terminal.state'
+	| 'session.terminal.input'
 	| 'session.prompt'
 	| 'session.command'
 	| 'session.complete'
@@ -328,7 +346,8 @@ export type MethodMetadata = {
 
 export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
-	'system.status': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'airport.status': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'airport.client.connect': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'airport.client.observe': { includeSurfacePath: true, workspaceRoute: 'none' },
@@ -354,6 +373,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'mission.gate.evaluate': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.console.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.terminal.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.terminal.input': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.prompt': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.command': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.complete': { includeSurfacePath: true, workspaceRoute: 'mission' },
@@ -467,6 +488,16 @@ export type SessionSelect = MissionSelect & {
 
 export type SessionConsoleState = SessionSelect;
 
+export type SessionTerminalState = SessionSelect;
+
+export type SessionTerminalInput = SessionSelect & {
+	data?: string;
+	literal?: boolean;
+	cols?: number;
+	rows?: number;
+	respondWithState?: boolean;
+};
+
 export type SessionPrompt = SessionSelect & {
 	prompt: AgentPrompt;
 };
@@ -543,6 +574,12 @@ export type Notification =
 		event: MissionAgentConsoleEvent;
 	}
 	| {
+		type: 'session.terminal';
+		missionId: string;
+		sessionId: string;
+		state: MissionAgentTerminalState;
+	}
+	| {
 		type: 'session.event';
 		missionId: string;
 		sessionId: string;
@@ -561,6 +598,12 @@ export type Notification =
 		changedPaths: string[];
 		context: ControlWorkflowSettingsUpdate['context'];
 	};
+
+export type EventSubscription = {
+	eventTypes?: Notification['type'][];
+	missionId?: string;
+	sessionId?: string;
+};
 
 export type Request = {
 	type: 'request';
@@ -588,6 +631,7 @@ export type SuccessResponse = {
 	| ControlWorkflowSettingsInitializeResponse
 	| ControlWorkflowSettingsUpdateResponse
 	| MissionAgentConsoleState
+	| MissionAgentTerminalState
 	| null
 	| MissionAgentSessionRecord
 	| MissionAgentSessionRecord[]

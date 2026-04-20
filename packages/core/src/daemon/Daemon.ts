@@ -8,6 +8,7 @@ import {
 	type AirportClientConnect,
 	type AirportClientObserve,
 	type AirportPaneBind,
+	type EventSubscription,
 	type ErrorResponse,
 	type EventMessage,
 	type Manifest,
@@ -25,7 +26,7 @@ import {
 import { MissionSystemController } from './control-plane/MissionSystemController.js';
 import { WorkspaceManager } from '../workspace/WorkspaceManager.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
-import { readSystemStatus } from '../system/SystemStatus.js';
+import { peekCachedSystemStatus } from '../system/SystemStatus.js';
 
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
@@ -42,6 +43,8 @@ export class Daemon {
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
 	private readonly logLine: ((line: string) => void) | undefined;
+	private readonly clientIdsBySocket = new Map<Socket, string>();
+	private readonly eventSubscriptionsByClientId = new Map<string, EventSubscription>();
 	private resolveShutdown!: () => void;
 	private manifest?: Manifest;
 	private closed = false;
@@ -137,6 +140,7 @@ export class Daemon {
 	private handleConnection(socket: Socket): void {
 		const clientId = `client-${String(++this.nextClientId)}`;
 		this.clients.add(socket);
+		this.clientIdsBySocket.set(socket, clientId);
 		this.logLine?.(`Client connected (${String(this.clients.size)} total).`);
 		socket.setEncoding('utf8');
 		let buffer = '';
@@ -155,11 +159,15 @@ export class Daemon {
 
 		socket.on('close', () => {
 			this.clients.delete(socket);
+			this.clientIdsBySocket.delete(socket);
+			this.eventSubscriptionsByClientId.delete(clientId);
 			void this.handleClientDisconnected(clientId);
 			this.logLine?.(`Client disconnected (${String(this.clients.size)} remaining).`);
 		});
 		socket.on('error', (error) => {
 			this.clients.delete(socket);
+			this.clientIdsBySocket.delete(socket);
+			this.eventSubscriptionsByClientId.delete(clientId);
 			void this.handleClientDisconnected(clientId);
 			this.logLine?.(`Client socket error: ${error instanceof Error ? error.message : String(error)}`);
 		});
@@ -213,8 +221,15 @@ export class Daemon {
 			return pingResult;
 		}
 
+		if (request.method === 'event.subscribe') {
+			return this.executeEventSubscribe(request);
+		}
+
 		if (request.method === 'system.status') {
-			return readSystemStatus();
+			return peekCachedSystemStatus({
+				...(request.surfacePath?.trim() ? { cwd: request.surfacePath.trim() } : {}),
+				...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
+			});
 		}
 
 		if (request.method === 'airport.status') {
@@ -236,6 +251,10 @@ export class Daemon {
 	}
 
 	private broadcastEvent(event: Notification): void {
+		if (event.type === 'session.terminal' && !this.hasExplicitSubscriberForEvent(event)) {
+			return;
+		}
+
 		void this.decorateEvent(event).then((resolvedEvent) => {
 			this.logLine?.(
 				`Broadcasting ${resolvedEvent.type}${'missionId' in resolvedEvent ? ` mission=${resolvedEvent.missionId}` : ''}`
@@ -243,14 +262,76 @@ export class Daemon {
 			const message: EventMessage = { type: 'event', event: resolvedEvent };
 			const wire = JSON.stringify(message) + '\n';
 			for (const client of this.clients) {
+				const clientId = this.clientIdsBySocket.get(client);
+				if (clientId && !this.shouldDeliverEventToClient(clientId, resolvedEvent)) {
+					continue;
+				}
 				client.write(wire, (error) => {
 					if (error) {
 						this.clients.delete(client);
+						const failedClientId = this.clientIdsBySocket.get(client);
+						if (failedClientId) {
+							this.eventSubscriptionsByClientId.delete(failedClientId);
+						}
+						this.clientIdsBySocket.delete(client);
 						client.destroy();
 					}
 				});
 			}
 		});
+	}
+
+	private hasExplicitSubscriberForEvent(event: Notification): boolean {
+		for (const subscription of this.eventSubscriptionsByClientId.values()) {
+			if (this.matchesEventSubscription(subscription, event)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private executeEventSubscribe(request: Request): null {
+		if (!request.clientId) {
+			throw new Error('Event subscription requires a connected client id.');
+		}
+
+		const params = (request.params ?? {}) as EventSubscription;
+		this.eventSubscriptionsByClientId.set(request.clientId, {
+			...(params.eventTypes?.length ? { eventTypes: [...new Set(params.eventTypes)] } : {}),
+			...(params.missionId?.trim() ? { missionId: params.missionId.trim() } : {}),
+			...(params.sessionId?.trim() ? { sessionId: params.sessionId.trim() } : {})
+		});
+		return null;
+	}
+
+	private shouldDeliverEventToClient(clientId: string, event: Notification): boolean {
+		const subscription = this.eventSubscriptionsByClientId.get(clientId);
+		if (!subscription) {
+			return true;
+		}
+
+		return this.matchesEventSubscription(subscription, event);
+	}
+
+	private matchesEventSubscription(subscription: EventSubscription, event: Notification): boolean {
+		if (subscription.eventTypes && !subscription.eventTypes.includes(event.type)) {
+			return false;
+		}
+
+		if (subscription.missionId) {
+			if (!('missionId' in event) || event.missionId !== subscription.missionId) {
+				return false;
+			}
+		}
+
+		if (subscription.sessionId) {
+			if (!('sessionId' in event) || event.sessionId !== subscription.sessionId) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private async executeAirportClientConnect(request: Request): Promise<any> {

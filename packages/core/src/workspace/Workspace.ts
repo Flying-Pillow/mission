@@ -22,6 +22,10 @@ import {
 	type MissionAgentDisposable
 } from '../agent/events.js';
 import {
+	TerminalAgentTransport,
+	type TerminalSessionSnapshot
+} from '../agent/TerminalAgentTransport.js';
+import {
 	getMissionDirectoryPath,
 	getMissionWorkflowDefinitionPath,
 	getMissionWorktreesPath,
@@ -64,6 +68,7 @@ import {
 	type MissionActionList,
 	type MissionGateEvaluate,
 	type MissionAgentConsoleState,
+	type MissionAgentTerminalState,
 	type MissionAgentEvent,
 	type MissionAgentSessionRecord,
 	type MissionSelect,
@@ -73,6 +78,8 @@ import {
 	type SessionComplete,
 	type SessionConsoleState,
 	type SessionControl,
+	type SessionTerminalInput,
+	type SessionTerminalState,
 	type SessionPrompt
 } from '../daemon/protocol/contracts.js';
 import type {
@@ -81,7 +88,7 @@ import type {
 } from '../agent/AgentRuntimeTypes.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
-import { readSystemStatus } from '../system/SystemStatus.js';
+import { refreshSystemStatus } from '../system/SystemStatus.js';
 import {
 	WorkflowSettingsStore,
 	type WorkflowSettingsGetResult
@@ -96,11 +103,23 @@ type LoadedMission = {
 	autopilotEnabled: boolean;
 	autopilotQueue: Promise<void>;
 };
+
+type PendingTerminalNotification = {
+	loadedMission: LoadedMission;
+	event: TerminalSessionSnapshot;
+	timer: ReturnType<typeof setTimeout>;
+};
+
+const TERMINAL_EVENT_BATCH_WINDOW_MS = 50;
+
 export class MissionWorkspace {
 	private readonly store: FilesystemAdapter;
 	private readonly workflowSettingsStore: WorkflowSettingsStore;
 	private readonly agentRunners = new Map<string, AgentRunner>();
 	private readonly loadedMissions = new Map<string, LoadedMission>();
+	private readonly terminalTransport = new TerminalAgentTransport();
+	private readonly terminalSubscription: MissionAgentDisposable;
+	private readonly pendingTerminalNotifications = new Map<string, PendingTerminalNotification>();
 
 	public constructor(
 		private readonly workspaceRoot: string,
@@ -112,6 +131,85 @@ export class MissionWorkspace {
 		for (const [runnerId, runner] of agentRunners) {
 			this.agentRunners.set(runnerId, runner);
 		}
+		this.terminalSubscription = TerminalAgentTransport.onDidSessionUpdate((event) => {
+			const loadedMission = this.findLoadedMissionForSession(event.sessionName);
+			if (!loadedMission) {
+				return;
+			}
+			this.queueTerminalEvent(loadedMission, event);
+		});
+	}
+
+	private queueTerminalEvent(
+		loadedMission: LoadedMission,
+		event: TerminalSessionSnapshot
+	): void {
+		const key = this.createTerminalNotificationKey(loadedMission.missionId, event.sessionName);
+		const existing = this.pendingTerminalNotifications.get(key);
+		if (existing) {
+			clearTimeout(existing.timer);
+			const mergedEvent: TerminalSessionSnapshot = {
+				...event,
+				chunk: `${existing.event.chunk ?? ''}${event.chunk ?? ''}`,
+				screen: event.screen,
+				truncated: existing.event.truncated || event.truncated
+			};
+			if (this.shouldFlushTerminalEventImmediately(mergedEvent)) {
+				this.pendingTerminalNotifications.delete(key);
+				this.emitTerminalEvent(loadedMission, mergedEvent);
+				return;
+			}
+			this.pendingTerminalNotifications.set(key, {
+				loadedMission,
+				event: mergedEvent,
+				timer: setTimeout(() => {
+					this.flushTerminalEvent(key);
+				}, TERMINAL_EVENT_BATCH_WINDOW_MS)
+			});
+			return;
+		}
+
+		if (this.shouldFlushTerminalEventImmediately(event)) {
+			this.emitTerminalEvent(loadedMission, event);
+			return;
+		}
+
+		this.pendingTerminalNotifications.set(key, {
+			loadedMission,
+			event,
+			timer: setTimeout(() => {
+				this.flushTerminalEvent(key);
+			}, TERMINAL_EVENT_BATCH_WINDOW_MS)
+		});
+	}
+
+	private flushTerminalEvent(key: string): void {
+		const pending = this.pendingTerminalNotifications.get(key);
+		if (!pending) {
+			return;
+		}
+		this.pendingTerminalNotifications.delete(key);
+		this.emitTerminalEvent(pending.loadedMission, pending.event);
+	}
+
+	private emitTerminalEvent(
+		loadedMission: LoadedMission,
+		event: TerminalSessionSnapshot
+	): void {
+		this.emitEvent({
+			type: 'session.terminal',
+			missionId: loadedMission.missionId,
+			sessionId: event.sessionName,
+			state: this.toAgentTerminalEventState(event.sessionName, event)
+		});
+	}
+
+	private shouldFlushTerminalEventImmediately(event: TerminalSessionSnapshot): boolean {
+		return event.connected === false || event.dead;
+	}
+
+	private createTerminalNotificationKey(missionId: string, sessionId: string): string {
+		return `${missionId}:${sessionId}`;
 	}
 
 	public async executeMethod(request: Request): Promise<unknown> {
@@ -154,6 +252,10 @@ export class MissionWorkspace {
 				return this.listAgentSessions((request.params ?? {}) as MissionSelect);
 			case 'session.console.state':
 				return this.getAgentConsoleState((request.params ?? {}) as SessionConsoleState);
+			case 'session.terminal.state':
+				return this.getAgentTerminalState((request.params ?? {}) as SessionTerminalState);
+			case 'session.terminal.input':
+				return this.sendAgentTerminalInput((request.params ?? {}) as SessionTerminalInput);
 			case 'session.prompt':
 				return this.promptAgentSession((request.params ?? {}) as SessionPrompt);
 			case 'session.command':
@@ -196,6 +298,10 @@ export class MissionWorkspace {
 			: 50;
 		const limit = Math.max(1, Math.min(200, requestedLimit));
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const adapter = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -437,6 +543,10 @@ export class MissionWorkspace {
 		this.requireGitHubAuthentication(request);
 
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const github = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -601,6 +711,10 @@ export class MissionWorkspace {
 		this.requireGitHubAuthentication(request);
 
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const adapter = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -638,6 +752,57 @@ export class MissionWorkspace {
 	): Promise<MissionAgentConsoleState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.getAgentConsoleState(params.sessionId) ?? null;
+	}
+
+	private async getAgentTerminalState(
+		params: SessionTerminalState
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionSession(params);
+		const session = loadedMission.mission.getAgentSession(params.sessionId);
+		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+			return null;
+		}
+
+		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
+			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		});
+		if (!handle) {
+			return this.toAgentTerminalState(session.sessionId);
+		}
+
+		return this.toAgentTerminalState(session.sessionId, await this.terminalTransport.readSnapshot(handle));
+	}
+
+	private async sendAgentTerminalInput(
+		params: SessionTerminalInput
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionSession(params);
+		const session = loadedMission.mission.getAgentSession(params.sessionId);
+		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+			return null;
+		}
+
+		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
+			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		});
+		if (!handle) {
+			return this.toAgentTerminalState(session.sessionId);
+		}
+
+		if (params.cols !== undefined && params.rows !== undefined) {
+			await this.terminalTransport.resizeSession(handle, params.cols, params.rows);
+		}
+		if (typeof params.data === 'string' && params.data.length > 0) {
+			await this.terminalTransport.sendKeys(handle, params.data, {
+				...(params.literal !== undefined ? { literal: params.literal } : {})
+			});
+		}
+
+		if (params.respondWithState === false) {
+			return null;
+		}
+
+		return this.toAgentTerminalState(session.sessionId, await this.terminalTransport.readSnapshot(handle));
 	}
 
 	private async cancelAgentSession(params: SessionControl) {
@@ -947,7 +1112,7 @@ export class MissionWorkspace {
 					{
 						id: 'copilot-cli',
 						label: 'Copilot CLI',
-						description: 'Interactive Copilot CLI session in terminal-manager transport'
+						description: 'Interactive Copilot CLI session in daemon-backed PTY transport'
 					},
 					{
 						id: 'pi',
@@ -980,7 +1145,7 @@ export class MissionWorkspace {
 						id: 'autonomous',
 						label: 'Autonomous',
 						description: usesTerminalTransport
-							? 'Terminal-manager transport continues until interrupted or complete'
+							? 'PTY transport continues until interrupted or complete'
 							: 'Runtime continues with autonomous execution'
 					}
 				], control.settings.defaultAgentMode)
@@ -1294,7 +1459,7 @@ export class MissionWorkspace {
 			return;
 		}
 
-		const systemStatus = readSystemStatus({ cwd: this.workspaceRoot });
+		const systemStatus = refreshSystemStatus({ cwd: this.workspaceRoot });
 		if (!systemStatus.github.authenticated) {
 			throw new Error(systemStatus.github.detail ?? 'GitHub CLI authentication is required.');
 		}
@@ -1625,6 +1790,11 @@ export class MissionWorkspace {
 	}
 
 	public dispose(): void {
+		this.terminalSubscription.dispose();
+		for (const pending of this.pendingTerminalNotifications.values()) {
+			clearTimeout(pending.timer);
+		}
+		this.pendingTerminalNotifications.clear();
 		for (const loadedMission of this.loadedMissions.values()) {
 			loadedMission.consoleSubscription.dispose();
 			loadedMission.eventSubscription.dispose();
@@ -1664,6 +1834,56 @@ export class MissionWorkspace {
 
 	private isLoadedMissionActive(loadedMission: LoadedMission): boolean {
 		return this.loadedMissions.get(loadedMission.missionId) === loadedMission;
+	}
+
+	private findLoadedMissionForSession(sessionId: string): LoadedMission | undefined {
+		for (const loadedMission of this.loadedMissions.values()) {
+			if (loadedMission.mission.getAgentSession(sessionId)) {
+				return loadedMission;
+			}
+		}
+		return undefined;
+	}
+
+	private toAgentTerminalState(
+		sessionId: string,
+		snapshot?: TerminalSessionSnapshot
+	): MissionAgentTerminalState {
+		if (!snapshot) {
+			return {
+				sessionId,
+				connected: false,
+				dead: true,
+				exitCode: null,
+				screen: ''
+			};
+		}
+
+		return {
+			sessionId,
+			connected: snapshot.connected,
+			dead: snapshot.dead,
+			exitCode: snapshot.exitCode,
+			screen: snapshot.screen,
+			...(snapshot.truncated ? { truncated: true } : {}),
+			...(snapshot.chunk !== undefined ? { chunk: snapshot.chunk } : {}),
+			terminalHandle: {
+				sessionName: snapshot.sessionName,
+				paneId: snapshot.paneId,
+				...(snapshot.sharedSessionName ? { sharedSessionName: snapshot.sharedSessionName } : {})
+			}
+		};
+	}
+
+	private toAgentTerminalEventState(
+		sessionId: string,
+		snapshot?: TerminalSessionSnapshot
+	): MissionAgentTerminalState {
+		const state = this.toAgentTerminalState(sessionId, snapshot);
+		return {
+			...state,
+			screen: ''
+		};
 	}
 
 	private resolveRunnerId(runnerId?: string): string {

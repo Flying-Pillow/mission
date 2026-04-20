@@ -46,6 +46,7 @@ The current installer prepares the things Mission needs in order to feel smooth 
 | --- | --- |
 | Operator config | Creates the Mission user config file |
 | Mission workspace root | Chooses where isolated mission workspaces and worktrees will live |
+| Terminal runtime | Provisions or validates the configured terminal multiplexer used to host agent sessions |
 | GitHub integration | Provisions or validates the Mission-managed GitHub CLI when the default `gh` command is unavailable |
 
 In the current implementation, the user config is written to the usual XDG config location when available, otherwise under `~/.config/mission/config.json`. On supported Linux systems, Mission stores its managed runtime envelope under `~/.config/mission/runtime`.
@@ -58,10 +59,11 @@ These current runtime facts matter:
 | --- | --- |
 | Node.js 24 | Required for the workspace, the published Mission CLI, and the native Airport host toolchain |
 | pnpm 10 | Required as the workspace package manager; enable it through Corepack |
+| A PTY-capable Linux environment | Mission agent sessions run through the daemon-backed PTY transport, which requires the host to support pseudoterminals |
 | GitHub CLI | Used for Mission's GitHub-backed flows and provisioned by Mission on supported Linux systems when `gh` is missing |
 | The daemon | Auto-started by the Airport layout when needed |
 
-On Linux, Mission installs the managed GitHub CLI into its own runtime directory instead of relying on whatever happens to be in the general user bin path.
+On Linux, Mission installs the managed GitHub CLI runtime into its own runtime directory instead of relying on whatever happens to be in the general user bin path.
 
 ## Your First Run
 
@@ -88,6 +90,7 @@ The goal is not to make installation complicated. The goal is to make operation 
 Once installation is done:
 
 - your mission workspaces have a known home
+- the agent session transport can attach directly to daemon-owned PTYs without a required external multiplexer
 - the Airport host can rely on a pnpm workspace running on Node 24
 - reconnecting to Mission feels consistent across repositories
 

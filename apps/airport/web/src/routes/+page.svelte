@@ -2,6 +2,7 @@
 <script lang="ts">
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
@@ -50,6 +51,7 @@
             };
         };
     }>();
+    const appContext = getAppContext();
 
     const daemonStatusTone = $derived(
         data.appContext.daemon.running ? "connected" : "disconnected",
@@ -66,6 +68,34 @@
             ? "1 repository registered"
             : `${data.airportHome.repositories.length} repositories registered`,
     );
+    const selectedRepository = $derived.by(() =>
+        data.airportHome.repositories.find(
+            (repository: (typeof data.airportHome.repositories)[number]) =>
+                repository.repositoryRootPath ===
+                data.airportHome.selectedRepositoryRoot,
+        ),
+    );
+
+    syncAppContext();
+
+    $effect(() => {
+        syncAppContext();
+    });
+
+    function syncAppContext(): void {
+        appContext.setRepositories(data.airportHome.repositories);
+        appContext.setActiveRepository(
+            selectedRepository
+                ? {
+                      repositoryId: selectedRepository.repositoryId,
+                      repositoryRootPath: selectedRepository.repositoryRootPath,
+                  }
+                : undefined,
+        );
+        appContext.setActiveMission(undefined);
+        appContext.setActiveMissionOutline(undefined);
+        appContext.setActiveMissionSelectedNodeId(undefined);
+    }
 </script>
 
 <svelte:head>

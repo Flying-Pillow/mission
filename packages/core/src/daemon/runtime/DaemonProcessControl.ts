@@ -15,6 +15,7 @@ import {
 } from '../daemonPaths.js';
 
 const execFileAsync = promisify(execFile);
+const DAEMON_STATUS_TIMEOUT_MS = 2_000;
 
 export type DaemonRuntimeMode = 'build' | 'source';
 
@@ -55,8 +56,14 @@ export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResul
 
 	const client = new DaemonClient();
 	try {
-		await client.connect({ surfacePath: process.cwd(), socketPath: manifest.endpoint.path });
-		const ping = await client.request<Ping>('ping');
+		await client.connect({
+			surfacePath: process.cwd(),
+			socketPath: manifest.endpoint.path,
+			timeoutMs: DAEMON_STATUS_TIMEOUT_MS
+		});
+		const ping = await client.request<Ping>('ping', undefined, {
+			timeoutMs: DAEMON_STATUS_TIMEOUT_MS
+		});
 		return {
 			manifestPath,
 			running: true,

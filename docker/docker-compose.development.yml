@@ -12,11 +12,13 @@ services:
     stdin_open: true
     env_file:
       - ../.env
+    environment:
+      MISSIONS_PATH: /missions
+      MISSION_CONFIG_PATH: /config
     volumes:
       - "../:/mission"
-      - "$MISSIONS_PATH:/missions"
-      - "$CONFIG_PATH:/config"
-      - "$REPOSSITORY_PATH:/repositories"
+      - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
+      - "${HOST_MISSION_CONFIG_PATH:-/mnt/volatile/config}:/config"
       - "cargo-registry:/home/dev/.cargo/registry"
       - "cargo-git:/home/dev/.cargo/git"
       - "rustup:/home/dev/.rustup"

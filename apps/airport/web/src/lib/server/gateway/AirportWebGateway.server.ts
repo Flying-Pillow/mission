@@ -6,11 +6,13 @@ import {
     getMissionArtifactDefinition,
     getMissionStageDefinition,
     isMissionStageId,
-    TerminalAgentTransport,
     type MissionRepositoryCandidate,
     type MissionSelectionCandidate,
     type MissionAgentSessionRecord,
     type Notification,
+    type OperatorActionExecutionStep,
+    type OperatorActionListSnapshot,
+    type OperatorActionQueryContext,
     type OperatorStatus,
     type TrackedIssueSummary
 } from '@flying-pillow/mission-core';
@@ -19,6 +21,7 @@ import type {
     AgentPrompt,
     AirportHomeSnapshotDto,
     AirportRuntimeEventEnvelopeDto,
+    ControlDocumentResponse,
     GitHubIssueDetailDto,
     MissionAgentSessionDto,
     MissionSessionTerminalSnapshotDto,
@@ -40,8 +43,13 @@ import {
     repositorySurfaceSnapshotDtoSchema,
     trackedIssueSummaryDtoSchema
 } from '@flying-pillow/mission-core';
-import { connectAuthenticatedDaemonClient, logAirportWebPerf } from '$lib/server/daemon.server';
+import {
+    connectAuthenticatedDaemonClient,
+    connectDedicatedAuthenticatedDaemonClient
+} from '$lib/server/daemon.server';
 import { fetchGitHubIssueDetail } from '$lib/server/github-issues.server';
+
+const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 
 export class AirportWebGateway {
     public constructor(private readonly locals?: App.Locals) { }
@@ -75,7 +83,6 @@ export class AirportWebGateway {
         repositoryId: string;
         repositoryRootPath?: string;
     }): Promise<TrackedIssueSummaryDto[]> {
-        const startedAt = performance.now();
         const repositoryRootPath = input.repositoryRootPath?.trim()
             || (await this.resolveRepositoryCandidate({
                 repositoryId: input.repositoryId
@@ -84,45 +91,29 @@ export class AirportWebGateway {
         const daemon = await this.connectDaemon(repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
-            const statusStartedAt = performance.now();
             const status = await withTimeout(
                 api.control.getStatus(),
                 2500,
                 'Repository issues status request timed out.'
             );
-            logAirportWebPerf('gateway.repositoryIssues.controlStatus', statusStartedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath
-            });
 
             if (status.control?.trackingProvider !== 'github') {
                 return [];
             }
 
-            const issuesStartedAt = performance.now();
             const issues = await withTimeout(
                 api.control.listOpenIssues(25),
                 2500,
                 'Issue listing timed out.'
             ).catch(() => []);
-            logAirportWebPerf('gateway.repositoryIssues.listOpenIssues', issuesStartedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath,
-                issueCount: issues.length
-            });
 
             return issues.map((issue) => this.toTrackedIssueSummaryDto(issue));
         } finally {
-            logAirportWebPerf('gateway.repositoryIssues.total', startedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath
-            });
             daemon.dispose();
         }
     }
 
     public async getMissionRuntimeSnapshot(missionId: string, surfacePath?: string): Promise<MissionRuntimeSnapshotDto> {
-        const startedAt = performance.now();
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission runtime snapshot requires a missionId.');
@@ -131,15 +122,165 @@ export class AirportWebGateway {
         const daemon = await this.connectDaemon(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            return this.buildMissionRuntimeSnapshot({
+            return await this.buildMissionRuntimeSnapshot({
                 api,
                 missionId: normalizedMissionId
             });
         } finally {
-            logAirportWebPerf('gateway.missionRuntimeSnapshot.total', startedAt, {
-                missionId: normalizedMissionId,
-                surfacePath: surfacePath?.trim()
-            });
+            daemon.dispose();
+        }
+    }
+
+    public async getMissionControlSnapshot(input: {
+        missionId: string;
+        surfacePath?: string;
+    }): Promise<{
+        missionRuntime: MissionRuntimeSnapshotDto;
+        operatorStatus: OperatorStatus;
+    }> {
+        const missionId = input.missionId.trim();
+        if (!missionId) {
+            throw new Error('Mission control snapshot requires a missionId.');
+        }
+
+        const daemon = await this.connectDaemon(input.surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            const operatorStatus = await withTimeout(
+                api.mission.getStatus({ missionId }),
+                2500,
+                'Mission operator status request timed out.'
+            );
+
+            return {
+                missionRuntime: await this.buildMissionRuntimeSnapshot({
+                    api,
+                    missionId,
+                    status: operatorStatus
+                }),
+                operatorStatus
+            };
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async getMissionOperatorStatus(missionId: string, surfacePath?: string): Promise<OperatorStatus> {
+        const normalizedMissionId = missionId.trim();
+        if (!normalizedMissionId) {
+            throw new Error('Mission operator status requires a missionId.');
+        }
+
+        const daemon = await this.connectDaemon(surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            return await withTimeout(
+                api.mission.getStatus({ missionId: normalizedMissionId }),
+                2500,
+                'Mission operator status request timed out.'
+            );
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async getMissionActionSnapshot(input: {
+        missionId: string;
+        context?: OperatorActionQueryContext;
+        surfacePath?: string;
+    }): Promise<OperatorActionListSnapshot> {
+        const missionId = input.missionId.trim();
+        if (!missionId) {
+            throw new Error('Mission action snapshot requires a missionId.');
+        }
+
+        const daemon = await this.connectDaemon(input.surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            return await withTimeout(
+                api.mission.listAvailableActionsSnapshot(
+                    { missionId },
+                    input.context,
+                ),
+                2500,
+                'Mission action snapshot request timed out.'
+            );
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async executeMissionAction(input: {
+        missionId: string;
+        actionId: string;
+        steps?: OperatorActionExecutionStep[];
+        terminalSessionName?: string;
+        surfacePath?: string;
+    }): Promise<OperatorStatus> {
+        const missionId = input.missionId.trim();
+        const actionId = input.actionId.trim();
+        if (!missionId || !actionId) {
+            throw new Error('Mission action execution requires missionId and actionId.');
+        }
+
+        const daemon = await this.connectDaemon(input.surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            return await withTimeout(
+                api.mission.executeAction(
+                    { missionId },
+                    actionId,
+                    input.steps ?? [],
+                    input.terminalSessionName?.trim()
+                        ? { terminalSessionName: input.terminalSessionName.trim() }
+                        : {},
+                ),
+                2500,
+                `Mission action '${actionId}' timed out.`
+            );
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async readControlDocument(filePath: string, surfacePath?: string): Promise<ControlDocumentResponse> {
+        const normalizedPath = filePath.trim();
+        if (!normalizedPath) {
+            throw new Error('Document read requires a filePath.');
+        }
+
+        const daemon = await this.connectDaemon(surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            return await withTimeout(
+                api.control.readDocument(normalizedPath),
+                2500,
+                `Document read timed out for '${normalizedPath}'.`
+            );
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async writeControlDocument(input: {
+        filePath: string;
+        content: string;
+        surfacePath?: string;
+    }): Promise<ControlDocumentResponse> {
+        const normalizedPath = input.filePath.trim();
+        if (!normalizedPath) {
+            throw new Error('Document write requires a filePath.');
+        }
+
+        const daemon = await this.connectDaemon(input.surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            return await withTimeout(
+                api.control.writeDocument(normalizedPath, input.content),
+                2500,
+                `Document write timed out for '${normalizedPath}'.`
+            );
+        } finally {
             daemon.dispose();
         }
     }
@@ -173,7 +314,7 @@ export class AirportWebGateway {
                 `Mission task command '${input.action}' timed out.`
             );
 
-            return this.buildMissionRuntimeSnapshot({
+            return await this.buildMissionRuntimeSnapshot({
                 api,
                 missionId,
                 status
@@ -201,7 +342,7 @@ export class AirportWebGateway {
                 `Mission command '${input.action}' timed out.`
             );
 
-            return this.buildMissionRuntimeSnapshot({
+            return await this.buildMissionRuntimeSnapshot({
                 api,
                 missionId,
                 status
@@ -279,7 +420,7 @@ export class AirportWebGateway {
                     break;
             }
 
-            return this.buildMissionRuntimeSnapshot({
+            return await this.buildMissionRuntimeSnapshot({
                 api,
                 missionId
             });
@@ -289,7 +430,6 @@ export class AirportWebGateway {
     }
 
     public async getAirportHomeSnapshot(): Promise<AirportHomeSnapshotDto> {
-        const startedAt = performance.now();
         if (this.locals?.appContext.daemon.running === false) {
             return this.createEmptyAirportHomeSnapshot();
         }
@@ -298,15 +438,11 @@ export class AirportWebGateway {
         try {
             daemon = await this.connectDaemon();
             const api = new DaemonApi(daemon.client);
-            const statusStartedAt = performance.now();
             const status = await withTimeout(
                 api.control.getStatus(),
                 2500,
                 'Airport home status request timed out.'
             );
-            logAirportWebPerf('gateway.airportHome.controlStatus', statusStartedAt, {
-                repositoryCount: status.availableRepositories?.length ?? 0
-            });
 
             return airportHomeSnapshotDtoSchema.parse({
                 ...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
@@ -325,7 +461,6 @@ export class AirportWebGateway {
         } catch {
             return this.createEmptyAirportHomeSnapshot();
         } finally {
-            logAirportWebPerf('gateway.airportHome.total', startedAt);
             daemon?.dispose();
         }
     }
@@ -357,7 +492,6 @@ export class AirportWebGateway {
         repositoryRootPath?: string;
         selectedMissionId?: string;
     }): Promise<RepositorySurfaceSnapshotDto> {
-        const startedAt = performance.now();
         const repository = input.repository
             ?? await this.resolveRepositoryCandidate({
                 repositoryId: input.repositoryId,
@@ -367,17 +501,11 @@ export class AirportWebGateway {
         const daemon = await this.connectDaemon(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
-            const statusStartedAt = performance.now();
             const status = await withTimeout(
                 api.control.getStatus(),
                 2500,
                 'Repository surface status request timed out.'
             );
-            logAirportWebPerf('gateway.repositorySurface.controlStatus', statusStartedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath: repository.repositoryRootPath,
-                missionCount: status.availableMissions?.length ?? 0
-            });
             const selectedMissionId = input.selectedMissionId?.trim();
             const selectedMission = selectedMissionId
                 && (status.availableMissions ?? []).some((candidate) => candidate.missionId === selectedMissionId)
@@ -398,11 +526,6 @@ export class AirportWebGateway {
                 ...(selectedMission ? { selectedMission } : {})
             });
         } finally {
-            logAirportWebPerf('gateway.repositorySurface.total', startedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath: repository.repositoryRootPath,
-                selectedMissionId: input.selectedMissionId?.trim()
-            });
             daemon.dispose();
         }
     }
@@ -412,7 +535,6 @@ export class AirportWebGateway {
         repositoryRootPath?: string;
         issueNumber: number;
     }): Promise<GitHubIssueDetailDto> {
-        const startedAt = performance.now();
         const repositoryRootPath = input.repositoryRootPath?.trim()
             || (await this.resolveRepositoryCandidate({
                 repositoryId: input.repositoryId
@@ -437,11 +559,6 @@ export class AirportWebGateway {
                 issueNumber: input.issueNumber
             });
         } finally {
-            logAirportWebPerf('gateway.repositoryIssueDetail.total', startedAt, {
-                repositoryId: input.repositoryId,
-                repositoryRootPath,
-                issueNumber: input.issueNumber
-            });
             daemon.dispose();
         }
     }
@@ -505,12 +622,12 @@ export class AirportWebGateway {
         onEvent: (event: AirportRuntimeEventEnvelopeDto) => void;
     }): Promise<{ dispose(): void }> {
         const missionId = input.missionId?.trim();
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectDedicatedDaemon();
+        await daemon.client.request<null>('event.subscribe', {
+            eventTypes: ['mission.actions.changed', 'mission.status', 'session.lifecycle'],
+            ...(missionId ? { missionId } : {})
+        });
         const subscription = daemon.client.onDidEvent((event) => {
-            if (!this.matchesMission(event, missionId)) {
-                return;
-            }
-
             input.onEvent(this.toRuntimeEventEnvelope(event));
         });
 
@@ -526,11 +643,12 @@ export class AirportWebGateway {
         missionId: string;
         sessionId: string;
     }): Promise<MissionSessionTerminalSnapshotDto> {
-        const context = await this.resolveTerminalSessionContext(input);
-        if (!context) {
+        const missionId = input.missionId.trim();
+        const sessionId = input.sessionId.trim();
+        if (!missionId || !sessionId) {
             return missionSessionTerminalSnapshotDtoSchema.parse({
-                missionId: input.missionId.trim(),
-                sessionId: input.sessionId.trim(),
+                missionId,
+                sessionId,
                 connected: false,
                 dead: true,
                 exitCode: null,
@@ -538,74 +656,86 @@ export class AirportWebGateway {
             });
         }
 
-        const terminalTransport = new TerminalAgentTransport({
-            ...(context.sharedSessionName ? { sharedSessionName: context.sharedSessionName } : {})
-        });
-        const handle = await terminalTransport.attachSession(context.session.terminalSessionName as string, {
-            ...(context.sharedSessionName ? { sharedSessionName: context.sharedSessionName } : {}),
-            ...(context.session.terminalPaneId ? { paneId: context.session.terminalPaneId } : {})
-        });
-        if (!handle) {
-            return missionSessionTerminalSnapshotDtoSchema.parse({
-                missionId: context.missionId,
-                sessionId: context.session.sessionId,
-                connected: false,
-                dead: true,
-                exitCode: null,
-                screen: ''
-            });
-        }
-
-        const [paneState, screen] = await Promise.all([
-            terminalTransport.readPaneState(handle),
-            terminalTransport.capturePane(handle).catch(() => '')
-        ]);
-
-        return missionSessionTerminalSnapshotDtoSchema.parse({
-            missionId: context.missionId,
-            sessionId: context.session.sessionId,
-            connected: true,
-            dead: paneState.dead,
-            exitCode: paneState.dead ? paneState.exitCode : null,
-            screen,
-            terminalHandle: {
-                sessionName: handle.sessionName,
-                paneId: handle.paneId,
-                ...(handle.sharedSessionName ? { sharedSessionName: handle.sharedSessionName } : {})
+        const daemon = await this.connectDaemon();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const state = await withTimeout(
+                api.mission.getSessionTerminalState({ missionId }, sessionId),
+                2500,
+                'Mission terminal snapshot request timed out.'
+            );
+            if (!state) {
+                return missionSessionTerminalSnapshotDtoSchema.parse({
+                    missionId,
+                    sessionId,
+                    connected: false,
+                    dead: true,
+                    exitCode: null,
+                    screen: ''
+                });
             }
-        });
+
+            const terminalScreen = clipTerminalScreen(state.screen);
+
+            return missionSessionTerminalSnapshotDtoSchema.parse({
+                missionId,
+                sessionId,
+                connected: state.connected,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                screen: terminalScreen.screen,
+                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            });
+        } finally {
+            daemon.dispose();
+        }
     }
 
     public async sendMissionSessionTerminalInput(input: {
         missionId: string;
         sessionId: string;
-        data: string;
+        data?: string;
         literal?: boolean;
+        cols?: number;
+        rows?: number;
     }): Promise<MissionSessionTerminalSnapshotDto> {
-        const context = await this.resolveTerminalSessionContext(input);
-        if (!context) {
-            throw new Error(`Mission session '${input.sessionId}' is not available as a terminal-backed session.`);
+        const missionId = input.missionId.trim();
+        const sessionId = input.sessionId.trim();
+        const daemon = await this.connectDaemon();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const state = await withTimeout(
+                api.mission.sendSessionTerminalInput(
+                    { missionId },
+                    sessionId,
+                    {
+                        ...(input.data !== undefined ? { data: input.data } : {}),
+                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                        ...(input.rows !== undefined ? { rows: input.rows } : {})
+                    }
+                ),
+                2500,
+                'Mission terminal input request timed out.'
+            );
+            if (!state) {
+                throw new Error(`Mission session '${sessionId}' is not available as a terminal-backed session.`);
+            }
+            const terminalScreen = clipTerminalScreen(state.screen);
+            return missionSessionTerminalSnapshotDtoSchema.parse({
+                missionId,
+                sessionId,
+                connected: state.connected,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                screen: terminalScreen.screen,
+                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            });
+        } finally {
+            daemon.dispose();
         }
-
-        const terminalTransport = new TerminalAgentTransport({
-            ...(context.sharedSessionName ? { sharedSessionName: context.sharedSessionName } : {})
-        });
-        const handle = await terminalTransport.attachSession(context.session.terminalSessionName as string, {
-            ...(context.sharedSessionName ? { sharedSessionName: context.sharedSessionName } : {}),
-            ...(context.session.terminalPaneId ? { paneId: context.session.terminalPaneId } : {})
-        });
-        if (!handle) {
-            throw new Error(`Unable to attach terminal handle for session '${input.sessionId}'.`);
-        }
-
-        await terminalTransport.sendKeys(handle, input.data, {
-            ...(input.literal !== undefined ? { literal: input.literal } : {})
-        });
-
-        return this.getMissionSessionTerminalSnapshot({
-            missionId: context.missionId,
-            sessionId: context.session.sessionId
-        });
     }
 
     private matchesMission(event: Notification, missionId?: string): boolean {
@@ -617,6 +747,7 @@ export class AirportWebGateway {
             case 'mission.actions.changed':
             case 'mission.status':
             case 'session.console':
+            case 'session.terminal':
             case 'session.event':
             case 'session.lifecycle':
                 return event.missionId === missionId;
@@ -681,6 +812,7 @@ export class AirportWebGateway {
             case 'mission.status':
                 return event.status.workflow?.updatedAt ?? new Date().toISOString();
             case 'session.console':
+            case 'session.terminal':
                 return new Date().toISOString();
             case 'session.event':
                 return event.event.state.lastUpdatedAt;
@@ -696,12 +828,28 @@ export class AirportWebGateway {
             case 'mission.actions.changed':
             case 'mission.status':
             case 'session.console':
+            case 'session.terminal':
             case 'session.event':
             case 'session.lifecycle':
                 return event.missionId;
             case 'airport.state':
             case 'control.workflow.settings.updated':
                 return undefined;
+        }
+    }
+
+    private shouldForwardRuntimeEvent(event: Notification): boolean {
+        switch (event.type) {
+            case 'airport.state':
+            case 'mission.actions.changed':
+            case 'mission.status':
+            case 'session.lifecycle':
+                return true;
+            case 'session.console':
+            case 'session.terminal':
+            case 'session.event':
+            case 'control.workflow.settings.updated':
+                return false;
         }
     }
 
@@ -810,13 +958,17 @@ export class AirportWebGateway {
                 return undefined;
             }
 
-            const sharedSessionName = await withTimeout(
+            const airportSessionName = await withTimeout(
                 api.airport.getStatus(),
                 2500,
                 'Airport status request timed out.'
             )
                 .then((status) => status.state.airport.substrate.sessionName)
                 .catch(() => undefined);
+
+            const sharedSessionName = airportSessionName?.trim() === session.terminalSessionName.trim()
+                ? airportSessionName
+                : undefined;
 
             return {
                 missionId,
@@ -906,10 +1058,22 @@ export class AirportWebGateway {
         return withTimeout(
             connectAuthenticatedDaemonClient({
                 locals: this.locals,
-                allowStart: false,
+                allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
             }),
-            2000,
+            5000,
+            'Mission daemon connection timed out.'
+        );
+    }
+
+    private async connectDedicatedDaemon(surfacePath?: string) {
+        return withTimeout(
+            connectDedicatedAuthenticatedDaemonClient({
+                locals: this.locals,
+                allowStart: true,
+                ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
+            }),
+            5000,
             'Mission daemon connection timed out.'
         );
     }
@@ -920,6 +1084,17 @@ export class AirportWebGateway {
             ...(this.locals?.appContext.daemon.running ? {} : { settingsComplete: false })
         });
     }
+}
+
+function clipTerminalScreen(screen: string): { screen: string; truncated: boolean } {
+    if (screen.length <= AIRPORT_WEB_TERMINAL_SCREEN_LIMIT) {
+        return { screen, truncated: false };
+    }
+
+    return {
+        screen: screen.slice(-AIRPORT_WEB_TERMINAL_SCREEN_LIMIT),
+        truncated: true
+    };
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

@@ -2,6 +2,7 @@
 <script lang="ts">
     import { getRepositoryIssue, getRepositoryIssues } from "./issue.remote";
     import { startMissionFromIssue } from "./mission.remote";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { onMount, type Component } from "svelte";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
@@ -10,10 +11,11 @@
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
-    import SelectedMission from "$lib/components/entities/Mission/SelectedMission.svelte";
+    import MissionSummary from "$lib/components/entities/Mission/MissionSummary.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import RepositoryCard from "$lib/components/entities/Repository/Repository.svelte";
     import type { SelectedIssueSummary } from "$lib/components/entities/types";
+    import type { RepositorySurfaceSnapshotDto } from "@flying-pillow/mission-core";
     import {
         SidebarInset,
         SidebarProvider,
@@ -21,14 +23,18 @@
 
     type Props = {
         data: {
-            repositorySurface: import("@flying-pillow/mission-core").RepositorySurfaceSnapshotDto;
+            airportRepositories: import("$lib/components/entities/types").RepositorySummary[];
+            repositorySurface: RepositorySurfaceSnapshotDto;
+            repositoryId: string;
         };
     };
 
     let { data }: Props = $props();
+    const appContext = getAppContext();
     const missionCommands = new MissionCommandTransport();
+    const repositorySurface = $derived(data.repositorySurface);
     const repository = $derived(
-        new RepositoryEntity(data.repositorySurface, {
+        new RepositoryEntity(repositorySurface, {
             gateway: {
                 listIssues: (input) => getRepositoryIssues(input),
                 getIssue: (input) => getRepositoryIssue(input).run(),
@@ -45,6 +51,31 @@
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
     let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
+
+    syncAppContext();
+
+    $effect(() => {
+        syncAppContext();
+    });
+
+    function syncAppContext(): void {
+        const repositories = data.airportRepositories.some(
+            (repository) =>
+                repository.repositoryId ===
+                repositorySurface.repository.repositoryId,
+        )
+            ? data.airportRepositories
+            : [repositorySurface.repository, ...data.airportRepositories];
+
+        appContext.setRepositories(repositories);
+        appContext.setActiveRepository({
+            repositoryId: repositorySurface.repository.repositoryId,
+            repositoryRootPath: repositorySurface.repository.repositoryRootPath,
+        });
+        appContext.setActiveMission(repositorySurface.selectedMissionId);
+        appContext.setActiveMissionOutline(undefined);
+        appContext.setActiveMissionSelectedNodeId(undefined);
+    }
 
     onMount(async () => {
         MarkdownViewer = (
@@ -93,6 +124,7 @@
                     >
                         <RepositoryList
                             missions={repository.missions}
+                            repositoryId={repository.repositoryId}
                             {missionCountLabel}
                             selectedMissionId={repository.selectedMissionId}
                         />
@@ -132,7 +164,7 @@
                                 {/if}
 
                                 {#if selectedMission}
-                                    <SelectedMission
+                                    <MissionSummary
                                         selectedMissionId={repository.selectedMissionId}
                                         {selectedMission}
                                     />

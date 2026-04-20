@@ -942,6 +942,9 @@ export class Mission {
 		if (state === 'running') {
 			return '#3fb950';
 		}
+		if (state === 'terminated') {
+			return '#9be9a8';
+		}
 		if (state === 'failed') {
 			return '#f85149';
 		}
@@ -949,7 +952,7 @@ export class Mission {
 			return '#d29922';
 		}
 		if (state === 'completed') {
-			return '#f0f6fc';
+			return '#3fb950';
 		}
 		return fallbackColor;
 	}

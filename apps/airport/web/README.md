@@ -13,7 +13,7 @@ pnpm --dir apps/airport/web run dev
 For a remotely reachable dev server:
 
 ```sh
-pnpm --dir apps/airport/web run dev:remote
+pnpm --dir apps/airport/web run dev:host
 ```
 
 ## GitHub OAuth

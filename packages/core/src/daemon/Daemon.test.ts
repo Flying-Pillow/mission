@@ -77,6 +77,71 @@ describe('Daemon', () => {
 		});
 	});
 
+	it('drops session.terminal broadcasts until a matching subscriber is attached', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const idleClient = new DaemonClient();
+				const terminalClient = new DaemonClient();
+				const terminalEvent = {
+					type: 'session.terminal' as const,
+					missionId: 'mission-1',
+					sessionId: 'session-1',
+					state: {
+						connected: true,
+						dead: false,
+						exitCode: null,
+						screen: 'hello',
+						truncated: false,
+						chunk: 'hello'
+					}
+				};
+
+				try {
+					await idleClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					const idleEvents: string[] = [];
+					const idleSubscription = idleClient.onDidEvent((event) => {
+						idleEvents.push(event.type);
+					});
+
+					(daemon as unknown as { broadcastEvent(event: typeof terminalEvent): void }).broadcastEvent(terminalEvent);
+					await new Promise((resolve) => setTimeout(resolve, 25));
+					expect(idleEvents).toEqual([]);
+
+					await terminalClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					await terminalClient.request<null>('event.subscribe', {
+						eventTypes: ['session.terminal'],
+						missionId: 'mission-1',
+						sessionId: 'session-1'
+					});
+
+					const terminalEventPromise = new Promise<string>((resolve) => {
+						const terminalSubscription = terminalClient.onDidEvent((event) => {
+							if (event.type !== 'session.terminal') {
+								return;
+							}
+							terminalSubscription.dispose();
+							resolve(event.state.chunk ?? '');
+						});
+					});
+
+					(daemon as unknown as { broadcastEvent(event: typeof terminalEvent): void }).broadcastEvent(terminalEvent);
+					await expect(terminalEventPromise).resolves.toBe('hello');
+
+					idleSubscription.dispose();
+				} finally {
+					idleClient.dispose();
+					terminalClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it('prepares the first initialization mission in a worktree without mutating the original checkout', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
@@ -200,6 +265,77 @@ describe('Daemon', () => {
 					});
 				} finally {
 					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('filters daemon events per subscribed client connection', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const subscribedClient = new DaemonClient();
+				const unsubscribedClient = new DaemonClient();
+
+				try {
+					await subscribedClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					await unsubscribedClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+
+					const subscribedApi = new DaemonApi(subscribedClient);
+					const unsubscribedApi = new DaemonApi(unsubscribedClient);
+					await subscribedApi.control.initializeWorkflowSettings();
+					const initial = await subscribedApi.control.getWorkflowSettings();
+					await subscribedClient.request<null>('event.subscribe', {
+						eventTypes: ['control.workflow.settings.updated']
+					});
+
+					const subscribedEvents: string[] = [];
+					const unsubscribedEvents: string[] = [];
+					const subscribedEventPromise = new Promise<void>((resolve) => {
+						const subscription = subscribedClient.onDidEvent((event) => {
+							subscribedEvents.push(event.type);
+							if (event.type === 'control.workflow.settings.updated') {
+								subscription.dispose();
+								resolve();
+							}
+						});
+					});
+					const unsubscribedEventPromise = new Promise<void>((resolve) => {
+						const subscription = unsubscribedClient.onDidEvent((event) => {
+							unsubscribedEvents.push(event.type);
+							if (event.type === 'control.workflow.settings.updated') {
+								subscription.dispose();
+								resolve();
+							}
+						});
+					});
+
+					await unsubscribedApi.control.updateWorkflowSettings({
+						expectedRevision: initial.revision,
+						patch: [
+							{
+								op: 'replace',
+								path: '/execution/maxParallelTasks',
+								value: 2
+							}
+						],
+						context: {
+							requestedBySurface: 'test-suite',
+							requestedBy: 'vitest'
+						}
+					});
+
+					await Promise.all([subscribedEventPromise, unsubscribedEventPromise]);
+					expect(subscribedEvents).toEqual(['control.workflow.settings.updated']);
+					expect(unsubscribedEvents).toContain('control.workflow.settings.updated');
+				} finally {
+					subscribedClient.dispose();
+					unsubscribedClient.dispose();
 					await daemon.close();
 				}
 			} finally {
