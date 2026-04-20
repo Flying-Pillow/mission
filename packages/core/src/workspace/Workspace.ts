@@ -14,13 +14,19 @@ import {
 	type MissionDaemonSettings,
 	writeMissionDaemonSettings
 } from '../lib/daemonConfig.js';
+import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
 import {
 	GitHubPlatformAdapter,
+	type GitHubBranchSyncStatus,
 	resolveGitHubRepositoryFromWorkspace
 } from '../platforms/GitHubPlatformAdapter.js';
 import {
 	type MissionAgentDisposable
 } from '../agent/events.js';
+import {
+	TerminalAgentTransport,
+	type TerminalSessionSnapshot
+} from '../agent/TerminalAgentTransport.js';
 import {
 	getMissionDirectoryPath,
 	getMissionWorkflowDefinitionPath,
@@ -39,6 +45,7 @@ import type {
 	MissionControlPlaneStatus,
 	MissionOperationalMode,
 	MissionSelectionCandidate,
+	MissionStageId,
 	MissionTaskState,
 	MissionSelector,
 	TrackedIssueSummary,
@@ -64,14 +71,20 @@ import {
 	type MissionActionList,
 	type MissionGateEvaluate,
 	type MissionAgentConsoleState,
+	type MissionAgentTerminalState,
 	type MissionAgentEvent,
 	type MissionAgentSessionRecord,
+	type MissionTerminalInput,
+	type MissionTerminalStateRequest,
 	type MissionSelect,
 	type Notification,
 	type Request,
 	type SessionCommand,
+	type SessionComplete,
 	type SessionConsoleState,
 	type SessionControl,
+	type SessionTerminalInput,
+	type SessionTerminalState,
 	type SessionPrompt
 } from '../daemon/protocol/contracts.js';
 import type {
@@ -80,7 +93,7 @@ import type {
 } from '../agent/AgentRuntimeTypes.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
-import { readSystemStatus } from '../system/SystemStatus.js';
+import { refreshSystemStatus } from '../system/SystemStatus.js';
 import {
 	WorkflowSettingsStore,
 	type WorkflowSettingsGetResult
@@ -90,16 +103,73 @@ type LoadedMission = {
 	missionId: string;
 	branchRef: string;
 	mission: Mission;
+	commandState: LoadedMissionCommandState;
 	consoleSubscription: MissionAgentDisposable;
 	eventSubscription: MissionAgentDisposable;
 	autopilotEnabled: boolean;
 	autopilotQueue: Promise<void>;
 };
+
+type LoadedMissionCommandState = {
+	repositorySync?: MissionRepositorySyncState;
+};
+
+type MissionRepositorySyncState = {
+	provider: 'github';
+	status: GitHubBranchSyncStatus['status'] | 'unsupported' | 'error';
+	branchRef: string;
+	checkedAt: string;
+	revision: string;
+	reason?: string;
+	trackingRef?: string;
+	aheadCount?: number;
+	behindCount?: number;
+	localHead?: string;
+	remoteHead?: string;
+};
+
+type MissionWorkspaceCommandContext = {
+	loadedMission: LoadedMission;
+	missionStatus: OperatorStatus;
+	currentStageId?: MissionStageId;
+	repositorySync?: MissionRepositorySyncState;
+};
+
+type MissionWorkspaceCommandRuleResult = {
+	enabled: boolean;
+	reason?: string;
+};
+
+type MissionWorkspaceCommandDefinition = {
+	id: string;
+	label: string;
+	action: string;
+	ordering?: OperatorActionDescriptor['ordering'];
+	ui: NonNullable<OperatorActionDescriptor['ui']>;
+	evaluate: (context: MissionWorkspaceCommandContext) => MissionWorkspaceCommandRuleResult;
+	buildFlow?: (
+		workspace: MissionWorkspace,
+		context: MissionWorkspaceCommandContext
+	) => Promise<OperatorActionFlowDescriptor>;
+};
+
+type PendingTerminalNotification = {
+	loadedMission: LoadedMission;
+	event: TerminalSessionSnapshot;
+	timer: ReturnType<typeof setTimeout>;
+};
+
+const TERMINAL_EVENT_BATCH_WINDOW_MS = 50;
+const MISSION_TERMINAL_SESSION_PREFIX = 'mission-shell';
+
 export class MissionWorkspace {
 	private readonly store: FilesystemAdapter;
 	private readonly workflowSettingsStore: WorkflowSettingsStore;
 	private readonly agentRunners = new Map<string, AgentRunner>();
 	private readonly loadedMissions = new Map<string, LoadedMission>();
+	private readonly terminalTransport = new TerminalAgentTransport();
+	private readonly terminalSubscription: MissionAgentDisposable;
+	private readonly pendingTerminalNotifications = new Map<string, PendingTerminalNotification>();
 
 	public constructor(
 		private readonly workspaceRoot: string,
@@ -111,6 +181,124 @@ export class MissionWorkspace {
 		for (const [runnerId, runner] of agentRunners) {
 			this.agentRunners.set(runnerId, runner);
 		}
+		this.terminalSubscription = TerminalAgentTransport.onDidSessionUpdate((event) => {
+			const loadedMission = this.findLoadedMissionForSession(event.sessionName);
+			if (!loadedMission) {
+				return;
+			}
+			this.queueTerminalEvent(loadedMission, event);
+		});
+	}
+
+	private queueTerminalEvent(
+		loadedMission: LoadedMission,
+		event: TerminalSessionSnapshot
+	): void {
+		const key = this.createTerminalNotificationKey(loadedMission.missionId, event.sessionName);
+		const existing = this.pendingTerminalNotifications.get(key);
+		if (existing) {
+			clearTimeout(existing.timer);
+			const mergedEvent: TerminalSessionSnapshot = {
+				...event,
+				chunk: `${existing.event.chunk ?? ''}${event.chunk ?? ''}`,
+				screen: event.screen,
+				truncated: existing.event.truncated || event.truncated
+			};
+			if (this.shouldFlushTerminalEventImmediately(mergedEvent)) {
+				this.pendingTerminalNotifications.delete(key);
+				this.emitTerminalEvent(loadedMission, mergedEvent);
+				return;
+			}
+			this.pendingTerminalNotifications.set(key, {
+				loadedMission,
+				event: mergedEvent,
+				timer: setTimeout(() => {
+					this.flushTerminalEvent(key);
+				}, TERMINAL_EVENT_BATCH_WINDOW_MS)
+			});
+			return;
+		}
+
+		if (this.shouldFlushTerminalEventImmediately(event)) {
+			this.emitTerminalEvent(loadedMission, event);
+			return;
+		}
+
+		this.pendingTerminalNotifications.set(key, {
+			loadedMission,
+			event,
+			timer: setTimeout(() => {
+				this.flushTerminalEvent(key);
+			}, TERMINAL_EVENT_BATCH_WINDOW_MS)
+		});
+	}
+
+	private flushTerminalEvent(key: string): void {
+		const pending = this.pendingTerminalNotifications.get(key);
+		if (!pending) {
+			return;
+		}
+		this.pendingTerminalNotifications.delete(key);
+		this.emitTerminalEvent(pending.loadedMission, pending.event);
+	}
+
+	private emitTerminalEvent(
+		loadedMission: LoadedMission,
+		event: TerminalSessionSnapshot
+	): void {
+		this.emitEvent({
+			type: 'session.terminal',
+			missionId: loadedMission.missionId,
+			sessionId: event.sessionName,
+			state: this.toAgentTerminalEventState(event.sessionName, event)
+		});
+	}
+
+	private shouldFlushTerminalEventImmediately(event: TerminalSessionSnapshot): boolean {
+		return event.connected === false || event.dead;
+	}
+
+	private createTerminalNotificationKey(missionId: string, sessionId: string): string {
+		return `${missionId}:${sessionId}`;
+	}
+
+	private async ensureMissionTerminalSession(
+		loadedMission: LoadedMission
+	): Promise<{
+		sessionId: string;
+		handle: import('../agent/TerminalAgentTransport.js').TerminalSessionHandle;
+		snapshot: TerminalSessionSnapshot;
+	}> {
+		const sessionId = this.getMissionTerminalSessionId(loadedMission.missionId);
+		const existingHandle = await this.terminalTransport.attachSession(sessionId);
+		if (existingHandle) {
+			const snapshot = await this.terminalTransport.readSnapshot(existingHandle);
+			if (!snapshot.dead) {
+				return {
+					sessionId,
+					handle: existingHandle,
+					snapshot
+				};
+			}
+		}
+
+		const openedHandle = await this.terminalTransport.openSession({
+			workingDirectory: this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir()),
+			sessionName: sessionId,
+			sessionPrefix: MISSION_TERMINAL_SESSION_PREFIX,
+			command: resolveMissionTerminalCommand(),
+			args: resolveMissionTerminalArgs(),
+			env: buildMissionTerminalEnv()
+		});
+		return {
+			sessionId,
+			handle: openedHandle,
+			snapshot: await this.terminalTransport.readSnapshot(openedHandle)
+		};
+	}
+
+	private getMissionTerminalSessionId(missionId: string): string {
+		return `${MISSION_TERMINAL_SESSION_PREFIX}:${missionId}`;
 	}
 
 	public async executeMethod(request: Request): Promise<unknown> {
@@ -149,14 +337,24 @@ export class MissionWorkspace {
 				return this.executeMissionAction((request.params ?? {}) as MissionActionExecute);
 			case 'mission.gate.evaluate':
 				return this.evaluateGate((request.params ?? {}) as MissionGateEvaluate);
+			case 'mission.terminal.state':
+				return this.getMissionTerminalState((request.params ?? {}) as MissionTerminalStateRequest);
+			case 'mission.terminal.input':
+				return this.sendMissionTerminalInput((request.params ?? {}) as MissionTerminalInput);
 			case 'session.list':
 				return this.listAgentSessions((request.params ?? {}) as MissionSelect);
 			case 'session.console.state':
 				return this.getAgentConsoleState((request.params ?? {}) as SessionConsoleState);
+			case 'session.terminal.state':
+				return this.getAgentTerminalState((request.params ?? {}) as SessionTerminalState);
+			case 'session.terminal.input':
+				return this.sendAgentTerminalInput((request.params ?? {}) as SessionTerminalInput);
 			case 'session.prompt':
 				return this.promptAgentSession((request.params ?? {}) as SessionPrompt);
 			case 'session.command':
 				return this.commandAgentSession((request.params ?? {}) as SessionCommand);
+			case 'session.complete':
+				return this.completeAgentSession((request.params ?? {}) as SessionComplete);
 			case 'session.cancel':
 				return this.cancelAgentSession((request.params ?? {}) as SessionControl);
 			case 'session.terminate':
@@ -193,6 +391,10 @@ export class MissionWorkspace {
 			: 50;
 		const limit = Math.max(1, Math.min(200, requestedLimit));
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const adapter = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -413,6 +615,10 @@ export class MissionWorkspace {
 
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
+		const workspaceStatus = await this.executeWorkspaceMissionAction(loadedMission, params);
+		if (workspaceStatus) {
+			return workspaceStatus;
+		}
 		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? [], {
 			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
 		});
@@ -422,10 +628,13 @@ export class MissionWorkspace {
 
 	private async listMissionActions(params: MissionActionList): Promise<OperatorActionListSnapshot> {
 		const loadedMission = await this.requireMissionContext(params.selector);
+		await this.ensureLoadedMissionCommandState(loadedMission);
 		const snapshot = await loadedMission.mission.listAvailableActionsSnapshot();
+		const status = await loadedMission.mission.status();
+		const workspaceActions = await this.buildWorkspaceMissionActions(loadedMission, status);
 		return {
-			actions: this.resolveAvailableActions(snapshot.actions, params.context),
-			revision: snapshot.revision
+			actions: this.resolveAvailableActions([...snapshot.actions, ...workspaceActions], params.context),
+			revision: this.buildMissionActionRevision(loadedMission.missionId, status, loadedMission)
 		};
 	}
 
@@ -434,6 +643,10 @@ export class MissionWorkspace {
 		this.requireGitHubAuthentication(request);
 
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const github = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -598,6 +811,10 @@ export class MissionWorkspace {
 		this.requireGitHubAuthentication(request);
 
 		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
 		const adapter = new GitHubPlatformAdapter(
 			this.workspaceRoot,
 			githubRepository,
@@ -623,6 +840,39 @@ export class MissionWorkspace {
 		return loadedMission.mission.evaluateGate(params.intent);
 	}
 
+	private async getMissionTerminalState(
+		params: MissionTerminalStateRequest
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		const terminal = await this.ensureMissionTerminalSession(loadedMission);
+		return this.toAgentTerminalState(terminal.sessionId, terminal.snapshot);
+	}
+
+	private async sendMissionTerminalInput(
+		params: MissionTerminalInput
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		const terminal = await this.ensureMissionTerminalSession(loadedMission);
+
+		if (params.cols !== undefined && params.rows !== undefined) {
+			await this.terminalTransport.resizeSession(terminal.handle, params.cols, params.rows);
+		}
+		if (typeof params.data === 'string' && params.data.length > 0) {
+			await this.terminalTransport.sendKeys(terminal.handle, params.data, {
+				...(params.literal !== undefined ? { literal: params.literal } : {})
+			});
+		}
+
+		if (params.respondWithState === false) {
+			return null;
+		}
+
+		return this.toAgentTerminalState(
+			terminal.sessionId,
+			await this.terminalTransport.readSnapshot(terminal.handle)
+		);
+	}
+
 	private async listAgentSessions(
 		params: MissionSelect = {}
 	) {
@@ -635,6 +885,57 @@ export class MissionWorkspace {
 	): Promise<MissionAgentConsoleState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.getAgentConsoleState(params.sessionId) ?? null;
+	}
+
+	private async getAgentTerminalState(
+		params: SessionTerminalState
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionSession(params);
+		const session = loadedMission.mission.getAgentSession(params.sessionId);
+		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+			return null;
+		}
+
+		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
+			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		});
+		if (!handle) {
+			return this.toAgentTerminalState(session.sessionId);
+		}
+
+		return this.toAgentTerminalState(session.sessionId, await this.terminalTransport.readSnapshot(handle));
+	}
+
+	private async sendAgentTerminalInput(
+		params: SessionTerminalInput
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionSession(params);
+		const session = loadedMission.mission.getAgentSession(params.sessionId);
+		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+			return null;
+		}
+
+		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
+			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		});
+		if (!handle) {
+			return this.toAgentTerminalState(session.sessionId);
+		}
+
+		if (params.cols !== undefined && params.rows !== undefined) {
+			await this.terminalTransport.resizeSession(handle, params.cols, params.rows);
+		}
+		if (typeof params.data === 'string' && params.data.length > 0) {
+			await this.terminalTransport.sendKeys(handle, params.data, {
+				...(params.literal !== undefined ? { literal: params.literal } : {})
+			});
+		}
+
+		if (params.respondWithState === false) {
+			return null;
+		}
+
+		return this.toAgentTerminalState(session.sessionId, await this.terminalTransport.readSnapshot(handle));
 	}
 
 	private async cancelAgentSession(params: SessionControl) {
@@ -650,6 +951,11 @@ export class MissionWorkspace {
 	private async commandAgentSession(params: SessionCommand) {
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.sendAgentSessionCommand(params.sessionId, params.command as AgentCommand);
+	}
+
+	private async completeAgentSession(params: SessionComplete) {
+		const loadedMission = await this.requireMissionSession(params);
+		return loadedMission.mission.completeAgentSession(params.sessionId);
 	}
 
 	private async terminateAgentSession(params: SessionControl) {
@@ -669,8 +975,333 @@ export class MissionWorkspace {
 			.map((action) => structuredClone(action));
 	}
 
+	private async ensureLoadedMissionCommandState(loadedMission: LoadedMission): Promise<void> {
+		if (loadedMission.commandState.repositorySync) {
+			return;
+		}
+		await this.refreshLoadedMissionCommandState(loadedMission);
+	}
+
+	private async refreshLoadedMissionCommandState(loadedMission: LoadedMission): Promise<void> {
+		loadedMission.commandState.repositorySync = this.resolveMissionRepositorySyncState(loadedMission);
+	}
+
+	private resolveMissionRepositorySyncState(loadedMission: LoadedMission): MissionRepositorySyncState {
+		const checkedAt = new Date().toISOString();
+		const settings = getDefaultMissionDaemonSettingsWithOverrides(
+			readMissionDaemonSettings(this.workspaceRoot) ?? {}
+		);
+		const missionWorkspaceRoot = this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir());
+		const githubRepository = resolveGitHubRepositoryFromWorkspace(missionWorkspaceRoot)
+			?? resolveGitHubRepositoryFromWorkspace(this.workspaceRoot);
+
+		if (settings.trackingProvider !== 'github' || !githubRepository) {
+			return {
+				provider: 'github',
+				status: 'unsupported',
+				branchRef: loadedMission.branchRef,
+				checkedAt,
+				revision: `workspace-mission-sync:${loadedMission.missionId}:unsupported`,
+				reason: 'GitHub tracking is not configured for this mission repository.'
+			};
+		}
+
+		try {
+			const ghBinary = getMissionGitHubCliBinary();
+			const adapter = new GitHubPlatformAdapter(
+				missionWorkspaceRoot,
+				githubRepository,
+				ghBinary ? { ghBinary } : {}
+			);
+			adapter.fetchRemote('origin');
+			const sync = adapter.getBranchSyncStatus(loadedMission.branchRef, 'origin');
+			return {
+				provider: 'github',
+				status: sync.status,
+				branchRef: sync.branchRef,
+				checkedAt,
+				revision: `workspace-mission-sync:${loadedMission.missionId}:${sync.status}:${sync.remoteHead ?? 'none'}:${String(sync.aheadCount)}:${String(sync.behindCount)}`,
+				aheadCount: sync.aheadCount,
+				behindCount: sync.behindCount,
+				...(sync.trackingRef ? { trackingRef: sync.trackingRef } : {}),
+				...(sync.localHead ? { localHead: sync.localHead } : {}),
+				...(sync.remoteHead ? { remoteHead: sync.remoteHead } : {})
+			};
+		} catch (error) {
+			return {
+				provider: 'github',
+				status: 'error',
+				branchRef: loadedMission.branchRef,
+				checkedAt,
+				revision: `workspace-mission-sync:${loadedMission.missionId}:error`,
+				reason: error instanceof Error ? error.message : String(error)
+			};
+		}
+	}
+
+	private async buildWorkspaceMissionActions(
+		loadedMission: LoadedMission,
+		status: OperatorStatus
+	): Promise<OperatorActionDescriptor[]> {
+		const context: MissionWorkspaceCommandContext = {
+			loadedMission,
+			missionStatus: status,
+			...((status.workflow?.currentStageId ?? status.stage)
+				? { currentStageId: (status.workflow?.currentStageId ?? status.stage) }
+				: {}),
+			...(loadedMission.commandState.repositorySync
+				? { repositorySync: loadedMission.commandState.repositorySync }
+				: {})
+		};
+
+		return Promise.all(WORKSPACE_MISSION_COMMAND_DEFINITIONS.map(async (definition) => {
+			const evaluation = definition.evaluate(context);
+			const flow = definition.buildFlow
+				? await definition.buildFlow(this, context)
+				: undefined;
+			return buildWorkspaceMissionCommandDescriptor(definition, context, evaluation, flow);
+		}));
+	}
+
+	private async executeWorkspaceMissionAction(
+		loadedMission: LoadedMission,
+		params: MissionActionExecute
+	): Promise<OperatorStatus | undefined> {
+		const definition = WORKSPACE_MISSION_COMMAND_DEFINITIONS.find((candidate) => candidate.id === params.actionId);
+		if (!definition) {
+			return undefined;
+		}
+		if (!definition.buildFlow && (params.steps ?? []).length > 0) {
+			throw new Error(`Mission action '${params.actionId}' does not accept input steps.`);
+		}
+
+		await this.ensureLoadedMissionCommandState(loadedMission);
+		const status = await loadedMission.mission.status();
+		const context: MissionWorkspaceCommandContext = {
+			loadedMission,
+			missionStatus: status,
+			...((status.workflow?.currentStageId ?? status.stage)
+				? { currentStageId: (status.workflow?.currentStageId ?? status.stage) }
+				: {}),
+			...(loadedMission.commandState.repositorySync
+				? { repositorySync: loadedMission.commandState.repositorySync }
+				: {})
+		};
+		const evaluation = definition.evaluate(context);
+		if (!evaluation.enabled) {
+			throw new Error(evaluation.reason ?? `Mission action '${params.actionId}' is unavailable.`);
+		}
+
+		switch (definition.id) {
+			case 'mission.pull-origin':
+				this.pullMissionOrigin(loadedMission);
+				await loadedMission.mission.refresh();
+				break;
+			case 'mission.changeset.add':
+				await this.createMissionChangeset(loadedMission, params.steps ?? []);
+				break;
+			default:
+				throw new Error(`Unsupported workspace mission action '${definition.id}'.`);
+		}
+		await this.refreshLoadedMissionCommandState(loadedMission);
+		const refreshedStatus = await loadedMission.mission.status();
+		await this.broadcastMissionStatus(loadedMission.missionId, refreshedStatus);
+		return this.decorateMissionStatus(refreshedStatus, 'mission');
+	}
+
+	private pullMissionOrigin(loadedMission: LoadedMission): void {
+		const missionWorkspaceRoot = this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir());
+		const githubRepository = resolveGitHubRepositoryFromWorkspace(missionWorkspaceRoot)
+			?? resolveGitHubRepositoryFromWorkspace(this.workspaceRoot);
+		if (!githubRepository) {
+			throw new Error('GitHub repository configuration is incomplete for this mission.');
+		}
+
+		const ghBinary = getMissionGitHubCliBinary();
+		const adapter = new GitHubPlatformAdapter(
+			missionWorkspaceRoot,
+			githubRepository,
+			ghBinary ? { ghBinary } : {}
+		);
+		adapter.pullBranch(loadedMission.branchRef, 'origin');
+	}
+
+	async buildMissionChangesetFlow(): Promise<OperatorActionFlowDescriptor> {
+		const packages = await this.listReleasableWorkspacePackages();
+		return {
+			targetLabel: 'MISSION',
+			actionLabel: 'ADD CHANGESET',
+			steps: [
+				{
+					kind: 'selection',
+					id: 'changeset.packages',
+					label: 'Packages',
+					title: 'Select packages for this changeset',
+					emptyLabel: 'No releasable workspace packages are available.',
+					helperText: 'Choose one or more releasable workspace packages to include.',
+					selectionMode: 'multiple',
+					options: packages.map((pkg) => ({
+						id: pkg.name,
+						label: pkg.name,
+						description: pkg.relativePath
+					}))
+				},
+				{
+					kind: 'selection',
+					id: 'changeset.bump',
+					label: 'Release type',
+					title: 'Select the release type',
+					emptyLabel: 'No release types available.',
+					helperText: 'Use one release type for all selected packages in this changeset.',
+					selectionMode: 'single',
+					options: CHANGESET_RELEASE_TYPE_OPTIONS
+				},
+				{
+					kind: 'text',
+					id: 'changeset.summary',
+					label: 'Summary',
+					title: 'Describe the release change',
+					helperText: 'This summary becomes the body of the generated changeset file.',
+					placeholder: 'Summarize what changed and why it should be released.',
+					inputMode: 'expanded',
+					format: 'markdown'
+				}
+			]
+		};
+	}
+
+	private async createMissionChangeset(
+		loadedMission: LoadedMission,
+		steps: OperatorActionExecutionStep[]
+	): Promise<void> {
+		const packageStep = requireSelectionActionStep(steps, 'changeset.packages');
+		const releaseType = asChangesetReleaseType(requireSingleValueActionStep(steps, 'changeset.bump'));
+		if (!releaseType) {
+			throw new Error('Changeset action requires a valid release type.');
+		}
+		const summary = requireTextActionStep(steps, 'changeset.summary').value.trim();
+		if (summary.length === 0) {
+			throw new Error('Changeset action requires a non-empty summary.');
+		}
+
+		const releasablePackages = await this.listReleasableWorkspacePackages();
+		const allowedPackageNames = new Set(releasablePackages.map((pkg) => pkg.name));
+		const packageNames = packageStep.optionIds
+			.map((optionId) => optionId.trim())
+			.filter((optionId, index, optionIds) => optionId.length > 0 && optionIds.indexOf(optionId) === index);
+		if (packageNames.length === 0) {
+			throw new Error('Changeset action requires at least one package selection.');
+		}
+		for (const packageName of packageNames) {
+			if (!allowedPackageNames.has(packageName)) {
+				throw new Error(`Changeset action cannot target unknown package '${packageName}'.`);
+			}
+		}
+
+		const changesetDir = path.join(this.workspaceRoot, '.changeset');
+		await fs.mkdir(changesetDir, { recursive: true });
+		const filePath = path.join(
+			changesetDir,
+			`${createChangesetFileSlug(loadedMission.missionId, summary)}.md`
+		);
+		const frontmatter = packageNames
+			.map((packageName) => `"${packageName}": ${releaseType}`)
+			.join('\n');
+		const content = `---\n${frontmatter}\n---\n\n${summary}\n`;
+		await fs.writeFile(filePath, content, 'utf8');
+	}
+
+	private async listReleasableWorkspacePackages(): Promise<Array<{ name: string; relativePath: string }>> {
+		const ignoredPackages = await this.readIgnoredChangesetPackages();
+		const manifests = await Promise.all([
+			this.readWorkspacePackageManifests(path.join(this.workspaceRoot, 'packages'), 'packages', 1),
+			this.readWorkspacePackageManifests(path.join(this.workspaceRoot, 'apps'), 'apps', 2)
+		]);
+		return manifests
+			.flat()
+			.filter((manifest) => !manifest.private && !ignoredPackages.has(manifest.name))
+			.sort((left, right) => left.name.localeCompare(right.name));
+	}
+
+	private async readIgnoredChangesetPackages(): Promise<Set<string>> {
+		const configPath = path.join(this.workspaceRoot, '.changeset', 'config.json');
+		try {
+			const config = JSON.parse(await fs.readFile(configPath, 'utf8')) as { ignore?: unknown };
+			if (!Array.isArray(config.ignore)) {
+				return new Set();
+			}
+			return new Set(
+				config.ignore.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+			);
+		} catch {
+			return new Set();
+		}
+	}
+
+	private async readWorkspacePackageManifests(
+		rootPath: string,
+		basePath: string,
+		depth: number
+	): Promise<Array<{ name: string; private: boolean; relativePath: string }>> {
+		try {
+			const manifests: Array<{ name: string; private: boolean; relativePath: string }> = [];
+			const firstLevelEntries = await fs.readdir(rootPath, { withFileTypes: true });
+			for (const firstLevelEntry of firstLevelEntries) {
+				if (!firstLevelEntry.isDirectory()) {
+					continue;
+				}
+				if (depth === 1) {
+					const manifest = await this.readWorkspacePackageManifest(basePath, [firstLevelEntry.name]);
+					if (manifest) {
+						manifests.push(manifest);
+					}
+					continue;
+				}
+				const secondLevelPath = path.join(rootPath, firstLevelEntry.name);
+				const secondLevelEntries = await fs.readdir(secondLevelPath, { withFileTypes: true });
+				for (const secondLevelEntry of secondLevelEntries) {
+					if (!secondLevelEntry.isDirectory()) {
+						continue;
+					}
+					const manifest = await this.readWorkspacePackageManifest(basePath, [firstLevelEntry.name, secondLevelEntry.name]);
+					if (manifest) {
+						manifests.push(manifest);
+					}
+				}
+			}
+			return manifests;
+		} catch {
+			return [];
+		}
+	}
+
+	private async readWorkspacePackageManifest(
+		basePath: string,
+		segments: string[]
+	): Promise<{ name: string; private: boolean; relativePath: string } | undefined> {
+		const relativePath = path.posix.join(basePath, ...segments);
+		const manifestPath = path.join(this.workspaceRoot, ...relativePath.split('/'), 'package.json');
+		try {
+			const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+				name?: unknown;
+				private?: unknown;
+			};
+			if (typeof manifest.name !== 'string' || manifest.name.trim().length === 0) {
+				return undefined;
+			}
+			return {
+				name: manifest.name,
+				private: manifest.private === true,
+				relativePath
+			};
+		} catch {
+			return undefined;
+		}
+	}
+
 	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
 		const decoratedStatus = await this.decorateMissionStatus(status, 'mission');
+		const loadedMission = this.loadedMissions.get(missionId);
 		this.emitEvent({
 			type: 'mission.status',
 			workspaceRoot: this.workspaceRoot,
@@ -681,7 +1312,7 @@ export class MissionWorkspace {
 			type: 'mission.actions.changed',
 			workspaceRoot: this.workspaceRoot,
 			missionId,
-			revision: this.buildMissionActionRevision(missionId, decoratedStatus)
+			revision: this.buildMissionActionRevision(missionId, decoratedStatus, loadedMission)
 		});
 	}
 
@@ -844,16 +1475,21 @@ export class MissionWorkspace {
 		});
 	}
 
-	private buildMissionActionRevision(missionId: string, status: OperatorStatus): string {
+	private buildMissionActionRevision(
+		missionId: string,
+		status: OperatorStatus,
+		loadedMission?: LoadedMission
+	): string {
+		const repositorySyncRevision = loadedMission?.commandState.repositorySync?.revision;
 		const workflowUpdatedAt = status.workflow?.updatedAt?.trim();
 		if (workflowUpdatedAt) {
-			return `mission:${missionId}:${workflowUpdatedAt}`;
+			return `mission:${missionId}:${workflowUpdatedAt}:${repositorySyncRevision ?? 'workspace'}`;
 		}
 		const systemVersion = status.system?.state.version;
 		if (typeof systemVersion === 'number') {
-			return `mission:${missionId}:system:${String(systemVersion)}`;
+			return `mission:${missionId}:system:${String(systemVersion)}:${repositorySyncRevision ?? 'workspace'}`;
 		}
-		return `mission:${missionId}:status`;
+		return `mission:${missionId}:status:${repositorySyncRevision ?? 'workspace'}`;
 	}
 
 	private buildSetupCommandFlow(
@@ -939,7 +1575,7 @@ export class MissionWorkspace {
 					{
 						id: 'copilot-cli',
 						label: 'Copilot CLI',
-						description: 'Interactive Copilot CLI session in terminal-manager transport'
+						description: 'Interactive Copilot CLI session in daemon-backed PTY transport'
 					},
 					{
 						id: 'pi',
@@ -972,7 +1608,7 @@ export class MissionWorkspace {
 						id: 'autonomous',
 						label: 'Autonomous',
 						description: usesTerminalTransport
-							? 'Terminal-manager transport continues until interrupted or complete'
+							? 'PTY transport continues until interrupted or complete'
 							: 'Runtime continues with autonomous execution'
 					}
 				], control.settings.defaultAgentMode)
@@ -1286,7 +1922,7 @@ export class MissionWorkspace {
 			return;
 		}
 
-		const systemStatus = readSystemStatus({ cwd: this.workspaceRoot });
+		const systemStatus = refreshSystemStatus({ cwd: this.workspaceRoot });
 		if (!systemStatus.github.authenticated) {
 			throw new Error(systemStatus.github.detail ?? 'GitHub CLI authentication is required.');
 		}
@@ -1342,6 +1978,7 @@ export class MissionWorkspace {
 
 		const existing = await this.findLoadedMission(normalizedSelector);
 		if (existing) {
+			await this.ensureLoadedMissionCommandState(existing);
 			this.assertSelectorMatchesLoadedMission(normalizedSelector, existing);
 			return existing;
 		}
@@ -1365,6 +2002,8 @@ export class MissionWorkspace {
 		const loadedMission = this.registerLoadedMission(mission, {
 			autopilotEnabled: this.isAutopilotConfigured()
 		});
+		await this.ensureLoadedMissionCommandState(loadedMission);
+		void this.broadcastMissionStatusSnapshot(loadedMission);
 		this.assertSelectorMatchesLoadedMission(normalizedSelector, loadedMission);
 		return loadedMission;
 	}
@@ -1435,6 +2074,7 @@ export class MissionWorkspace {
 			missionId: record.id,
 			branchRef: record.branchRef,
 			mission,
+			commandState: {},
 			autopilotEnabled: options.autopilotEnabled === true,
 			autopilotQueue: Promise.resolve(),
 			consoleSubscription: { dispose: () => undefined },
@@ -1472,7 +2112,6 @@ export class MissionWorkspace {
 		});
 
 		this.loadedMissions.set(loadedMission.missionId, loadedMission);
-		void this.broadcastMissionStatusSnapshot(loadedMission);
 		this.scheduleAutopilot(loadedMission);
 		return loadedMission;
 	}
@@ -1617,6 +2256,11 @@ export class MissionWorkspace {
 	}
 
 	public dispose(): void {
+		this.terminalSubscription.dispose();
+		for (const pending of this.pendingTerminalNotifications.values()) {
+			clearTimeout(pending.timer);
+		}
+		this.pendingTerminalNotifications.clear();
 		for (const loadedMission of this.loadedMissions.values()) {
 			loadedMission.consoleSubscription.dispose();
 			loadedMission.eventSubscription.dispose();
@@ -1656,6 +2300,59 @@ export class MissionWorkspace {
 
 	private isLoadedMissionActive(loadedMission: LoadedMission): boolean {
 		return this.loadedMissions.get(loadedMission.missionId) === loadedMission;
+	}
+
+	private findLoadedMissionForSession(sessionId: string): LoadedMission | undefined {
+		for (const loadedMission of this.loadedMissions.values()) {
+			if (sessionId === this.getMissionTerminalSessionId(loadedMission.missionId)) {
+				return loadedMission;
+			}
+			if (loadedMission.mission.getAgentSession(sessionId)) {
+				return loadedMission;
+			}
+		}
+		return undefined;
+	}
+
+	private toAgentTerminalState(
+		sessionId: string,
+		snapshot?: TerminalSessionSnapshot
+	): MissionAgentTerminalState {
+		if (!snapshot) {
+			return {
+				sessionId,
+				connected: false,
+				dead: true,
+				exitCode: null,
+				screen: ''
+			};
+		}
+
+		return {
+			sessionId,
+			connected: snapshot.connected,
+			dead: snapshot.dead,
+			exitCode: snapshot.exitCode,
+			screen: snapshot.screen,
+			...(snapshot.truncated ? { truncated: true } : {}),
+			...(snapshot.chunk !== undefined ? { chunk: snapshot.chunk } : {}),
+			terminalHandle: {
+				sessionName: snapshot.sessionName,
+				paneId: snapshot.paneId,
+				...(snapshot.sharedSessionName ? { sharedSessionName: snapshot.sharedSessionName } : {})
+			}
+		};
+	}
+
+	private toAgentTerminalEventState(
+		sessionId: string,
+		snapshot?: TerminalSessionSnapshot
+	): MissionAgentTerminalState {
+		const state = this.toAgentTerminalState(sessionId, snapshot);
+		return {
+			...state,
+			screen: ''
+		};
 	}
 
 	private resolveRunnerId(runnerId?: string): string {
@@ -1731,6 +2428,77 @@ export class MissionWorkspace {
 
 }
 
+function resolveMissionTerminalCommand(): string {
+	if (process.platform === 'win32') {
+		return process.env['MISSION_TERMINAL_SHELL']?.trim() || 'powershell.exe';
+	}
+
+	return process.env['MISSION_TERMINAL_SHELL']?.trim() || process.env['SHELL']?.trim() || 'bash';
+}
+
+function resolveMissionTerminalArgs(): string[] {
+	if (process.platform === 'win32') {
+		return ['-NoLogo'];
+	}
+
+	return ['-l'];
+}
+
+function buildMissionTerminalEnv(): NodeJS.ProcessEnv {
+	const ghBinary = getMissionGitHubCliBinary();
+	const pathKey = resolveProcessPathKey(process.env);
+	const ghBinaryDirectory = ghBinary ? resolveBinaryParentDirectory(ghBinary) : undefined;
+	const nextPath = ghBinaryDirectory && pathKey
+		? prependPathEntry(process.env[pathKey], ghBinaryDirectory)
+		: undefined;
+
+	return {
+		...process.env,
+		...(pathKey && nextPath ? { [pathKey]: nextPath } : {}),
+		TERM_PROGRAM: 'mission-airport',
+		TERM_PROGRAM_VERSION: '1'
+	};
+}
+
+function resolveProcessPathKey(env: NodeJS.ProcessEnv): string | undefined {
+	if (process.platform === 'win32') {
+		return Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path';
+	}
+
+	return 'PATH';
+}
+
+function resolveBinaryParentDirectory(binaryPath: string): string | undefined {
+	const trimmedPath = binaryPath.trim();
+	if (!trimmedPath) {
+		return undefined;
+	}
+
+	if (!/[\\/]/u.test(trimmedPath) && trimmedPath !== '.' && trimmedPath !== '..') {
+		return undefined;
+	}
+
+	const parentDirectory = path.dirname(trimmedPath);
+	return parentDirectory === '.' ? undefined : parentDirectory;
+}
+
+function prependPathEntry(currentPath: string | undefined, entry: string): string {
+	const normalizedEntry = entry.trim();
+	if (!normalizedEntry) {
+		return currentPath ?? '';
+	}
+
+	const parts = (currentPath ?? '')
+		.split(path.delimiter)
+		.map((segment) => segment.trim())
+		.filter((segment) => segment.length > 0);
+	if (parts.includes(normalizedEntry)) {
+		return currentPath ?? normalizedEntry;
+	}
+
+	return [normalizedEntry, ...parts].join(path.delimiter);
+}
+
 function shouldBroadcastMissionStatusForAgentEvent(event: MissionAgentEvent): boolean {
 	switch (event.type) {
 		case 'session-started':
@@ -1754,6 +2522,116 @@ function shouldScheduleAutopilotForAgentEvent(event: MissionAgentEvent): boolean
 		default:
 			return false;
 	}
+}
+
+const WORKSPACE_MISSION_COMMAND_DEFINITIONS: readonly MissionWorkspaceCommandDefinition[] = [
+	{
+		id: 'mission.pull-origin',
+		label: 'Pull Origin',
+		action: '/mission pull-origin',
+		ui: {
+			toolbarLabel: 'PULL ORIGIN',
+			requiresConfirmation: true,
+			confirmationPrompt: 'Fast-forward this mission worktree from origin now?'
+		},
+		evaluate: (context) => {
+			const repositorySync = context.repositorySync;
+			if (!repositorySync) {
+				return { enabled: false, reason: 'Repository sync state is not available for this mission.' };
+			}
+			switch (repositorySync.status) {
+				case 'behind':
+					return { enabled: true };
+				case 'diverged':
+					return { enabled: false, reason: 'Mission branch has diverged from origin and cannot be fast-forwarded.' };
+				case 'ahead':
+					return { enabled: false, reason: 'Mission branch is already ahead of origin.' };
+				case 'up-to-date':
+					return { enabled: false, reason: 'Mission worktree is already up to date with origin.' };
+				case 'untracked':
+					return { enabled: false, reason: 'Origin does not have a tracked branch for this mission yet.' };
+				case 'unsupported':
+					return { enabled: false, reason: repositorySync.reason ?? 'GitHub tracking is not configured for this mission repository.' };
+				case 'error':
+					return { enabled: false, reason: repositorySync.reason ?? 'Mission could not determine repository sync state.' };
+			}
+		}
+	},
+	{
+		id: 'mission.changeset.add',
+		label: 'Add Changeset',
+		action: '/mission changeset',
+		ui: {
+			toolbarLabel: 'ADD CHANGESET'
+		},
+		evaluate: (context) => {
+			if (hasReachedDeliveryStage(context)) {
+				return { enabled: true };
+			}
+			return { enabled: false, reason: 'Changesets become available when the mission reaches the DELIVERY stage.' };
+		},
+		buildFlow: async (workspace) => workspace.buildMissionChangesetFlow()
+	}
+];
+
+function buildWorkspaceMissionCommandDescriptor(
+	definition: MissionWorkspaceCommandDefinition,
+	context: MissionWorkspaceCommandContext,
+	evaluation: MissionWorkspaceCommandRuleResult,
+	flow?: OperatorActionFlowDescriptor
+): OperatorActionDescriptor {
+	return {
+		id: definition.id,
+		label: definition.label,
+		action: definition.action,
+		scope: 'mission',
+		disabled: !evaluation.enabled,
+		disabledReason: evaluation.enabled ? '' : (evaluation.reason ?? 'Action is unavailable.'),
+		enabled: evaluation.enabled,
+		...(evaluation.enabled ? {} : { reason: evaluation.reason ?? 'Action is unavailable.' }),
+		...(definition.ordering ? { ordering: definition.ordering } : {}),
+		ui: definition.ui,
+		flow: flow ?? {
+			targetLabel: 'MISSION',
+			actionLabel: definition.ui.toolbarLabel ?? definition.label.toUpperCase(),
+			steps: []
+		},
+		presentationTargets: buildWorkspaceMissionPresentationTargets(context.currentStageId)
+	};
+}
+
+function buildWorkspaceMissionPresentationTargets(currentStageId: MissionStageId | undefined) {
+	return currentStageId
+		? [{ scope: 'mission' as const }, { scope: 'stage' as const, targetId: currentStageId }]
+		: [{ scope: 'mission' as const }];
+}
+
+function hasReachedDeliveryStage(context: MissionWorkspaceCommandContext): boolean {
+	return context.currentStageId === 'delivery'
+		|| context.missionStatus.stage === 'delivery'
+		|| context.missionStatus.workflow?.lifecycle === 'delivered';
+}
+
+function createChangesetFileSlug(missionId: string, summary: string): string {
+	const summarySlug = summary
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 32);
+	const missionSlug = missionId
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 24);
+	const suffix = Date.now().toString(36);
+	return [missionSlug || 'mission', summarySlug || 'changeset', suffix].join('-');
+}
+
+function asChangesetReleaseType(value: string | undefined): 'patch' | 'minor' | 'major' | undefined {
+	if (value === 'patch' || value === 'minor' || value === 'major') {
+		return value;
+	}
+	return undefined;
 }
 
 function normalizeMissionSelector(selector: MissionSelector = {}): MissionSelector {
@@ -1802,6 +2680,23 @@ function requireSingleSelectionActionStep(
 	return step;
 }
 
+function requireSelectionActionStep(
+	steps: OperatorActionExecutionStep[],
+	stepId: string
+): OperatorActionExecutionSelectionStep {
+	const step = steps.find(
+		(candidate): candidate is OperatorActionExecutionSelectionStep =>
+			candidate.kind === 'selection' && candidate.stepId === stepId
+	);
+	if (!step) {
+		throw new Error(`Mission action requires selection step '${stepId}'.`);
+	}
+	if (step.optionIds.every((optionId) => !optionId.trim())) {
+		throw new Error(`Mission action requires at least one selection for step '${stepId}'.`);
+	}
+	return step;
+}
+
 function requireTextActionStep(
 	steps: OperatorActionExecutionStep[],
 	stepId: string
@@ -1832,6 +2727,24 @@ function requireSingleValueActionStep(
 	}
 	return step.optionIds[0];
 }
+
+const CHANGESET_RELEASE_TYPE_OPTIONS: OperatorActionFlowOption[] = [
+	{
+		id: 'patch',
+		label: 'Patch',
+		description: 'Use for fixes and small compatible updates.'
+	},
+	{
+		id: 'minor',
+		label: 'Minor',
+		description: 'Use for backward-compatible features.'
+	},
+	{
+		id: 'major',
+		label: 'Major',
+		description: 'Use for breaking changes.'
+	}
+];
 
 function asControlSettingField(
 	value: string | undefined

@@ -3,42 +3,82 @@ import { spawnSync } from 'node:child_process';
 import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
 import type { SystemStatus } from '../types.js';
 
-let cachedSystemStatus: { checkedAt: number; cacheKey: string; status: SystemStatus } | undefined;
+const GITHUB_CLI_TIMEOUT_MS = 1_500;
+const SYSTEM_STATUS_CACHE_TTL_MS = 10_000;
+
+type CachedSystemStatusEntry = {
+	checkedAt: number;
+	status: SystemStatus;
+};
+
+const cachedSystemStatusByKey = new Map<string, CachedSystemStatusEntry>();
 
 export function readSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
 	const now = Date.now();
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
 	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
-	const cacheKey = `${cwd}\u0000${ghBinary}\u0000${process.env['PATH'] ?? ''}`;
-	if (
-		!authToken
-		&& cachedSystemStatus
-		&& cachedSystemStatus.cacheKey === cacheKey
-		&& now - cachedSystemStatus.checkedAt < 10_000
-	) {
+	const cacheKey = createSystemStatusCacheKey({
+		cwd,
+		ghBinary,
+		...(authToken ? { authToken } : {})
+	});
+	const cachedSystemStatus = cachedSystemStatusByKey.get(cacheKey);
+	if (cachedSystemStatus && now - cachedSystemStatus.checkedAt < SYSTEM_STATUS_CACHE_TTL_MS) {
 		return structuredClone(cachedSystemStatus.status);
 	}
 
-	if (authToken) {
-		return readTokenBackedSystemStatus({ cwd, ghBinary, authToken });
-	}
+	return refreshSystemStatus({ cwd, ...(authToken ? { authToken } : {}) });
+}
 
-	const authResult = spawnSync(ghBinary, ['auth', 'status'], {
+export function refreshSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
+	const authToken = options.authToken?.trim();
+	const cwd = options.cwd?.trim() || process.cwd();
+	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
+	const cacheKey = createSystemStatusCacheKey({
 		cwd,
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'pipe']
+		ghBinary,
+		...(authToken ? { authToken } : {})
 	});
-	const detail = resolveGitHubCliDetail(authResult.stdout ?? '', authResult.stderr ?? '');
+
+	const status = authToken
+		? readTokenBackedSystemStatus({ cwd, ghBinary, authToken })
+		: readCliBackedSystemStatus({ cwd, ghBinary });
+	cacheSystemStatus(cacheKey, status);
+	return structuredClone(status);
+}
+
+export function peekCachedSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
+	const authToken = options.authToken?.trim();
+	const cwd = options.cwd?.trim() || process.cwd();
+	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
+	const cacheKey = createSystemStatusCacheKey({
+		cwd,
+		ghBinary,
+		...(authToken ? { authToken } : {})
+	});
+	const cachedSystemStatus = cachedSystemStatusByKey.get(cacheKey);
+	return structuredClone(cachedSystemStatus?.status ?? buildUnknownSystemStatus());
+}
+
+function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): SystemStatus {
+	const authResult = spawnSync(input.ghBinary, ['auth', 'status'], {
+		cwd: input.cwd,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+		timeout: GITHUB_CLI_TIMEOUT_MS
+	});
+	const detail = resolveGitHubCliFailureDetail(authResult, input.ghBinary)
+		?? resolveGitHubCliDetail(authResult.stdout ?? '', authResult.stderr ?? '');
 	const authenticated = authResult.status === 0;
 	const identity = authenticated
-		? readGitHubIdentity({ cwd, ghBinary })
+		? readGitHubIdentity({ cwd: input.cwd, ghBinary: input.ghBinary })
 		: undefined;
 	const user = identity?.user;
 	const email = identity?.email;
 	const avatarUrl = identity?.avatarUrl;
 
-	const status: SystemStatus = {
+	return {
 		github: {
 			cliAvailable: !(authResult.error && 'code' in authResult.error && authResult.error.code === 'ENOENT'),
 			authenticated,
@@ -48,19 +88,12 @@ export function readSystemStatus(options: { cwd?: string; authToken?: string } =
 			...(detail
 				? { detail }
 				: authResult.error && 'code' in authResult.error && authResult.error.code === 'ENOENT'
-					? { detail: `GitHub CLI is not installed at '${ghBinary}'.` }
+					? { detail: `GitHub CLI is not installed at '${input.ghBinary}'.` }
 					: authenticated
 						? { detail: 'GitHub CLI authenticated.' }
 						: { detail: 'GitHub CLI authentication is required.' })
 		}
 	};
-
-	cachedSystemStatus = {
-		checkedAt: now,
-		cacheKey,
-		status
-	};
-	return structuredClone(status);
 }
 
 function readTokenBackedSystemStatus(input: {
@@ -73,11 +106,13 @@ function readTokenBackedSystemStatus(input: {
 		cwd: input.cwd,
 		encoding: 'utf8',
 		env: authEnv,
-		stdio: ['ignore', 'pipe', 'pipe']
+		stdio: ['ignore', 'pipe', 'pipe'],
+		timeout: GITHUB_CLI_TIMEOUT_MS
 	});
 	const detail = authResult.status === 0
 		? undefined
-		: resolveGitHubCliDetail(authResult.stdout ?? '', authResult.stderr ?? '');
+		: resolveGitHubCliFailureDetail(authResult, input.ghBinary)
+		?? resolveGitHubCliDetail(authResult.stdout ?? '', authResult.stderr ?? '');
 	const cliAvailable = !(authResult.error && 'code' in authResult.error && authResult.error.code === 'ENOENT');
 	const identity = authResult.status === 0
 		? readGitHubIdentity({
@@ -119,7 +154,8 @@ function readGitHubIdentity(input: {
 		cwd: input.cwd,
 		encoding: 'utf8',
 		env: input.env,
-		stdio: ['ignore', 'pipe', 'ignore']
+		stdio: ['ignore', 'pipe', 'ignore'],
+		timeout: GITHUB_CLI_TIMEOUT_MS
 	}).stdout ?? '';
 	const parsedUser = parseGitHubUserResponse(userOutput);
 	const user = parsedUser?.login;
@@ -137,7 +173,8 @@ function readGitHubIdentity(input: {
 		cwd: input.cwd,
 		encoding: 'utf8',
 		env: input.env,
-		stdio: ['ignore', 'pipe', 'ignore']
+		stdio: ['ignore', 'pipe', 'ignore'],
+		timeout: GITHUB_CLI_TIMEOUT_MS
 	});
 	const email = resolvePrimaryGitHubEmail(emailResult.stdout ?? '');
 	return {
@@ -153,6 +190,50 @@ function buildGitHubAuthEnv(authToken: string): NodeJS.ProcessEnv {
 		GH_TOKEN: authToken,
 		GITHUB_TOKEN: authToken
 	};
+}
+
+function createSystemStatusCacheKey(input: {
+	cwd: string;
+	ghBinary: string;
+	authToken?: string;
+}): string {
+	return `${input.cwd}\u0000${input.ghBinary}\u0000${process.env['PATH'] ?? ''}\u0000${input.authToken ?? ''}`;
+}
+
+function cacheSystemStatus(cacheKey: string, status: SystemStatus): void {
+	cachedSystemStatusByKey.set(cacheKey, {
+		checkedAt: Date.now(),
+		status
+	});
+}
+
+function buildUnknownSystemStatus(): SystemStatus {
+	return {
+		github: {
+			cliAvailable: false,
+			authenticated: false,
+			detail: 'GitHub status has not been checked by the daemon yet.'
+		}
+	};
+}
+
+function resolveGitHubCliFailureDetail(
+	result: ReturnType<typeof spawnSync>,
+	ghBinary: string
+): string | undefined {
+	if (!result.error || !("code" in result.error)) {
+		return undefined;
+	}
+
+	if (result.error.code === 'ENOENT') {
+		return `GitHub CLI is not installed at '${ghBinary}'.`;
+	}
+
+	if (result.error.code === 'ETIMEDOUT') {
+		return `GitHub CLI timed out after ${String(GITHUB_CLI_TIMEOUT_MS)}ms.`;
+	}
+
+	return undefined;
 }
 
 function resolveGitHubCliDetail(stdout: string, stderr: string): string | undefined {

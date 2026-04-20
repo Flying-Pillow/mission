@@ -23,6 +23,27 @@
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
+    "./airport": {
+      "development": "./src/airport/index.ts",
+      "typescript": "./src/airport/index.ts",
+      "types": "./build/airport/index.d.ts",
+      "import": "./build/airport/index.js",
+      "default": "./build/airport/index.js"
+    },
+    "./airport/runtime": {
+      "development": "./src/airport/runtime.ts",
+      "typescript": "./src/airport/runtime.ts",
+      "types": "./build/airport/runtime.d.ts",
+      "import": "./build/airport/runtime.js",
+      "default": "./build/airport/runtime.js"
+    },
+    "./browser": {
+      "development": "./src/browser.ts",
+      "typescript": "./src/browser.ts",
+      "types": "./build/browser.d.ts",
+      "import": "./build/browser.js",
+      "default": "./build/browser.js"
+    },
     "./*": {
       "development": "./src/*",
       "typescript": "./src/*",
@@ -34,6 +55,7 @@
   ],
   "dependencies": {
     "gray-matter": "^4.0.3",
+    "node-pty": "^1.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

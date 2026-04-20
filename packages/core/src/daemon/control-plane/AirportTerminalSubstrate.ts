@@ -1,35 +1,11 @@
-import { execFile } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { promisify } from 'node:util';
 import type { AirportPaneId, AirportPaneState, AirportState, AirportSubstrateState } from '../../airport/types.js';
-
-const execFileAsync = promisify(execFile);
 
 const PANE_DISPLAY_TITLES: Record<AirportPaneId, string> = {
     tower: 'TOWER',
     briefingRoom: 'BRIEFING ROOM',
     runway: 'RUNWAY'
 };
-
-type TerminalManagerPaneMetadata = {
-    id: number;
-    title: string;
-    tabId?: number;
-    tab_id?: number;
-    is_plugin: boolean;
-    is_focused?: boolean;
-    is_suppressed?: boolean;
-    exited?: boolean;
-    exitStatus?: number | null;
-    exit_status?: number | null;
-};
-
-type TerminalManagerExecutorResult = {
-    stdout: string;
-    stderr: string;
-};
-
-type TerminalManagerExecutor = (args: string[]) => Promise<TerminalManagerExecutorResult>;
 
 export type AirportSubstrateEffect = {
     kind: 'focus-pane';
@@ -43,10 +19,8 @@ export interface AirportSubstrateController {
     applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState>;
 }
 
-export type TerminalManagerSubstrateOptions = {
+export type ClientReportedSubstrateOptions = {
     sessionName: string;
-    executor?: TerminalManagerExecutor;
-    terminalBinary?: string;
 };
 
 export function planAirportSubstrateEffects(state: AirportState): AirportSubstrateEffect[] {
@@ -85,23 +59,11 @@ export function resolveObservedPaneIdFromSubstrate(substrate: AirportSubstrateSt
     return undefined;
 }
 
-export class TerminalManagerSubstrateController implements AirportSubstrateController {
+export class ClientReportedSubstrateController implements AirportSubstrateController {
     private state: AirportSubstrateState;
-    private readonly executor: TerminalManagerExecutor;
 
-    public constructor(options: TerminalManagerSubstrateOptions) {
+    public constructor(options: ClientReportedSubstrateOptions) {
         this.state = createDefaultTerminalManagerSubstrateState(options);
-        const terminalBinary = options.terminalBinary?.trim() || process.env['AIRPORT_TERMINAL_BINARY']?.trim() || 'zellij';
-        this.executor = options.executor ?? (async (args) => {
-            const result = await execFileAsync(terminalBinary, args, {
-                encoding: 'utf8',
-                env: { ...process.env, ZELLIJ: undefined }
-            });
-            return {
-                stdout: result.stdout,
-                stderr: result.stderr
-            };
-        });
     }
 
     public getState(): AirportSubstrateState {
@@ -111,60 +73,31 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
     public async observe(state: AirportState): Promise<AirportSubstrateState> {
         const startedAt = performance.now();
         const now = new Date().toISOString();
-        const panes = await this.listPanes().catch(() => undefined);
-        this.state = panes
-            ? buildObservedState(state, panes, now)
-            : buildDetachedState(state, now);
+        this.state = buildClientReportedState(state, now);
         const durationMs = performance.now() - startedAt;
         process.stdout.write(
-            `${new Date().toISOString().slice(11, 19)} terminal-manager.observe session=${this.state.sessionName} attached=${String(Boolean(panes))} duration=${durationMs.toFixed(1)}ms paneCount=${String(panes?.length ?? 0)}\n`
+            `${new Date().toISOString().slice(11, 19)} airport-substrate.observe session=${this.state.sessionName} attached=${String(this.state.attached)} duration=${durationMs.toFixed(1)}ms paneCount=${String(Object.keys(this.state.panes).length)}\n`
         );
         return this.getState();
     }
 
     public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
         const startedAt = performance.now();
-        for (const effect of effects) {
-            try {
-                await this.executor([
-                    '--session',
-                    this.state.sessionName,
-                    'action',
-                    'focus-pane-id',
-                    toTerminalPaneReference(effect.terminalPaneId)
-                ]);
-            } catch (error) {
-                if (isAlreadyFocusedPaneError(error) || isMissingPaneError(error)) {
-                    continue;
-                }
-                throw error;
-            }
-        }
+        const focusEffect = effects[0];
         this.state = {
             ...this.state,
+            ...(focusEffect ? { observedFocusedTerminalPaneId: focusEffect.terminalPaneId } : {}),
             lastAppliedAt: new Date().toISOString()
         };
         const durationMs = performance.now() - startedAt;
         process.stdout.write(
-            `${new Date().toISOString().slice(11, 19)} terminal-manager.applyEffects session=${this.state.sessionName} effects=${String(effects.length)} duration=${durationMs.toFixed(1)}ms\n`
+            `${new Date().toISOString().slice(11, 19)} airport-substrate.applyEffects session=${this.state.sessionName} effects=${String(effects.length)} duration=${durationMs.toFixed(1)}ms\n`
         );
         return this.getState();
     }
-
-    private async listPanes(): Promise<TerminalManagerPaneMetadata[]> {
-        const result = await this.executor([
-            '--session',
-            this.state.sessionName,
-            'action',
-            'list-panes',
-            '--json',
-            '--all'
-        ]);
-        return parseTerminalManagerPaneListing(result.stdout).filter((pane) => !pane.is_plugin);
-    }
 }
 
-export class InMemoryTerminalManagerSubstrateController implements AirportSubstrateController {
+export class InMemoryClientReportedSubstrateController implements AirportSubstrateController {
     private state: AirportSubstrateState;
 
     public constructor(options: { sessionName: string }) {
@@ -211,27 +144,23 @@ export function createDefaultTerminalManagerSubstrateState(options: { sessionNam
     };
 }
 
-function buildObservedState(
-    state: AirportState,
-    panes: TerminalManagerPaneMetadata[],
-    now: string
-): AirportSubstrateState {
+function buildClientReportedState(state: AirportState, now: string): AirportSubstrateState {
     const currentState = state.substrate;
-    const focusedPaneId = panes.find((pane) => pane.is_focused)?.id;
+    const connectedClients = Object.values(state.clients).filter((client) => client.connected);
+    const attached = connectedClients.length > 0;
+    const focusedPaneId = resolveFocusedTerminalPaneIdFromClients(state);
     const panesById = Object.fromEntries(
         (Object.keys(PANE_DISPLAY_TITLES) as AirportPaneId[]).map((paneId) => {
             const expected = isAirportPaneExpected(state, paneId);
             const currentPane = currentState.panes[paneId];
-            const pane = currentPane?.terminalPaneId !== undefined && currentPane.terminalPaneId >= 0
-                ? panes.find((candidate) => candidate.id === currentPane.terminalPaneId)
-                : panes.find((candidate) => candidate.title === PANE_DISPLAY_TITLES[paneId]);
+            const pane = resolveClientReportedPane(state, paneId, currentPane);
             return [
                 paneId,
                 pane
                     ? {
-                        terminalPaneId: pane.id,
+                        terminalPaneId: pane.terminalPaneId,
                         expected,
-                        exists: true,
+                        exists: pane.exists,
                         title: pane.title
                     }
                     : {
@@ -246,7 +175,7 @@ function buildObservedState(
 
     return {
         ...currentState,
-        attached: true,
+        attached,
         panes: panesById,
         ...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
         lastObservedAt: now,
@@ -256,54 +185,35 @@ function buildObservedState(
     };
 }
 
-function buildDetachedState(state: AirportState, now: string): AirportSubstrateState {
-    const currentState = state.substrate;
+function resolveClientReportedPane(
+    state: AirportState,
+    paneId: AirportPaneId,
+    currentPane: AirportPaneState | undefined
+): AirportPaneState | undefined {
+    const claimedClient = Object.values(state.clients)
+        .filter((client) => client.connected && client.claimedPaneId === paneId)
+        .sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt) || left.clientId.localeCompare(right.clientId))[0];
+    const terminalPaneId = currentPane?.terminalPaneId ?? -1;
+    if (!claimedClient && terminalPaneId < 0) {
+        return undefined;
+    }
     return {
-        kind: currentState.kind,
-        sessionName: currentState.sessionName,
-        layoutIntent: currentState.layoutIntent,
-        attached: false,
-        panes: Object.fromEntries(
-            (Object.keys(PANE_DISPLAY_TITLES) as AirportPaneId[]).map((paneId) => [
-                paneId,
-                {
-                    terminalPaneId: currentState.panes[paneId]?.terminalPaneId ?? -1,
-                    expected: isAirportPaneExpected(state, paneId),
-                    exists: false,
-                    title: currentState.panes[paneId]?.title ?? PANE_DISPLAY_TITLES[paneId]
-                }
-            ])
-        ) as Partial<Record<AirportPaneId, AirportPaneState>>,
-        ...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
-        lastObservedAt: now
+        terminalPaneId,
+        expected: isAirportPaneExpected(state, paneId),
+        exists: Boolean(claimedClient),
+        title: currentPane?.title ?? PANE_DISPLAY_TITLES[paneId]
     };
 }
 
-function toTerminalPaneReference(paneId: number): string {
-    return `terminal_${String(paneId)}`;
-}
-
-function isAlreadyFocusedPaneError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error);
-    return message.includes('already focused');
-}
-
-function isMissingPaneError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error);
-    return message.includes('Pane with id') && message.includes('not found');
-}
-
-function parseTerminalManagerPaneListing(output: string): TerminalManagerPaneMetadata[] {
-    const normalizedOutput = output.trim();
-    if (!normalizedOutput || !normalizedOutput.startsWith('[')) {
-        return [];
+function resolveFocusedTerminalPaneIdFromClients(state: AirportState): number | undefined {
+    const focusedClient = Object.values(state.clients)
+        .filter((client) => client.connected && client.focusedPaneId)
+        .sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt) || left.clientId.localeCompare(right.clientId))[0];
+    if (!focusedClient?.focusedPaneId) {
+        return undefined;
     }
-
-    try {
-        return JSON.parse(normalizedOutput) as TerminalManagerPaneMetadata[];
-    } catch {
-        return [];
-    }
+    const pane = state.substrate.panes[focusedClient.focusedPaneId];
+    return pane && pane.terminalPaneId >= 0 ? pane.terminalPaneId : undefined;
 }
 
 function isAirportPaneExpected(state: AirportState, paneId: AirportPaneId): boolean {

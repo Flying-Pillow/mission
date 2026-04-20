@@ -16,7 +16,7 @@ import type {
 	MissionSystemState,
 	OperatorStatus
 } from '../../types.js';
-import { readSystemStatus } from '../../system/SystemStatus.js';
+import { peekCachedSystemStatus } from '../../system/SystemStatus.js';
 import { MissionControl } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryAirportRegistry } from './RepositoryAirportRegistry.js';
@@ -330,7 +330,7 @@ export class MissionSystemController {
 				...(activeRepositoryId ? { activeRepositoryId } : {})
 			}
 		};
-		const systemStatus = readSystemStatus({
+		const systemStatus = peekCachedSystemStatus({
 			...(activeAirport.repositoryRootPath ? { cwd: activeAirport.repositoryRootPath } : {})
 		});
 		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(
@@ -344,7 +344,7 @@ export class MissionSystemController {
 				deriveSystemAirportProjections(
 					domain,
 					record.control.getState(),
-					readSystemStatus({
+					peekCachedSystemStatus({
 						...(record.repositoryRootPath ? { cwd: record.repositoryRootPath } : {})
 					})
 				)

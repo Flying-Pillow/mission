@@ -200,4 +200,36 @@ describe('FilesystemAdapter', () => {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}
 	});
+
+	it('orders implementation verification pairs after their base task', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			await adapter.writeTaskRecord(missionDir, 'implementation', '01-base-verify.md', {
+				subject: 'Verify Base',
+				instruction: 'Validate the base slice.',
+				dependsOn: ['01-base'],
+				agent: 'copilot-cli'
+			});
+			await adapter.writeTaskRecord(missionDir, 'implementation', '01-base.md', {
+				subject: 'Base',
+				instruction: 'Build the base slice.',
+				agent: 'copilot-cli'
+			});
+			await adapter.writeTaskRecord(missionDir, 'implementation', '02-next.md', {
+				subject: 'Next',
+				instruction: 'Build the next slice.',
+				agent: 'copilot-cli'
+			});
+
+			const tasks = await adapter.listTaskStates(missionDir, 'implementation');
+			expect(tasks.map((task) => [task.taskId, task.dependsOn, task.blockedBy])).toEqual([
+				['implementation/01-base', [], []],
+				['implementation/01-base-verify', ['implementation/01-base'], ['implementation/01-base']],
+				['implementation/02-next', ['implementation/01-base-verify'], ['implementation/01-base-verify']]
+			]);
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
 });

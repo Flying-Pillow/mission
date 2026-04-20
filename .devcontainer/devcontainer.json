@@ -50,7 +50,7 @@
                 },
                 "editor.formatOnSave": true,
                 "terminal.integrated.defaultProfile.linux": "bash",
-                "typescript.tsdk": "node_modules/typescript/lib",
+                "js/ts.tsdk.path": "node_modules/typescript/lib",
                 "svelte.enable-ts-plugin": true,
                 "typescript.enableProjectDiagnostics": true
             },

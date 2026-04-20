@@ -3,7 +3,6 @@ import {
 	DaemonApi,
 	connectAirportControl,
 	type MissionSystemSnapshot,
-	readMissionUserConfig,
 	resolveAirportControlRuntimeMode,
 } from '@flying-pillow/mission-core';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
@@ -17,7 +16,6 @@ export async function bootstrapRunwayPane(context: AirportTerminalContext): Prom
 	});
 	const api = new DaemonApi(client);
 	const terminalBinary = process.env['AIRPORT_TERMINAL_BINARY']?.trim()
-		|| readMissionUserConfig()?.terminalBinary?.trim()
 		|| 'zellij';
 	const hostSessionName = process.env['AIRPORT_TERMINAL_SESSION']?.trim()
 		|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim();

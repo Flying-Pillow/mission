@@ -4,7 +4,7 @@ import { DaemonClient } from './DaemonClient.js';
 export class DaemonSystemApi {
 	public constructor(private readonly client: DaemonClient) { }
 
-	public async getStatus(): Promise<SystemStatus> {
-		return this.client.request<SystemStatus>('system.status');
+	public async getStatus(options: { timeoutMs?: number } = {}): Promise<SystemStatus> {
+		return this.client.request<SystemStatus>('system.status', undefined, options);
 	}
 }

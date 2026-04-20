@@ -2,9 +2,8 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { asset } from "$app/paths";
+    import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
     import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import DatabaseIcon from "@tabler/icons-svelte/icons/database";
-    import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
     import FolderIcon from "@tabler/icons-svelte/icons/folder";
     import HelpIcon from "@tabler/icons-svelte/icons/help";
     import SearchIcon from "@tabler/icons-svelte/icons/search";
@@ -52,11 +51,17 @@
         };
     });
 
-    const sidebarRepositories = $derived.by(() => {
-        const activeRepositoryId = page.url.pathname.startsWith("/repository/")
-            ? decodeURIComponent(page.url.pathname.replace("/repository/", ""))
-            : undefined;
+    const routeSegments = $derived(
+        page.url.pathname.split("/").filter((segment) => segment.length > 0),
+    );
+    const activeRepositoryId = $derived(
+        routeSegments[0] === "repository"
+            ? decodeURIComponent(routeSegments[1] ?? "")
+            : undefined,
+    );
+    const activeMissionId = $derived(appContext.airport.activeMissionId);
 
+    const sidebarRepositories = $derived.by(() => {
         return (appContext?.airport.repositories ?? []).map((repository) => {
             const isSelected = repository.repositoryId === activeRepositoryId;
 
@@ -64,6 +69,12 @@
                 ...repository,
                 icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
                 href: `/repository/${encodeURIComponent(repository.repositoryId)}`,
+                missions: (repository.missions ?? []).map((mission) => ({
+                    ...mission,
+                    href: `/repository/${encodeURIComponent(repository.repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`,
+                    isActive:
+                        isSelected && mission.missionId === activeMissionId,
+                })),
             };
         });
     });
@@ -114,7 +125,11 @@
                     {:else}
                         {#each sidebarRepositories as repository (repository.repositoryId)}
                             <Sidebar.MenuItem>
-                                <Sidebar.MenuButton class="h-auto py-2">
+                                <Sidebar.MenuButton
+                                    class="h-auto py-2"
+                                    isActive={repository.repositoryId ===
+                                        activeRepositoryId}
+                                >
                                     {#snippet child({ props })}
                                         <a href={repository.href} {...props}>
                                             <repository.icon />
@@ -134,6 +149,31 @@
                                         </a>
                                     {/snippet}
                                 </Sidebar.MenuButton>
+
+                                {#if repository.missions.length > 0}
+                                    <Sidebar.MenuSub>
+                                        {#each repository.missions as mission (mission.missionId)}
+                                            <Sidebar.MenuSubItem>
+                                                <Sidebar.MenuSubButton
+                                                    isActive={mission.isActive}
+                                                >
+                                                    {#snippet child({ props })}
+                                                        <a
+                                                            href={mission.href}
+                                                            {...props}
+                                                        >
+                                                            <CalendarIcon />
+                                                            <span>
+                                                                {mission.title?.trim() ||
+                                                                    mission.missionId}
+                                                            </span>
+                                                        </a>
+                                                    {/snippet}
+                                                </Sidebar.MenuSubButton>
+                                            </Sidebar.MenuSubItem>
+                                        {/each}
+                                    </Sidebar.MenuSub>
+                                {/if}
                             </Sidebar.MenuItem>
                         {/each}
                     {/if}

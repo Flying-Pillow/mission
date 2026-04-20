@@ -3,35 +3,37 @@ import { error as kitError, redirect, type Actions } from '@sveltejs/kit';
 import {
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core';
-import { logAirportWebPerf } from '$lib/server/daemon.server';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
-    const startedAt = performance.now();
     const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse(params);
     const missionId = url.searchParams.get('missionId')?.trim() || undefined;
 
+    if (missionId) {
+        throw redirect(
+            303,
+            `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(missionId)}`
+        );
+    }
+
     try {
         const gateway = new AirportWebGateway(locals);
+        const airportHome = await gateway.getAirportHomeSnapshot();
 
         return {
+            airportRepositories: airportHome.repositories,
             repositorySurface: await gateway.getRepositorySurfaceSnapshot({
                 repositoryId,
-                repositoryRootPath: repositoryId,
-                ...(missionId ? { selectedMissionId: missionId } : {})
-            })
+                repositoryRootPath: repositoryId
+            }),
+            repositoryId,
         };
     } catch (loadError) {
         const message = loadError instanceof Error ? loadError.message : String(loadError);
         throw kitError(404, message);
-    } finally {
-        logAirportWebPerf('route.repositoryPage.load', startedAt, {
-            repositoryId,
-            selectedMissionId: missionId
-        });
     }
 };
 
@@ -40,6 +42,11 @@ export const actions: Actions = {
         const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse(params);
         const formData = await request.formData();
         const missionId = String(formData.get('missionId') ?? '').trim();
-        throw redirect(303, missionId ? `/repository/${encodeURIComponent(repositoryId)}?missionId=${encodeURIComponent(missionId)}` : `/repository/${encodeURIComponent(repositoryId)}`);
+        throw redirect(
+            303,
+            missionId
+                ? `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(missionId)}`
+                : `/repository/${encodeURIComponent(repositoryId)}`
+        );
     }
 };

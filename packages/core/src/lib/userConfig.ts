@@ -16,12 +16,16 @@ export type MissionUserRegisteredRepository = {
 export type MissionUserConfig = {
 	version: 1;
 	missionWorkspaceRoot?: string;
-	terminalBinary?: string;
 	ghBinary?: string;
 	registeredRepositories?: MissionUserRegisteredRepository[];
 };
 
 export function getMissionUserConfigDirectory(): string {
+	const configuredPath = resolveConfiguredMissionConfigDirectory();
+	if (configuredPath) {
+		return configuredPath;
+	}
+
 	const xdgConfigHome = process.env['XDG_CONFIG_HOME']?.trim();
 	return xdgConfigHome
 		? path.join(xdgConfigHome, MISSION_USER_CONFIG_DIRECTORY)
@@ -38,13 +42,11 @@ export function getMissionRuntimeDirectory(): string {
 
 export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig> = {}): MissionUserConfig {
 	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
-	const terminalBinary = normalizeOptionalString(overrides.terminalBinary);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
 	return {
 		version: 1,
 		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
-		...(terminalBinary ? { terminalBinary } : {}),
 		...(ghBinary ? { ghBinary } : {}),
 		...(registeredRepositories ? { registeredRepositories } : {})
 	};
@@ -139,9 +141,6 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefi
 		...(typeof candidate['missionWorkspaceRoot'] === 'string'
 			? { missionWorkspaceRoot: candidate['missionWorkspaceRoot'] }
 			: {}),
-		...(typeof candidate['terminalBinary'] === 'string'
-			? { terminalBinary: candidate['terminalBinary'] }
-			: {}),
 		...(typeof candidate['ghBinary'] === 'string'
 			? { ghBinary: candidate['ghBinary'] }
 			: {}),
@@ -203,4 +202,16 @@ function buildMissionRepositoryCandidate(
 function normalizeOptionalString(value: string | undefined): string | undefined {
 	const trimmed = value?.trim();
 	return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveConfiguredMissionConfigDirectory(): string | undefined {
+	const configuredPath = normalizeOptionalString(process.env['MISSION_CONFIG_PATH']);
+	if (!configuredPath) {
+		return undefined;
+	}
+
+	const resolvedPath = path.resolve(configuredPath);
+	return path.basename(resolvedPath) === MISSION_USER_CONFIG_DIRECTORY
+		? resolvedPath
+		: path.join(resolvedPath, MISSION_USER_CONFIG_DIRECTORY);
 }

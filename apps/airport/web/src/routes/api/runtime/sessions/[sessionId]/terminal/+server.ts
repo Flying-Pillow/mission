@@ -35,8 +35,10 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const snapshot = await gateway.sendMissionSessionTerminalInput({
         missionId: body.missionId,
         sessionId,
-        data: body.data,
-        ...(body.literal !== undefined ? { literal: body.literal } : {})
+        ...(body.data !== undefined ? { data: body.data } : {}),
+        ...(body.literal !== undefined ? { literal: body.literal } : {}),
+        ...(body.cols !== undefined ? { cols: body.cols } : {}),
+        ...(body.rows !== undefined ? { rows: body.rows } : {})
     });
 
     return json(snapshot, {

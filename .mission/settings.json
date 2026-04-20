@@ -135,9 +135,10 @@
         "artifactTasks": false,
         "templateSources": [
           {
-            "templateId": "touchdown",
-            "path": "tasks/AUDIT/02-touchdown.md"
-          }],
+            "templateId": "closeout",
+            "path": "tasks/DELIVERY/01-closeout.md"
+          }
+        ],
         "tasks": []
       }
     ],

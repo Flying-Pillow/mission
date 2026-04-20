@@ -1,7 +1,10 @@
 // /apps/airport/web/src/routes/repository/[repositoryId]/issue.remote.ts: Client-callable remote queries for repository issue lists and issue details.
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { githubIssueDetailDtoSchema, trackedIssueSummaryDtoSchema } from '@flying-pillow/mission-core';
+import {
+    githubIssueDetailDtoSchema,
+    trackedIssueSummaryDtoSchema
+} from '@flying-pillow/mission-core/airport/runtime';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 
 const repositoryIssuesQuerySchema = z.object({

@@ -23,6 +23,7 @@ type PendingRequest = {
 
 export class DaemonClient implements MissionAgentDisposable {
 	private socket: net.Socket | undefined;
+	private socketPath: string | undefined;
 	private buffer = '';
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
@@ -36,24 +37,63 @@ export class DaemonClient implements MissionAgentDisposable {
 		this.authToken = authToken?.trim() ?? '';
 	}
 
-	public async connect(options: { surfacePath: string; socketPath?: string }): Promise<this> {
+	public async connect(options: { surfacePath: string; socketPath?: string; timeoutMs?: number }): Promise<this> {
 		this.surfacePath = options.surfacePath;
 		if (this.socket && !this.socket.destroyed) {
 			return this;
 		}
 
-		const socketPath = options.socketPath?.trim() || (await this.resolveSocketPath());
+		const socketPath = options.socketPath?.trim() || this.socketPath || (await this.resolveSocketPath());
 		await new Promise<void>((resolve, reject) => {
 			const socket = net.createConnection(socketPath);
-			socket.setEncoding('utf8');
-			socket.once('connect', () => {
+			const timeoutMs = options.timeoutMs;
+			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+			let settled = false;
+
+			const cleanup = () => {
+				if (timeoutHandle) {
+					clearTimeout(timeoutHandle);
+					timeoutHandle = undefined;
+				}
+				socket.off('connect', onConnect);
+				socket.off('error', onError);
+			};
+
+			const fail = (error: Error) => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				cleanup();
+				socket.destroy();
+				reject(error);
+			};
+
+			const onConnect = () => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				cleanup();
 				this.socket = socket;
+				this.socketPath = socketPath;
+				this.buffer = '';
 				this.attachSocket(socket);
 				resolve();
-			});
-			socket.once('error', (error) => {
-				reject(error);
-			});
+			};
+
+			const onError = (error: Error) => {
+				fail(error);
+			};
+
+			socket.setEncoding('utf8');
+			socket.once('connect', onConnect);
+			socket.once('error', onError);
+			if (timeoutMs && timeoutMs > 0) {
+				timeoutHandle = setTimeout(() => {
+					fail(new Error(`Mission daemon connection timed out after ${String(timeoutMs)}ms.`));
+				}, timeoutMs);
+			}
 		});
 
 		return this;
@@ -62,10 +102,19 @@ export class DaemonClient implements MissionAgentDisposable {
 	public async request<TResult>(
 		method: Method,
 		params?: unknown,
-		options: { authToken?: string } = {}
+		options: { authToken?: string; timeoutMs?: number } = {}
 	): Promise<TResult> {
 		if (!this.socket || this.socket.destroyed) {
-			throw new Error('Daemon client is not connected.');
+			if (!this.surfacePath) {
+				throw new Error('Daemon client is not connected.');
+			}
+			await this.connect({
+				surfacePath: this.surfacePath,
+				...(this.socketPath ? { socketPath: this.socketPath } : {})
+			});
+			if (!this.socket || this.socket.destroyed) {
+				throw new Error('Daemon client is not connected.');
+			}
 		}
 
 		const id = `request-${String(++this.nextRequestId)}`;
@@ -81,7 +130,29 @@ export class DaemonClient implements MissionAgentDisposable {
 		};
 
 		const response = await new Promise<unknown>((resolve, reject) => {
-			this.pendingRequests.set(id, { resolve, reject });
+			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+			const finish = <T>(callback: (value: T) => void, value: T) => {
+				if (timeoutHandle) {
+					clearTimeout(timeoutHandle);
+					timeoutHandle = undefined;
+				}
+				callback(value);
+			};
+
+			this.pendingRequests.set(id, {
+				resolve: (value) => {
+					finish(resolve, value);
+				},
+				reject: (error) => {
+					finish(reject, error);
+				}
+			});
+			if (options.timeoutMs && options.timeoutMs > 0) {
+				timeoutHandle = setTimeout(() => {
+					this.pendingRequests.delete(id);
+					reject(new Error(`Mission daemon request '${method}' timed out after ${String(options.timeoutMs)}ms.`));
+				}, options.timeoutMs);
+			}
 			this.socket?.write(`${JSON.stringify(request)}\n`);
 		});
 
@@ -115,9 +186,17 @@ export class DaemonClient implements MissionAgentDisposable {
 		});
 
 		socket.once('error', (error) => {
+			if (this.socket === socket) {
+				this.socket = undefined;
+			}
+			this.buffer = '';
 			this.rejectPendingRequests(error instanceof Error ? error : new Error(String(error)));
 		});
 		socket.once('close', () => {
+			if (this.socket === socket) {
+				this.socket = undefined;
+			}
+			this.buffer = '';
 			this.rejectPendingRequests(new Error('Mission daemon connection closed.'));
 		});
 	}

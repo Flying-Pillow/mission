@@ -307,6 +307,13 @@ export class Mission {
 		return (await session.sendCommand(command)).toRecord();
 	}
 
+	public async completeAgentSession(
+		sessionId: string
+	): Promise<MissionAgentSessionRecord> {
+		const session = this.requireAgentSession(sessionId);
+		return (await session.done()).toRecord();
+	}
+
 	public async terminateAgentSession(
 		sessionId: string,
 		reason?: string
@@ -576,6 +583,7 @@ export class Mission {
 			return this.buildDraftStatus();
 		}
 		const stages = await this.buildWorkflowStageStatuses(persistedDocument);
+		const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
 		const currentStageId = this.resolveCurrentStageFromWorkflow(persistedDocument);
 		const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
 		const activeTasks = this.resolveActiveTasks(currentStage);
@@ -617,6 +625,7 @@ export class Mission {
 				})),
 				tasks: persistedDocument.runtime.tasks.map((task) => ({
 					...task,
+					title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 					dependsOn: [...task.dependsOn],
 					blockedByTaskIds: [...task.blockedByTaskIds],
 					runtime: { ...task.runtime }
@@ -798,6 +807,19 @@ export class Mission {
 		productFiles: Partial<Record<MissionArtifactKey, string>>
 	): MissionTowerTreeNode[] {
 		const nodes: MissionTowerTreeNode[] = [];
+		const missionArtifactPath = productFiles.brief;
+		if (missionArtifactPath) {
+			nodes.push({
+				id: 'tree:mission-artifact:brief',
+				label: MISSION_ARTIFACTS.brief,
+				kind: 'mission-artifact',
+				depth: 0,
+				color: this.progressTone('pending'),
+				statusLabel: 'Mission artifact',
+				collapsible: false,
+				sourcePath: missionArtifactPath
+			});
+		}
 		for (const stage of stages) {
 			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
 			const stageStatusLabel = this.toStatusLabel(stage.status);
@@ -811,20 +833,6 @@ export class Mission {
 				collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
 				stageId: stage.stage
 			});
-
-			if (stageArtifactPath) {
-				nodes.push({
-					id: `tree:stage-artifact:${stage.stage}`,
-					label: path.basename(stageArtifactPath),
-					kind: 'stage-artifact',
-					depth: 1,
-					color: this.progressTone(stage.status),
-					statusLabel: stageStatusLabel,
-					collapsible: false,
-					sourcePath: stageArtifactPath,
-					stageId: stage.stage
-				});
-			}
 
 			for (const task of stage.tasks) {
 				const taskColor = this.progressTone(task.status);
@@ -873,6 +881,20 @@ export class Mission {
 						taskId: task.taskId
 					});
 				}
+			}
+
+			if (stageArtifactPath) {
+				nodes.push({
+					id: `tree:stage-artifact:${stage.stage}`,
+					label: path.basename(stageArtifactPath),
+					kind: 'stage-artifact',
+					depth: 1,
+					color: this.progressTone(stage.status),
+					statusLabel: stageStatusLabel,
+					collapsible: false,
+					sourcePath: stageArtifactPath,
+					stageId: stage.stage
+				});
 			}
 		}
 		return nodes;
@@ -933,7 +955,10 @@ export class Mission {
 			return '#79c0ff';
 		}
 		if (state === 'running') {
-			return '#3fb950';
+			return '#58a6ff';
+		}
+		if (state === 'terminated') {
+			return '#9be9a8';
 		}
 		if (state === 'failed') {
 			return '#f85149';
@@ -942,7 +967,7 @@ export class Mission {
 			return '#d29922';
 		}
 		if (state === 'completed') {
-			return '#f0f6fc';
+			return '#3fb950';
 		}
 		return fallbackColor;
 	}
@@ -968,7 +993,7 @@ export class Mission {
 			taskId: task.taskId,
 			stage: task.stageId as MissionStageId,
 			sequence: fileTask?.sequence ?? index + 1,
-			subject: task.title,
+			subject: this.resolveWorkflowTaskSubject(task, fileTask, fileName),
 			instruction: task.instruction,
 			body: task.instruction,
 			dependsOn: [...task.dependsOn],
@@ -980,6 +1005,34 @@ export class Mission {
 			filePath,
 			relativePath
 		};
+	}
+
+	private resolveWorkflowTaskSubject(
+		task: MissionRuntimeRecord['runtime']['tasks'][number],
+		fileTask: MissionTaskState | undefined,
+		fileName: string
+	): string {
+		const runtimeTitle = task.title.trim();
+		if (runtimeTitle.length > 0) {
+			return runtimeTitle;
+		}
+
+		const fileSubject = fileTask?.subject.trim();
+		if (fileSubject && fileSubject.length > 0) {
+			return fileSubject;
+		}
+
+		const taskStem = task.taskId.split('/').at(-1) ?? fileName;
+		const normalizedStem = stripTaskStemPrefix(stripMarkdownExtension(taskStem));
+		if (normalizedStem.length > 0) {
+			return normalizedStem
+				.split(/[-_]+/u)
+				.filter(Boolean)
+				.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+				.join(' ');
+		}
+
+		return task.taskId;
 	}
 
 	private resolveCurrentStageFromWorkflow(document: MissionRuntimeRecord): MissionStageId {
@@ -2139,4 +2192,12 @@ function resolveCurrentStageId(input: MissionAvailableActionsInput): MissionStag
 	return (input.runtime.activeStageId as MissionStageId | undefined)
 		?? (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
 		?? (input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined);
+}
+
+function stripTaskStemPrefix(value: string): string {
+	return value.replace(/^\d+(?:-[a-z0-9]+)?-/iu, '');
+}
+
+function stripMarkdownExtension(value: string): string {
+	return value.toLowerCase().endsWith('.md') ? value.slice(0, -3) : value;
 }

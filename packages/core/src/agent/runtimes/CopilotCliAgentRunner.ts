@@ -34,7 +34,7 @@ export class CopilotCliAgentRunner extends AgentRunner {
 	public constructor(options: CopilotCliAgentRunnerOptions) {
 		super({
 			id: COPILOT_CLI_AGENT_RUNNER_ID,
-			displayName: `${COPILOT_CLI_AGENT_RUNNER_ID} via terminal-manager`
+			displayName: `${COPILOT_CLI_AGENT_RUNNER_ID} via PTY transport`
 		});
 		this.trustedConfigDir = resolveTrustedConfigDir(options.trustedConfigDir);
 		const effectiveArgs = options.args && options.args.length > 0

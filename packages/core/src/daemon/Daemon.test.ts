@@ -77,6 +77,122 @@ describe('Daemon', () => {
 		});
 	});
 
+	it('derives system status from an explicit auth token without waiting for another daemon action', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const configHome = path.join(workspaceRoot, 'config-home');
+			const binDirectory = path.join(workspaceRoot, 'bin');
+			const originalPath = process.env['PATH'] ?? '';
+			await fs.mkdir(binDirectory, { recursive: true });
+			await fs.writeFile(
+				path.join(binDirectory, 'gh'),
+				`#!/bin/sh
+if [ "$GH_TOKEN" = "ghp_test_token" ] && [ "$1" = "api" ] && [ "$2" = "user" ]; then
+  echo '{"login":"mission-token-user","email":"mission@example.com"}'
+  exit 0
+fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "authentication required" >&2
+  exit 1
+fi
+exit 1
+`,
+				{ mode: 0o755 }
+			);
+
+			process.env['XDG_CONFIG_HOME'] = configHome;
+			process.env['PATH'] = `${binDirectory}:${originalPath}`;
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const client = new DaemonClient();
+
+				try {
+					client.setAuthToken('ghp_test_token');
+					await client.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					const api = new DaemonApi(client);
+					const status = await api.system.getStatus();
+
+					expect(status.github.authenticated).toBe(true);
+					expect(status.github.user).toBe('mission-token-user');
+					expect(status.github.email).toBe('mission@example.com');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				process.env['XDG_CONFIG_HOME'] = undefined;
+				process.env['PATH'] = originalPath;
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('drops session.terminal broadcasts until a matching subscriber is attached', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const idleClient = new DaemonClient();
+				const terminalClient = new DaemonClient();
+				const terminalEvent = {
+					type: 'session.terminal' as const,
+					missionId: 'mission-1',
+					sessionId: 'session-1',
+					state: {
+						connected: true,
+						dead: false,
+						exitCode: null,
+						screen: 'hello',
+						truncated: false,
+						chunk: 'hello'
+					}
+				};
+
+				try {
+					await idleClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					const idleEvents: string[] = [];
+					const idleSubscription = idleClient.onDidEvent((event) => {
+						idleEvents.push(event.type);
+					});
+
+					(daemon as unknown as { broadcastEvent(event: typeof terminalEvent): void }).broadcastEvent(terminalEvent);
+					await new Promise((resolve) => setTimeout(resolve, 25));
+					expect(idleEvents).toEqual([]);
+
+					await terminalClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					await terminalClient.request<null>('event.subscribe', {
+						eventTypes: ['session.terminal'],
+						missionId: 'mission-1',
+						sessionId: 'session-1'
+					});
+
+					const terminalEventPromise = new Promise<string>((resolve) => {
+						const terminalSubscription = terminalClient.onDidEvent((event) => {
+							if (event.type !== 'session.terminal') {
+								return;
+							}
+							terminalSubscription.dispose();
+							resolve(event.state.chunk ?? '');
+						});
+					});
+
+					(daemon as unknown as { broadcastEvent(event: typeof terminalEvent): void }).broadcastEvent(terminalEvent);
+					await expect(terminalEventPromise).resolves.toBe('hello');
+
+					idleSubscription.dispose();
+				} finally {
+					idleClient.dispose();
+					terminalClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it('prepares the first initialization mission in a worktree without mutating the original checkout', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
@@ -200,6 +316,77 @@ describe('Daemon', () => {
 					});
 				} finally {
 					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('filters daemon events per subscribed client connection', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const subscribedClient = new DaemonClient();
+				const unsubscribedClient = new DaemonClient();
+
+				try {
+					await subscribedClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					await unsubscribedClient.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+
+					const subscribedApi = new DaemonApi(subscribedClient);
+					const unsubscribedApi = new DaemonApi(unsubscribedClient);
+					await subscribedApi.control.initializeWorkflowSettings();
+					const initial = await subscribedApi.control.getWorkflowSettings();
+					await subscribedClient.request<null>('event.subscribe', {
+						eventTypes: ['control.workflow.settings.updated']
+					});
+
+					const subscribedEvents: string[] = [];
+					const unsubscribedEvents: string[] = [];
+					const subscribedEventPromise = new Promise<void>((resolve) => {
+						const subscription = subscribedClient.onDidEvent((event) => {
+							subscribedEvents.push(event.type);
+							if (event.type === 'control.workflow.settings.updated') {
+								subscription.dispose();
+								resolve();
+							}
+						});
+					});
+					const unsubscribedEventPromise = new Promise<void>((resolve) => {
+						const subscription = unsubscribedClient.onDidEvent((event) => {
+							unsubscribedEvents.push(event.type);
+							if (event.type === 'control.workflow.settings.updated') {
+								subscription.dispose();
+								resolve();
+							}
+						});
+					});
+
+					await unsubscribedApi.control.updateWorkflowSettings({
+						expectedRevision: initial.revision,
+						patch: [
+							{
+								op: 'replace',
+								path: '/execution/maxParallelTasks',
+								value: 2
+							}
+						],
+						context: {
+							requestedBySurface: 'test-suite',
+							requestedBy: 'vitest'
+						}
+					});
+
+					await Promise.all([subscribedEventPromise, unsubscribedEventPromise]);
+					expect(subscribedEvents).toEqual(['control.workflow.settings.updated']);
+					expect(unsubscribedEvents).toContain('control.workflow.settings.updated');
+				} finally {
+					subscribedClient.dispose();
+					unsubscribedClient.dispose();
 					await daemon.close();
 				}
 			} finally {
@@ -567,6 +754,73 @@ describe('Daemon', () => {
 					);
 					const firstEnabledAction = scopedTaskActions.find((action) => action.enabled);
 
+
+			it('surfaces and executes pull-origin as a daemon-owned mission action when origin is ahead on mission open', async () => {
+				await withTemporaryDaemonConfigHome(async () => {
+					const workspaceRoot = await createTempRepo();
+					const originPath = await createTempBareRemote();
+					runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+					runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+					runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
+					await initializeMissionRepository(workspaceRoot);
+					const seededMission = await seedTrackedMission(workspaceRoot, 8, 'Pull origin daemon action');
+
+					try {
+						const missionRecord = seededMission.getRecord();
+						runGit(missionRecord.missionDir, ['push', '--set-upstream', 'origin', missionRecord.branchRef]);
+
+						const remoteCloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-remote-clone-'));
+						temporaryDirectories.add(remoteCloneRoot);
+						try {
+							runGit(workspaceRoot, ['clone', originPath, remoteCloneRoot]);
+							runGit(remoteCloneRoot, ['config', 'user.email', 'mission@example.com']);
+							runGit(remoteCloneRoot, ['config', 'user.name', 'Mission Test']);
+							runGit(remoteCloneRoot, ['checkout', missionRecord.branchRef]);
+							await fs.writeFile(path.join(remoteCloneRoot, 'REMOTE_ONLY.md'), 'remote update\n', 'utf8');
+							runGit(remoteCloneRoot, ['add', 'REMOTE_ONLY.md']);
+							runGit(remoteCloneRoot, ['commit', '-m', 'remote update']);
+							runGit(remoteCloneRoot, ['push', 'origin', missionRecord.branchRef]);
+						} finally {
+							await fs.rm(remoteCloneRoot, { recursive: true, force: true });
+						}
+
+						const daemon = await startDaemon();
+						const client = new DaemonClient();
+
+						try {
+							await client.connect({ surfacePath: workspaceRoot });
+							const api = new DaemonApi(client);
+							await api.control.getStatus();
+							const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+							const pullOriginAction = actions.find((action) => action.id === 'mission.pull-origin');
+
+							expect(pullOriginAction).toMatchObject({
+								id: 'mission.pull-origin',
+								action: '/mission pull-origin',
+								enabled: true,
+								disabled: false,
+								scope: 'mission'
+							});
+
+							await api.mission.executeAction({ missionId: missionRecord.id }, 'mission.pull-origin');
+
+							const refreshedActions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+							expect(
+								refreshedActions.find((action) => action.id === 'mission.pull-origin')
+							).toMatchObject({ enabled: false, disabled: true });
+							await expect(fs.readFile(path.join(missionRecord.missionDir, 'REMOTE_ONLY.md'), 'utf8')).resolves.toContain('remote update');
+						} finally {
+							client.dispose();
+							await daemon.close();
+						}
+					} finally {
+						seededMission.dispose();
+						await fs.rm(originPath, { recursive: true, force: true });
+						await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+						await fs.rm(workspaceRoot, { recursive: true, force: true });
+					}
+				});
+			});
 					expect(firstEnabledAction).toMatchObject({
 						id: 'mission.resume',
 						action: '/mission resume'
@@ -1676,6 +1930,75 @@ describe('Daemon', () => {
 			});
 		});
 	});
+
+	it('surfaces and executes a delivery-gated changeset mission action from the daemon registry', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMissionInDeliveryStage(workspaceRoot, 9, 'Delivery changeset action');
+
+			try {
+				const missionRecord = seededMission.getRecord();
+				await seededMission.startWorkflow();
+
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.control.getStatus();
+					const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+					const changesetAction = actions.find((action) => action.id === 'mission.changeset.add');
+
+					expect(changesetAction).toMatchObject({
+						id: 'mission.changeset.add',
+						action: '/mission changeset',
+						enabled: true,
+						disabled: false,
+						scope: 'mission'
+					});
+					expect(changesetAction?.flow?.steps).toEqual(
+						expect.arrayContaining([
+							expect.objectContaining({ id: 'changeset.packages', kind: 'selection' }),
+							expect.objectContaining({ id: 'changeset.bump', kind: 'selection' }),
+							expect.objectContaining({ id: 'changeset.summary', kind: 'text' })
+						])
+					);
+
+					await api.mission.executeAction(
+						{ missionId: missionRecord.id },
+						'mission.changeset.add',
+						[
+							{ kind: 'selection', stepId: 'changeset.packages', optionIds: ['@flying-pillow/mission-core'] },
+							{ kind: 'selection', stepId: 'changeset.bump', optionIds: ['patch'] },
+							{ kind: 'text', stepId: 'changeset.summary', value: 'Ship the delivery-stage daemon changeset action.' }
+						]
+					);
+
+					const changesetDirectory = path.join(workspaceRoot, '.changeset');
+					const changesetFiles = (await fs.readdir(changesetDirectory))
+						.filter((entry) => entry.endsWith('.md') && entry !== 'README.md');
+					const generatedChangeset = changesetFiles.find((entry) => entry.includes(missionRecord.id.split('-')[0] ?? ''));
+
+					if (!generatedChangeset) {
+						throw new Error('Expected the daemon to generate a changeset file.');
+					}
+
+					await expect(fs.readFile(path.join(changesetDirectory, generatedChangeset), 'utf8')).resolves.toContain(
+						'"@flying-pillow/mission-core": patch\n---\n\nShip the delivery-stage daemon changeset action.'
+					);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
 });
 
 function createBrief(issueId: number | undefined, title: string) {
@@ -1696,6 +2019,51 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 		title,
 		branchRef: adapter.deriveMissionBranchName(issueId, title)
 	});
+}
+
+async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
+	const adapter = new FilesystemAdapter(workspaceRoot);
+	const missionId = adapter.createMissionId(createBrief(issueId, title));
+	const branchRef = adapter.deriveMissionBranchName(issueId, title);
+	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
+	const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
+	const workflow = createDefaultWorkflowSettings();
+	const deliveryStage = workflow.stages['delivery'];
+	if (!deliveryStage) {
+		throw new Error('Expected the default workflow to include a delivery stage.');
+	}
+	workflow.stageOrder = ['delivery'];
+	workflow.stages = {
+		delivery: {
+			...deliveryStage,
+			taskLaunchPolicy: {
+				...deliveryStage.taskLaunchPolicy,
+				defaultAutostart: false
+			}
+		}
+	};
+	workflow.taskGeneration = workflow.taskGeneration.filter((rule) => rule.stageId === 'delivery');
+	workflow.gates = workflow.gates.filter((gate) => gate.stageId === 'delivery');
+	await adapter.materializeMissionWorktree(missionWorktreePath, branchRef);
+	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
+	const mission = Mission.hydrate(
+		worktreeAdapter,
+		missionRootDir,
+		{
+			missionId,
+			missionDir: missionRootDir,
+			brief: createBrief(issueId, title),
+			branchRef,
+			createdAt: new Date().toISOString()
+		},
+		{
+			workflow,
+			resolveWorkflow: () => workflow,
+			taskRunners: new Map()
+		}
+	);
+	await mission.initialize();
+	return mission;
 }
 
 async function seedTrackedMissionWithId(

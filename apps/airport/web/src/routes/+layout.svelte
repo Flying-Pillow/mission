@@ -1,10 +1,9 @@
-<!-- /apps/airport/web/src/routes/+layout.svelte: Root layout that seeds app-wide client context and renders route content. -->
 <script lang="ts">
 	import "../app.css";
-	import { ModeWatcher } from "mode-watcher";
-	import { getAirportRepositories } from "./airport.remote";
-	import { onMount, type Snippet } from "svelte";
+	import type { Snippet } from "svelte";
+	import { browser } from "$app/environment";
 	import { asset } from "$app/paths";
+	import { ModeWatcher } from "mode-watcher";
 	import {
 		createAppContext,
 		setAppContext,
@@ -12,24 +11,54 @@
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
-	const appContext = setAppContext(createAppContext(() => data.appContext));
-	let repositoriesLoading = $state(false);
+	const appContext = createAppContext(() => data.appContext);
+	let retryReloadTimer: ReturnType<typeof setTimeout> | undefined;
 
-	onMount(() => {
-		if (repositoriesLoading || appContext.airport.repositories.length > 0) {
+	setAppContext(appContext);
+
+	$effect(() => {
+		appContext.syncServerContext(data.appContext);
+	});
+
+	$effect(() => {
+		if (retryReloadTimer) {
+			clearTimeout(retryReloadTimer);
+			retryReloadTimer = undefined;
+		}
+
+		if (
+			!browser ||
+			appContext.daemon.running ||
+			!appContext.daemon.nextRetryAt
+		) {
 			return;
 		}
 
-		repositoriesLoading = true;
-		void getAirportRepositories({})
-			.then((repositories) => {
-				appContext.setRepositories(repositories);
-			})
-			.finally(() => {
-				repositoriesLoading = false;
-			});
+		const retryAtMs = new Date(appContext.daemon.nextRetryAt).getTime();
+		if (!Number.isFinite(retryAtMs)) {
+			return;
+		}
+
+		const delayMs = retryAtMs - Date.now();
+		if (delayMs <= 0) {
+			window.location.reload();
+			return;
+		}
+
+		retryReloadTimer = setTimeout(() => {
+			window.location.reload();
+		}, delayMs);
+
+		return () => {
+			if (retryReloadTimer) {
+				clearTimeout(retryReloadTimer);
+				retryReloadTimer = undefined;
+			}
+		};
 	});
 </script>
+
+<ModeWatcher />
 
 <svelte:head>
 	<link rel="icon" href={asset("/favicon.ico")} sizes="any" />
@@ -37,6 +66,43 @@
 	<link rel="apple-touch-icon" href={asset("/apple-touch-icon.png")} />
 </svelte:head>
 
-<ModeWatcher />
-
-{@render children()}
+{#if appContext.daemon.running}
+	{@render children()}
+{:else}
+	<div
+		class="flex min-h-svh items-center justify-center bg-background px-6 py-10"
+	>
+		<section
+			class="w-full max-w-xl rounded-3xl border bg-card/80 px-8 py-7 text-center shadow-sm backdrop-blur-sm"
+		>
+			<p
+				class="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground"
+			>
+				Mission Daemon
+			</p>
+			<h1 class="mt-4 text-2xl font-semibold text-foreground">
+				Daemon is not running
+			</h1>
+			<p class="mt-3 text-sm leading-6 text-muted-foreground">
+				{appContext.daemon.message}
+			</p>
+			{#if appContext.daemon.nextRetryAt}
+				<p class="mt-3 text-xs text-muted-foreground">
+					Retrying after {appContext.daemon.nextRetryAt}
+				</p>
+			{/if}
+			{#if appContext.daemon.failureCount}
+				<p class="mt-1 text-xs text-muted-foreground">
+					Failed recovery attempts: {appContext.daemon.failureCount}
+				</p>
+			{/if}
+			<div class="mt-6 flex items-center justify-center gap-3">
+				<span class="size-2.5 animate-pulse rounded-full bg-amber-500"
+				></span>
+				<p class="text-sm font-medium text-foreground">
+					Waiting for the next recovery window
+				</p>
+			</div>
+		</section>
+	</div>
+{/if}

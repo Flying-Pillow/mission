@@ -5,7 +5,7 @@ import {
     missionFromBriefInputSchema,
     missionFromIssueInputSchema,
     repositoryRuntimeRouteParamsSchema
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/airport/runtime';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 
 function resolveRepositoryContext(): {
@@ -36,7 +36,7 @@ export const startMissionFromIssue = command(
 
         return {
             missionId: status.missionId,
-            redirectTo: `/repository/${encodeURIComponent(repositoryId)}?missionId=${encodeURIComponent(status.missionId)}`
+            redirectTo: `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(status.missionId)}`
         };
     }
 );
@@ -56,7 +56,7 @@ export const startMissionFromBrief = form(
                 throw new Error('Mission creation did not return a missionId.');
             }
 
-            redirect(303, `/repository/${encodeURIComponent(repositoryId)}?missionId=${encodeURIComponent(status.missionId)}`);
+            redirect(303, `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(status.missionId)}`);
         } catch (error) {
             invalid(
                 error instanceof Error

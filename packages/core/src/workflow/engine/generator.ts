@@ -93,14 +93,46 @@ function deduplicateGeneratedTasksByTaskId(tasks: MissionGeneratedTaskPayload[])
 }
 
 export function normalizeGeneratedTaskDependencies(tasks: MissionGeneratedTaskPayload[]): MissionGeneratedTaskPayload[] {
+    const orderedTasks = [...tasks].sort(compareGeneratedTaskOrder);
+    const orderedTaskIndexById = new Map(orderedTasks.map((task, index) => [task.taskId, index]));
+
     return tasks.map((task, index) => ({
         ...task,
         dependsOn: task.dependsOn.length > 0
             ? [...new Set(task.dependsOn.map((dependency) => resolveGeneratedTaskDependencyReference(task, dependency, tasks)))]
-            : index > 0
-                ? [tasks[index - 1]!.taskId]
+            : (orderedTaskIndexById.get(task.taskId) ?? index) > 0
+                ? [orderedTasks[(orderedTaskIndexById.get(task.taskId) ?? index) - 1]!.taskId]
                 : []
     }));
+}
+
+function compareGeneratedTaskOrder(left: MissionGeneratedTaskPayload, right: MissionGeneratedTaskPayload): number {
+    const leftTaskId = left.taskId;
+    const rightTaskId = right.taskId;
+    const leftStem = leftTaskId.split('/').at(-1) ?? leftTaskId;
+    const rightStem = rightTaskId.split('/').at(-1) ?? rightTaskId;
+    const leftSequence = parseGeneratedTaskSequence(leftStem);
+    const rightSequence = parseGeneratedTaskSequence(rightStem);
+    if (leftSequence !== rightSequence) {
+        return leftSequence - rightSequence;
+    }
+
+    const leftVerificationRank = isVerificationTaskStem(leftStem) ? 1 : 0;
+    const rightVerificationRank = isVerificationTaskStem(rightStem) ? 1 : 0;
+    if (leftVerificationRank !== rightVerificationRank) {
+        return leftVerificationRank - rightVerificationRank;
+    }
+
+    return leftTaskId.localeCompare(rightTaskId);
+}
+
+function parseGeneratedTaskSequence(taskStem: string): number {
+    const match = /^(\d+)/u.exec(taskStem);
+    return match ? Number.parseInt(match[1] ?? '', 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function isVerificationTaskStem(taskStem: string): boolean {
+    return taskStem.endsWith('-verify');
 }
 
 function resolveGeneratedTaskDependencyReference(

@@ -1,7 +1,7 @@
 // /apps/airport/web/src/routes/airport.remote.ts: App-level remote queries for Airport shell state such as registered repositories.
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { repositoryCandidateDtoSchema } from '@flying-pillow/mission-core';
+import { repositoryCandidateDtoSchema } from '@flying-pillow/mission-core/airport/runtime';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 
 const airportRepositoriesQuerySchema = z.object({});

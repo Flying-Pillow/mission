@@ -1,18 +1,18 @@
 import { PI_AGENT_RUNNER_ID } from './AgentRuntimeIds.js';
 import {
-    AgentRunner,
+	AgentRunner,
 	type AgentRunnerTerminalTransportRuntimeOptions
 } from '../AgentRunner.js';
 import type { AgentSession } from '../AgentSession.js';
 import type {
-    AgentLaunchConfig,
-    AgentRunnerCapabilities,
-    AgentSessionReference
+	AgentLaunchConfig,
+	AgentRunnerCapabilities,
+	AgentSessionReference
 } from '../AgentRuntimeTypes.js';
 
 export type PiAgentRunnerOptions = Omit<
 	AgentRunnerTerminalTransportRuntimeOptions,
-    | 'command'
+	| 'command'
 > & {
 	command?: string;
 };
@@ -21,7 +21,7 @@ export class PiAgentRunner extends AgentRunner {
 	public constructor(options: PiAgentRunnerOptions = {}) {
 		super({
 			id: PI_AGENT_RUNNER_ID,
-			displayName: 'pi via terminal-manager'
+			displayName: 'pi via PTY transport'
 		});
 		this.configureTerminalTransportRuntime({
 			command: options.command?.trim() || process.env['MISSION_PI_COMMAND']?.trim() || 'pi',

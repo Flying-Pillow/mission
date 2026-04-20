@@ -2,6 +2,7 @@
 <script lang="ts">
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
@@ -50,13 +51,14 @@
             };
         };
     }>();
+    const appContext = getAppContext();
 
     const daemonStatusTone = $derived(
-        data.appContext.daemon.running ? "connected" : "disconnected",
+        appContext.daemon.running ? "connected" : "disconnected",
     );
-    const githubStatusTone = $derived(data.appContext.githubStatus);
+    const githubStatusTone = $derived(appContext.githubStatus);
     const githubAccountLabel = $derived(
-        data.appContext.user?.name ??
+        appContext.user?.name ??
             (githubStatusTone === "connected"
                 ? "Authenticated GitHub account"
                 : "No authenticated GitHub account"),
@@ -66,6 +68,34 @@
             ? "1 repository registered"
             : `${data.airportHome.repositories.length} repositories registered`,
     );
+    const selectedRepository = $derived.by(() =>
+        data.airportHome.repositories.find(
+            (repository: (typeof data.airportHome.repositories)[number]) =>
+                repository.repositoryRootPath ===
+                data.airportHome.selectedRepositoryRoot,
+        ),
+    );
+
+    syncAppContext();
+
+    $effect(() => {
+        syncAppContext();
+    });
+
+    function syncAppContext(): void {
+        appContext.setRepositories(data.airportHome.repositories);
+        appContext.setActiveRepository(
+            selectedRepository
+                ? {
+                      repositoryId: selectedRepository.repositoryId,
+                      repositoryRootPath: selectedRepository.repositoryRootPath,
+                  }
+                : undefined,
+        );
+        appContext.setActiveMission(undefined);
+        appContext.setActiveMissionOutline(undefined);
+        appContext.setActiveMissionSelectedNodeId(undefined);
+    }
 </script>
 
 <svelte:head>
@@ -111,7 +141,7 @@
                                     </p>
                                 </div>
                                 <p class="mt-1 text-sm text-muted-foreground">
-                                    {data.appContext.daemon.message}
+                                    {appContext.daemon.message}
                                 </p>
                             </div>
                             <div
@@ -304,8 +334,8 @@
                         Add repository
                     </h2>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Register a local git working tree so the daemon can
-                        expose it through Airport.
+                        Register a local git repository so the daemon can expose
+                        it through Airport.
                     </p>
 
                     <form

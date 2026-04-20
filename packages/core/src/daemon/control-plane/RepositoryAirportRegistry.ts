@@ -9,7 +9,7 @@ import {
 	type AirportPaneId
 } from '../../airport/index.js';
 import {
-	TerminalManagerSubstrateController,
+	ClientReportedSubstrateController,
 	type AirportSubstrateEffect
 } from './AirportTerminalSubstrate.js';
 
@@ -17,7 +17,7 @@ type RepositoryAirportRecord = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: AirportControl;
-	substrateController: TerminalManagerSubstrateController;
+	substrateController: ClientReportedSubstrateController;
 };
 
 export class RepositoryAirportRegistry {
@@ -94,7 +94,7 @@ export class RepositoryAirportRegistry {
 		if (airport.control.getState().substrate.sessionName === normalizedSessionName) {
 			return;
 		}
-		airport.substrateController = new TerminalManagerSubstrateController({
+		airport.substrateController = new ClientReportedSubstrateController({
 			sessionName: normalizedSessionName
 		});
 		airport.control.scopeToRepository({
@@ -173,7 +173,7 @@ export class RepositoryAirportRegistry {
 		}
 
 		const identity = deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath);
-		const substrateController = new TerminalManagerSubstrateController({
+		const substrateController = new ClientReportedSubstrateController({
 			sessionName: identity.sessionName
 		});
 		const control = new AirportControl({

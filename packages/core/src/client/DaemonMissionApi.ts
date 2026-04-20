@@ -1,10 +1,13 @@
 import type {
 	MissionActionList,
 	MissionAgentConsoleState,
+	MissionAgentTerminalState,
 	MissionAgentSessionRecord,
 	MissionActionExecute,
 	MissionFromBriefRequest,
+	SessionComplete,
 	SessionCommand,
+	SessionTerminalInput,
 	SessionPrompt
 } from '../daemon/protocol/contracts.js';
 import type {
@@ -92,6 +95,28 @@ export class DaemonMissionApi {
 		});
 	}
 
+	public async getMissionTerminalState(
+		selector: MissionSelector | undefined
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.state', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {})
+		});
+	}
+
+	public async sendMissionTerminalInput(
+		selector: MissionSelector | undefined,
+		input: { data?: string; literal?: boolean; cols?: number; rows?: number; respondWithState?: boolean }
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.input', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			...(input.data !== undefined ? { data: input.data } : {}),
+			...(input.literal !== undefined ? { literal: input.literal } : {}),
+			...(input.cols !== undefined ? { cols: input.cols } : {}),
+			...(input.rows !== undefined ? { rows: input.rows } : {}),
+			...(input.respondWithState !== undefined ? { respondWithState: input.respondWithState } : {})
+		});
+	}
+
 	public async listSessions(
 		selector: MissionSelector
 	): Promise<MissionAgentSessionRecord[]> {
@@ -108,6 +133,33 @@ export class DaemonMissionApi {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId
 		});
+	}
+
+	public async getSessionTerminalState(
+		selector: MissionSelector | undefined,
+		sessionId: string
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('session.terminal.state', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			sessionId
+		});
+	}
+
+	public async sendSessionTerminalInput(
+		selector: MissionSelector | undefined,
+		sessionId: string,
+		input: { data?: string; literal?: boolean; cols?: number; rows?: number; respondWithState?: boolean }
+	): Promise<MissionAgentTerminalState | null> {
+		const params: SessionTerminalInput = {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			sessionId,
+			...(input.data !== undefined ? { data: input.data } : {}),
+			...(input.literal !== undefined ? { literal: input.literal } : {}),
+			...(input.cols !== undefined ? { cols: input.cols } : {}),
+			...(input.rows !== undefined ? { rows: input.rows } : {}),
+			...(input.respondWithState !== undefined ? { respondWithState: input.respondWithState } : {})
+		};
+		return this.client.request<MissionAgentTerminalState | null>('session.terminal.input', params);
 	}
 
 	public async cancelSession(
@@ -146,6 +198,17 @@ export class DaemonMissionApi {
 			command
 		};
 		return this.client.request<MissionAgentSessionRecord>('session.command', params);
+	}
+
+	public async completeSession(
+		selector: MissionSelector | undefined,
+		sessionId: string
+	): Promise<MissionAgentSessionRecord> {
+		const params: SessionComplete = {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			sessionId
+		};
+		return this.client.request<MissionAgentSessionRecord>('session.complete', params);
 	}
 
 	public async terminateSession(

@@ -13,6 +13,7 @@ import {
 export type ConnectAirportControlOptions = {
 	surfacePath: string;
 	startupTimeoutMs?: number;
+	handshakeTimeoutMs?: number;
 	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 	logLine?: (line: string) => void;
@@ -46,12 +47,13 @@ export async function connectAirportControl(
 	options: ConnectAirportControlOptions
 ): Promise<DaemonClient> {
 	const runtimeMode = options.runtimeMode ?? resolveAirportControlRuntimeMode(import.meta.url);
+	const handshakeTimeoutMs = Math.min(options.handshakeTimeoutMs ?? 3_000, options.startupTimeoutMs ?? 15_000);
 	const runtimeFactoryModulePath =
 		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath(runtimeMode);
 	const allowStart = options.allowStart !== false;
 
 	try {
-		return await connectCompatibleDaemon(options.surfacePath, options.authToken);
+		return await connectCompatibleDaemon(options.surfacePath, options.authToken, handshakeTimeoutMs);
 	} catch (error) {
 		if (!allowStart) {
 			throw error;
@@ -69,7 +71,7 @@ export async function connectAirportControl(
 	let lastError: Error | undefined;
 	while (Date.now() < timeoutAt) {
 		try {
-			return await connectCompatibleDaemon(options.surfacePath, options.authToken);
+			return await connectCompatibleDaemon(options.surfacePath, options.authToken, handshakeTimeoutMs);
 		} catch (error) {
 			lastError = error instanceof Error ? error : new Error(String(error));
 			await restartIncompatibleDaemon(error, options.logLine);
@@ -84,12 +86,16 @@ export async function connectAirportControl(
 	);
 }
 
-async function connectCompatibleDaemon(surfacePath: string, authToken?: string): Promise<DaemonClient> {
+async function connectCompatibleDaemon(
+	surfacePath: string,
+	authToken?: string,
+	handshakeTimeoutMs = 3_000
+): Promise<DaemonClient> {
 	const client = new DaemonClient();
 	try {
 		client.setAuthToken(authToken);
-		await client.connect({ surfacePath });
-		const ping = await client.request<Ping>('ping');
+		await client.connect({ surfacePath, timeoutMs: handshakeTimeoutMs });
+		const ping = await client.request<Ping>('ping', undefined, { timeoutMs: handshakeTimeoutMs });
 		if (ping.protocolVersion !== PROTOCOL_VERSION) {
 			throw new IncompatibleDaemonError(ping.pid, ping.protocolVersion);
 		}

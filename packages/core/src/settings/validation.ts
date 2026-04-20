@@ -162,6 +162,57 @@ export function validateWorkflowSettings(settings: WorkflowGlobalSettings): Work
 				message: `Task generation rule at index ${String(index)} references unknown stage '${rule.stageId}'.`
 			});
 		}
+
+		for (const [sourceIndex, source] of rule.templateSources.entries()) {
+			if (source.templateId.trim().length === 0) {
+				errors.push({
+					code: 'INVALID_TASK_TEMPLATE_SOURCE',
+					path: `/taskGeneration/${String(index)}/templateSources/${String(sourceIndex)}/templateId`,
+					message: 'Task template sources must declare a non-empty templateId.'
+				});
+			}
+			if (source.path.trim().length === 0) {
+				errors.push({
+					code: 'INVALID_TASK_TEMPLATE_SOURCE',
+					path: `/taskGeneration/${String(index)}/templateSources/${String(sourceIndex)}/path`,
+					message: 'Task template sources must declare a non-empty path.'
+				});
+			}
+		}
+
+		for (const [taskIndex, task] of rule.tasks.entries()) {
+			if (task.taskId.trim().length === 0) {
+				errors.push({
+					code: 'INVALID_GENERATED_TASK',
+					path: `/taskGeneration/${String(index)}/tasks/${String(taskIndex)}/taskId`,
+					message: 'Generated workflow tasks must declare a non-empty taskId.'
+				});
+			}
+			if (task.title.trim().length === 0) {
+				errors.push({
+					code: 'INVALID_GENERATED_TASK',
+					path: `/taskGeneration/${String(index)}/tasks/${String(taskIndex)}/title`,
+					message: 'Generated workflow tasks must declare a non-empty title.'
+				});
+			}
+			if (task.instruction.trim().length === 0) {
+				errors.push({
+					code: 'INVALID_GENERATED_TASK',
+					path: `/taskGeneration/${String(index)}/tasks/${String(taskIndex)}/instruction`,
+					message: 'Generated workflow tasks must declare a non-empty instruction.'
+				});
+			}
+
+			for (const [dependencyIndex, dependency] of task.dependsOn.entries()) {
+				if (dependency.trim().length === 0) {
+					errors.push({
+						code: 'INVALID_GENERATED_TASK',
+						path: `/taskGeneration/${String(index)}/tasks/${String(taskIndex)}/dependsOn/${String(dependencyIndex)}`,
+						message: 'Generated workflow task dependencies must be non-empty strings.'
+					});
+				}
+			}
+		}
 	}
 
 	return errors;
