@@ -114,6 +114,19 @@ export const missionSessionTerminalInputSchema = z.object({
     message: 'Terminal input requests require data or a complete cols/rows resize payload.'
 });
 
+export const missionTerminalInputSchema = z.object({
+    data: z.string().optional(),
+    literal: z.boolean().optional(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional()
+}).refine((value) => {
+    const hasData = typeof value.data === 'string';
+    const hasResize = value.cols !== undefined && value.rows !== undefined;
+    return hasData || hasResize;
+}, {
+    message: 'Mission terminal input requests require data or a complete cols/rows resize payload.'
+});
+
 export const repositoryRuntimeRouteParamsSchema = z.object({
     repositoryId: z.string().trim().min(1)
 });
@@ -272,6 +285,16 @@ export const missionSessionTerminalSnapshotDtoSchema = z.object({
     terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
 });
 
+export const missionTerminalSnapshotDtoSchema = z.object({
+    missionId: z.string().trim().min(1),
+    connected: z.boolean(),
+    dead: z.boolean(),
+    exitCode: z.number().int().nullable(),
+    screen: z.string(),
+    truncated: z.boolean().optional(),
+    terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
+});
+
 export const missionSessionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
     z.object({
         type: z.literal('input'),
@@ -314,6 +337,47 @@ export const missionSessionTerminalSocketServerMessageSchema = z.discriminatedUn
     })
 ]);
 
+export const missionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('input'),
+        data: z.string(),
+        literal: z.boolean().optional()
+    }),
+    z.object({
+        type: z.literal('resize'),
+        cols: z.number().int().positive(),
+        rows: z.number().int().positive()
+    })
+]);
+
+export const missionTerminalOutputDtoSchema = z.object({
+    missionId: z.string().trim().min(1),
+    chunk: z.string(),
+    dead: z.boolean(),
+    exitCode: z.number().int().nullable(),
+    truncated: z.boolean().optional(),
+    terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
+});
+
+export const missionTerminalSocketServerMessageSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('snapshot'),
+        snapshot: missionTerminalSnapshotDtoSchema
+    }),
+    z.object({
+        type: z.literal('output'),
+        output: missionTerminalOutputDtoSchema
+    }),
+    z.object({
+        type: z.literal('disconnected'),
+        snapshot: missionTerminalSnapshotDtoSchema
+    }),
+    z.object({
+        type: z.literal('error'),
+        message: z.string().trim().min(1)
+    })
+]);
+
 export const missionRuntimeSnapshotDtoSchema = z.object({
     missionId: z.string().trim().min(1),
     status: missionStatusSummaryDtoSchema,
@@ -339,6 +403,10 @@ export type MissionSessionTerminalOutputDto = z.infer<typeof missionSessionTermi
 export type MissionSessionTerminalSnapshotDto = z.infer<typeof missionSessionTerminalSnapshotDtoSchema>;
 export type MissionSessionTerminalSocketClientMessageDto = z.infer<typeof missionSessionTerminalSocketClientMessageSchema>;
 export type MissionSessionTerminalSocketServerMessageDto = z.infer<typeof missionSessionTerminalSocketServerMessageSchema>;
+export type MissionTerminalOutputDto = z.infer<typeof missionTerminalOutputDtoSchema>;
+export type MissionTerminalSnapshotDto = z.infer<typeof missionTerminalSnapshotDtoSchema>;
+export type MissionTerminalSocketClientMessageDto = z.infer<typeof missionTerminalSocketClientMessageSchema>;
+export type MissionTerminalSocketServerMessageDto = z.infer<typeof missionTerminalSocketServerMessageSchema>;
 export type MissionSelectionCandidateDto = z.infer<typeof missionSelectionCandidateDtoSchema>;
 export type MissionRuntimeMissionCommandInputDto = z.infer<typeof missionRuntimeMissionCommandSchema>;
 export type MissionRuntimeSessionCommandInputDto = z.infer<typeof missionRuntimeSessionCommandSchema>;

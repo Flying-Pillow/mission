@@ -1041,7 +1041,16 @@ export class FilesystemAdapter {
 		if (leftSequence !== rightSequence) {
 			return leftSequence - rightSequence;
 		}
+		const leftVerificationRank = this.isVerificationTaskFile(left) ? 1 : 0;
+		const rightVerificationRank = this.isVerificationTaskFile(right) ? 1 : 0;
+		if (leftVerificationRank !== rightVerificationRank) {
+			return leftVerificationRank - rightVerificationRank;
+		}
 		return left.localeCompare(right);
+	}
+
+	private isVerificationTaskFile(fileName: string): boolean {
+		return path.basename(fileName, '.md').endsWith('-verify');
 	}
 
 	private slugify(value: string | undefined, maxLength: number): string {

@@ -327,6 +327,8 @@ export type Method =
 	| 'mission.action.list'
 	| 'mission.action.execute'
 	| 'mission.gate.evaluate'
+	| 'mission.terminal.state'
+	| 'mission.terminal.input'
 	| 'session.list'
 	| 'session.console.state'
 	| 'session.terminal.state'
@@ -371,6 +373,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'mission.action.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'mission.action.execute': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'mission.gate.evaluate': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'mission.terminal.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'mission.terminal.input': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.console.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.terminal.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
@@ -490,7 +494,17 @@ export type SessionConsoleState = SessionSelect;
 
 export type SessionTerminalState = SessionSelect;
 
+export type MissionTerminalStateRequest = MissionSelect;
+
 export type SessionTerminalInput = SessionSelect & {
+	data?: string;
+	literal?: boolean;
+	cols?: number;
+	rows?: number;
+	respondWithState?: boolean;
+};
+
+export type MissionTerminalInput = MissionSelect & {
 	data?: string;
 	literal?: boolean;
 	cols?: number;

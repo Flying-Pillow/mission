@@ -71,6 +71,8 @@ import {
 	type MissionAgentTerminalState,
 	type MissionAgentEvent,
 	type MissionAgentSessionRecord,
+	type MissionTerminalInput,
+	type MissionTerminalStateRequest,
 	type MissionSelect,
 	type Notification,
 	type Request,
@@ -111,6 +113,7 @@ type PendingTerminalNotification = {
 };
 
 const TERMINAL_EVENT_BATCH_WINDOW_MS = 50;
+const MISSION_TERMINAL_SESSION_PREFIX = 'mission-shell';
 
 export class MissionWorkspace {
 	private readonly store: FilesystemAdapter;
@@ -212,6 +215,45 @@ export class MissionWorkspace {
 		return `${missionId}:${sessionId}`;
 	}
 
+	private async ensureMissionTerminalSession(
+		loadedMission: LoadedMission
+	): Promise<{
+		sessionId: string;
+		handle: import('../agent/TerminalAgentTransport.js').TerminalSessionHandle;
+		snapshot: TerminalSessionSnapshot;
+	}> {
+		const sessionId = this.getMissionTerminalSessionId(loadedMission.missionId);
+		const existingHandle = await this.terminalTransport.attachSession(sessionId);
+		if (existingHandle) {
+			const snapshot = await this.terminalTransport.readSnapshot(existingHandle);
+			if (!snapshot.dead) {
+				return {
+					sessionId,
+					handle: existingHandle,
+					snapshot
+				};
+			}
+		}
+
+		const openedHandle = await this.terminalTransport.openSession({
+			workingDirectory: this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir()),
+			sessionName: sessionId,
+			sessionPrefix: MISSION_TERMINAL_SESSION_PREFIX,
+			command: resolveMissionTerminalCommand(),
+			args: resolveMissionTerminalArgs(),
+			env: buildMissionTerminalEnv()
+		});
+		return {
+			sessionId,
+			handle: openedHandle,
+			snapshot: await this.terminalTransport.readSnapshot(openedHandle)
+		};
+	}
+
+	private getMissionTerminalSessionId(missionId: string): string {
+		return `${MISSION_TERMINAL_SESSION_PREFIX}:${missionId}`;
+	}
+
 	public async executeMethod(request: Request): Promise<unknown> {
 		switch (request.method) {
 			case 'control.status':
@@ -248,6 +290,10 @@ export class MissionWorkspace {
 				return this.executeMissionAction((request.params ?? {}) as MissionActionExecute);
 			case 'mission.gate.evaluate':
 				return this.evaluateGate((request.params ?? {}) as MissionGateEvaluate);
+			case 'mission.terminal.state':
+				return this.getMissionTerminalState((request.params ?? {}) as MissionTerminalStateRequest);
+			case 'mission.terminal.input':
+				return this.sendMissionTerminalInput((request.params ?? {}) as MissionTerminalInput);
 			case 'session.list':
 				return this.listAgentSessions((request.params ?? {}) as MissionSelect);
 			case 'session.console.state':
@@ -738,6 +784,39 @@ export class MissionWorkspace {
 	private async evaluateGate(params: MissionGateEvaluate) {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return loadedMission.mission.evaluateGate(params.intent);
+	}
+
+	private async getMissionTerminalState(
+		params: MissionTerminalStateRequest
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		const terminal = await this.ensureMissionTerminalSession(loadedMission);
+		return this.toAgentTerminalState(terminal.sessionId, terminal.snapshot);
+	}
+
+	private async sendMissionTerminalInput(
+		params: MissionTerminalInput
+	): Promise<MissionAgentTerminalState | null> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		const terminal = await this.ensureMissionTerminalSession(loadedMission);
+
+		if (params.cols !== undefined && params.rows !== undefined) {
+			await this.terminalTransport.resizeSession(terminal.handle, params.cols, params.rows);
+		}
+		if (typeof params.data === 'string' && params.data.length > 0) {
+			await this.terminalTransport.sendKeys(terminal.handle, params.data, {
+				...(params.literal !== undefined ? { literal: params.literal } : {})
+			});
+		}
+
+		if (params.respondWithState === false) {
+			return null;
+		}
+
+		return this.toAgentTerminalState(
+			terminal.sessionId,
+			await this.terminalTransport.readSnapshot(terminal.handle)
+		);
 	}
 
 	private async listAgentSessions(
@@ -1838,6 +1917,9 @@ export class MissionWorkspace {
 
 	private findLoadedMissionForSession(sessionId: string): LoadedMission | undefined {
 		for (const loadedMission of this.loadedMissions.values()) {
+			if (sessionId === this.getMissionTerminalSessionId(loadedMission.missionId)) {
+				return loadedMission;
+			}
 			if (loadedMission.mission.getAgentSession(sessionId)) {
 				return loadedMission;
 			}
@@ -1957,6 +2039,30 @@ export class MissionWorkspace {
 		}
 	}
 
+}
+
+function resolveMissionTerminalCommand(): string {
+	if (process.platform === 'win32') {
+		return process.env['MISSION_TERMINAL_SHELL']?.trim() || 'powershell.exe';
+	}
+
+	return process.env['MISSION_TERMINAL_SHELL']?.trim() || process.env['SHELL']?.trim() || 'bash';
+}
+
+function resolveMissionTerminalArgs(): string[] {
+	if (process.platform === 'win32') {
+		return ['-NoLogo'];
+	}
+
+	return ['-l'];
+}
+
+function buildMissionTerminalEnv(): NodeJS.ProcessEnv {
+	return {
+		...process.env,
+		TERM_PROGRAM: 'mission-airport',
+		TERM_PROGRAM_VERSION: '1'
+	};
 }
 
 function shouldBroadcastMissionStatusForAgentEvent(event: MissionAgentEvent): boolean {

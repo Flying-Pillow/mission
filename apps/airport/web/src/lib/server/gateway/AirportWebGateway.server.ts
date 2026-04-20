@@ -25,6 +25,7 @@ import type {
     GitHubIssueDetailDto,
     MissionAgentSessionDto,
     MissionSessionTerminalSnapshotDto,
+    MissionTerminalSnapshotDto,
     MissionRuntimeSnapshotDto,
     MissionSelectionCandidateDto,
     RepositoryCandidateDto,
@@ -37,6 +38,7 @@ import {
     githubIssueDetailDtoSchema,
     missionAgentSessionDtoSchema,
     missionSessionTerminalSnapshotDtoSchema,
+    missionTerminalSnapshotDtoSchema,
     missionRuntimeSnapshotDtoSchema,
     missionSelectionCandidateDtoSchema,
     repositoryCandidateDtoSchema,
@@ -726,6 +728,96 @@ export class AirportWebGateway {
             return missionSessionTerminalSnapshotDtoSchema.parse({
                 missionId,
                 sessionId,
+                connected: state.connected,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                screen: terminalScreen.screen,
+                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            });
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async getMissionTerminalSnapshot(input: {
+        missionId: string;
+    }): Promise<MissionTerminalSnapshotDto> {
+        const missionId = input.missionId.trim();
+        if (!missionId) {
+            return missionTerminalSnapshotDtoSchema.parse({
+                missionId,
+                connected: false,
+                dead: true,
+                exitCode: null,
+                screen: ''
+            });
+        }
+
+        const daemon = await this.connectSharedDaemonClient();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const state = await withTimeout(
+                api.mission.getMissionTerminalState({ missionId }),
+                2500,
+                'Mission terminal snapshot request timed out.'
+            );
+            if (!state) {
+                return missionTerminalSnapshotDtoSchema.parse({
+                    missionId,
+                    connected: false,
+                    dead: true,
+                    exitCode: null,
+                    screen: ''
+                });
+            }
+
+            const terminalScreen = clipTerminalScreen(state.screen);
+
+            return missionTerminalSnapshotDtoSchema.parse({
+                missionId,
+                connected: state.connected,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                screen: terminalScreen.screen,
+                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            });
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async sendMissionTerminalInput(input: {
+        missionId: string;
+        data?: string;
+        literal?: boolean;
+        cols?: number;
+        rows?: number;
+    }): Promise<MissionTerminalSnapshotDto> {
+        const missionId = input.missionId.trim();
+        const daemon = await this.connectSharedDaemonClient();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const state = await withTimeout(
+                api.mission.sendMissionTerminalInput(
+                    { missionId },
+                    {
+                        ...(input.data !== undefined ? { data: input.data } : {}),
+                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                        ...(input.rows !== undefined ? { rows: input.rows } : {})
+                    }
+                ),
+                2500,
+                'Mission terminal input request timed out.'
+            );
+            if (!state) {
+                throw new Error(`Mission terminal for '${missionId}' is not available.`);
+            }
+            const terminalScreen = clipTerminalScreen(state.screen);
+            return missionTerminalSnapshotDtoSchema.parse({
+                missionId,
                 connected: state.connected,
                 dead: state.dead,
                 exitCode: state.dead ? state.exitCode : null,

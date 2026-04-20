@@ -12,6 +12,7 @@
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
+    import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
     import MissionView from "$lib/components/entities/Mission/Mission.svelte";
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
     import {
@@ -69,6 +70,7 @@
     let actionRefreshNonce = $state(0);
     let artifactPanelMode = $state<"view" | "edit">("view");
     let leftTreeMode = $state<"control" | "files">("control");
+    let rightPanelMode = $state<"terminal" | "agent">("terminal");
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
 
@@ -507,14 +509,47 @@
                     minSize={24}
                     class="flex h-full min-h-0 flex-col p-2"
                 >
-                    <AgentSession
-                        {missionId}
-                        repositoryId={repository.repositoryId}
-                        refreshNonce={actionRefreshNonce}
-                        stageId={controlState.resolvedSelection?.stageId}
-                        session={resolvedSession}
-                        onActionExecuted={handleMissionMutated}
-                    />
+                    <Tabs.Root
+                        bind:value={rightPanelMode}
+                        class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                    >
+                        <div class="border-b px-3 py-2">
+                            <Tabs.List class="w-full">
+                                <Tabs.Trigger value="terminal"
+                                    >Mission Terminal</Tabs.Trigger
+                                >
+                                <Tabs.Trigger value="agent"
+                                    >Agent Session</Tabs.Trigger
+                                >
+                            </Tabs.List>
+                        </div>
+
+                        <div
+                            class="relative min-h-0 flex-1 overflow-hidden p-0"
+                        >
+                            <div
+                                class={`absolute inset-0 min-h-0 overflow-hidden ${rightPanelMode === "terminal" ? "block" : "hidden"}`}
+                                aria-hidden={rightPanelMode !== "terminal"}
+                            >
+                                <MissionTerminal {missionId} />
+                            </div>
+
+                            <div
+                                class={`absolute inset-0 min-h-0 overflow-hidden ${rightPanelMode === "agent" ? "block" : "hidden"}`}
+                                aria-hidden={rightPanelMode !== "agent"}
+                            >
+                                <AgentSession
+                                    {missionId}
+                                    repositoryId={repository.repositoryId}
+                                    refreshNonce={actionRefreshNonce}
+                                    stageId={controlState.resolvedSelection
+                                        ?.stageId}
+                                    session={resolvedSession}
+                                    onActionExecuted={handleMissionMutated}
+                                />
+                            </div>
+                        </div>
+                    </Tabs.Root>
                 </ResizablePane>
             </ResizablePaneGroup>
         </div>

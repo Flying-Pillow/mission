@@ -95,6 +95,28 @@ export class DaemonMissionApi {
 		});
 	}
 
+	public async getMissionTerminalState(
+		selector: MissionSelector | undefined
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.state', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {})
+		});
+	}
+
+	public async sendMissionTerminalInput(
+		selector: MissionSelector | undefined,
+		input: { data?: string; literal?: boolean; cols?: number; rows?: number; respondWithState?: boolean }
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.input', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			...(input.data !== undefined ? { data: input.data } : {}),
+			...(input.literal !== undefined ? { literal: input.literal } : {}),
+			...(input.cols !== undefined ? { cols: input.cols } : {}),
+			...(input.rows !== undefined ? { rows: input.rows } : {}),
+			...(input.respondWithState !== undefined ? { respondWithState: input.respondWithState } : {})
+		});
+	}
+
 	public async listSessions(
 		selector: MissionSelector
 	): Promise<MissionAgentSessionRecord[]> {

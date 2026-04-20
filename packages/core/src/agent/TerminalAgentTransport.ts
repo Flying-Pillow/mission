@@ -234,6 +234,11 @@ class PtySessionRegistry {
 
     private resolveSessionName(requestedName: string | undefined, sessionPrefix: string | undefined): string {
         const baseName = requestedName?.trim() || `${sessionPrefix?.trim() || 'mission-agent'}-${randomUUID().slice(0, 8)}`;
+        const existing = this.sessions.get(baseName);
+        if (existing?.dead) {
+            this.sessions.delete(baseName);
+            return baseName;
+        }
         if (!this.sessions.has(baseName)) {
             return baseName;
         }
