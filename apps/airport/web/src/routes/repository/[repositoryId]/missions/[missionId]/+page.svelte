@@ -16,6 +16,7 @@
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
     import MissionView from "$lib/components/entities/Mission/Mission.svelte";
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
+    import type { AgentSession as AgentSessionModel } from "$lib/client/entities/AgentSession";
     import {
         computeMissionControlState,
         createInitialSelectedNodeId,
@@ -180,7 +181,10 @@
     const resolvedSession = $derived(
         controlState.activeSessionId
             ? mission.getSession(controlState.activeSessionId)
-            : undefined,
+            : resolvePreferredTaskSession(
+                  mission,
+                  controlState.resolvedSelection?.taskId,
+              ),
     );
 
     $effect(() => {
@@ -386,6 +390,27 @@
             extension === "md" ||
             extension === "markdown" ||
             extension === "mdx"
+        );
+    }
+
+    function resolvePreferredTaskSession(
+        currentMission: Mission,
+        taskId: string | undefined,
+    ): AgentSessionModel | undefined {
+        if (!taskId) {
+            return undefined;
+        }
+
+        const sessions = currentMission
+            .listSessions()
+            .filter((session) => session.taskId === taskId);
+        return (
+            sessions.find(
+                (session) => session.isRunning() && session.isTerminalBacked(),
+            ) ??
+            sessions.find((session) => session.isRunning()) ??
+            sessions.find((session) => session.isTerminalBacked()) ??
+            sessions[0]
         );
     }
 

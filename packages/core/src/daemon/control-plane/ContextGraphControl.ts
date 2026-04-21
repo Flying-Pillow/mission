@@ -316,6 +316,18 @@ function resolveSelectedSessionId(
 ): string | undefined {
 	const previousSessionId = previousSelection.agentSessionId;
 	if (previousSessionId && isSessionSelectionValid(previousSessionId, missionId, agentSessions)) {
+		const previousSession = agentSessions[previousSessionId];
+		const heuristicSession = heuristicSessionId ? agentSessions[heuristicSessionId] : undefined;
+		if (
+			previousSession
+			&& heuristicSession
+			&& previousSession.taskId
+			&& previousSession.taskId === heuristicSession.taskId
+			&& !isActiveSessionSelection(previousSession)
+			&& isActiveSessionSelection(heuristicSession)
+		) {
+			return heuristicSessionId;
+		}
 		return previousSessionId;
 	}
 	if (hasExplicitNonSessionSelection(previousSelection)) {
@@ -384,6 +396,12 @@ function isSessionSelectionValid(
 		return false;
 	}
 	return !missionId || session.missionId === missionId;
+}
+
+function isActiveSessionSelection(session: AgentSessionContext): boolean {
+	return session.lifecycleState === 'starting'
+		|| session.lifecycleState === 'running'
+		|| session.lifecycleState === 'awaiting-input';
 }
 
 function isStageSelectionValid(
