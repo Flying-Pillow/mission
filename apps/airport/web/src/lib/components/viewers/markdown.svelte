@@ -2,8 +2,11 @@
 <script lang="ts">
     import { marked } from "marked";
     import sanitizeHtml from "sanitize-html";
+    import { renderMermaidDiagrams } from "../../utils/mermaid.ts";
+    import { tick } from "svelte";
 
     let { source }: { source: string } = $props();
+    let containerElement = $state<HTMLElement | null>(null);
 
     type MarkdownDocument = {
         frontmatter: string | null;
@@ -57,9 +60,25 @@
             body: normalized.slice(closingIndex + 5),
         };
     }
+
+    async function enhanceContent(): Promise<void> {
+        if (!containerElement) {
+            return;
+        }
+
+        await tick();
+        await renderMermaidDiagrams(containerElement);
+    }
+
+    $effect(() => {
+        rendered;
+        containerElement;
+        void enhanceContent();
+    });
 </script>
 
 <div
+    bind:this={containerElement}
     class="markdown-viewer max-w-none break-words p-2 pb-6 text-sm text-foreground"
 >
     {#if document.frontmatter}
@@ -70,3 +89,15 @@
         {@html rendered}
     </div>
 </div>
+
+<style>
+    :global(.markdown-viewer .mermaid) {
+        margin: 1.5rem 0;
+        overflow-x: auto;
+    }
+
+    :global(.markdown-viewer .mermaid svg) {
+        height: auto;
+        max-width: 100%;
+    }
+</style>
