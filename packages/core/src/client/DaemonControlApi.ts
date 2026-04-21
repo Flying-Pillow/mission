@@ -14,6 +14,8 @@ import type {
 } from '../daemon/protocol/contracts.js';
 import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
+	GitHubIssueDetail,
+	GitHubVisibleRepository,
 	OperatorActionDescriptor,
 	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
@@ -24,7 +26,7 @@ import type {
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
-import type { ControlRepositoriesAdd } from '../daemon/protocol/contracts.js';
+import type { ControlGitHubIssueDetail, ControlRepositoriesAdd } from '../daemon/protocol/contracts.js';
 
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }
@@ -111,6 +113,15 @@ export class DaemonControlApi {
 
 	public async listRegisteredRepositories(): Promise<MissionRepositoryCandidate[]> {
 		return this.client.request<MissionRepositoryCandidate[]>('control.repositories.list');
+	}
+
+	public async listVisibleGitHubRepositories(): Promise<GitHubVisibleRepository[]> {
+		return this.client.request<GitHubVisibleRepository[]>('control.github.repositories.list');
+	}
+
+	public async getGitHubIssueDetail(issueNumber: number): Promise<GitHubIssueDetail> {
+		const params: ControlGitHubIssueDetail = { issueNumber };
+		return this.client.request<GitHubIssueDetail>('control.github.issue.detail', params);
 	}
 
 	public async addRepository(repositoryPath: string): Promise<MissionRepositoryCandidate> {

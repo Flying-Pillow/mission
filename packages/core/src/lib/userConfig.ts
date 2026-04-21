@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { resolveGitHubRepositoryFromWorkspace } from '../platforms/GitHubPlatformAdapter.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
+import { deriveRepositoryIdentity } from './repositoryIdentity.js';
 import type { MissionRepositoryCandidate } from '../types.js';
 
 export const MISSION_USER_CONFIG_DIRECTORY = 'mission';
@@ -108,6 +109,14 @@ export async function listRegisteredMissionUserRepos(): Promise<MissionRepositor
 		.sort((left, right) => left.label.localeCompare(right.label));
 }
 
+export async function findRegisteredMissionUserRepoById(repositoryId: string): Promise<MissionRepositoryCandidate | undefined> {
+	const normalizedRepositoryId = repositoryId.trim();
+	if (!normalizedRepositoryId) {
+		return undefined;
+	}
+	return (await listRegisteredMissionUserRepos()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
+}
+
 function loadMissionUserConfig(): {
 	config: MissionUserConfig | undefined;
 	needsRewrite: boolean;
@@ -191,7 +200,9 @@ function buildMissionRepositoryCandidate(
 	}
 	const githubRepository = resolveGitHubRepositoryFromWorkspace(controlRoot);
 	const label = githubRepository ? githubRepository.split('/').pop() ?? path.basename(controlRoot) : path.basename(controlRoot);
+	const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
 	return {
+		repositoryId: repositoryIdentity.repositoryId,
 		repositoryRootPath: controlRoot,
 		label,
 		description: githubRepository ?? controlRoot,

@@ -58,7 +58,7 @@
             <Collapsible.Trigger
                 {onclick}
                 {oncontextmenu}
-                class="flex min-w-0 flex-1 cursor-pointer place-items-center gap-2"
+                class="flex min-w-0 flex-1 cursor-pointer items-start justify-start gap-2 text-left"
             >
                 {#if icon}
                     {@render icon({ name, open })}
@@ -67,7 +67,7 @@
                 {:else}
                     <FolderIcon class="size-5 flex-none" />
                 {/if}
-                <span class="min-w-0 flex-1 truncate text-left">{name}</span>
+                <span class="min-w-0 flex-1 break-words text-left">{name}</span>
             </Collapsible.Trigger>
             {#if actions}
                 <div class="ml-auto shrink-0">

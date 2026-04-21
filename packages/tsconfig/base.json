@@ -9,7 +9,7 @@
 		"forceConsistentCasingInFileNames": true,
 		"inlineSources": false,
 		"isolatedModules": true,
-		"lib": ["es2022", "dom", "dom.iterable"],
+		"lib": ["es2024", "dom", "dom.iterable"],
 		"moduleResolution": "bundler",
 		"noFallthroughCasesInSwitch": true,
 		"noImplicitOverride": true,

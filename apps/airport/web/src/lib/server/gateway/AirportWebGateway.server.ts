@@ -1,11 +1,14 @@
 // /apps/airport/web/src/lib/server/gateway/AirportWebGateway.server.ts: Thin SvelteKit gateway over the existing Mission daemon API and notifications for Airport web.
+import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
     DaemonApi,
+    deriveRepositoryIdentity,
     getMissionArtifactDefinition,
     getMissionStageDefinition,
     isMissionStageId,
+    resolveGitWorkspaceRoot,
     type MissionRepositoryCandidate,
     type MissionSelectionCandidate,
     type MissionAgentSessionRecord,
@@ -22,6 +25,7 @@ import type {
     AirportHomeSnapshotDto,
     AirportRuntimeEventEnvelopeDto,
     ControlDocumentResponse,
+    GitHubVisibleRepositoryDto,
     GitHubIssueDetailDto,
     MissionAgentSessionDto,
     MissionSessionTerminalSnapshotDto,
@@ -35,6 +39,7 @@ import type {
 import {
     airportHomeSnapshotDtoSchema,
     airportRuntimeEventEnvelopeSchema,
+    githubVisibleRepositoryDtoSchema,
     githubIssueDetailDtoSchema,
     missionAgentSessionDtoSchema,
     missionSessionTerminalSnapshotDtoSchema,
@@ -49,8 +54,6 @@ import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
 } from '$lib/server/daemon/connections.server';
-import { fetchGitHubIssueDetail } from '$lib/server/github-issues.server';
-
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 
 export class AirportWebGateway {
@@ -488,6 +491,48 @@ export class AirportWebGateway {
         }
     }
 
+    public async listVisibleGitHubRepositories(surfacePath?: string): Promise<GitHubVisibleRepositoryDto[]> {
+        const daemon = await this.connectSharedDaemonClient(surfacePath);
+        try {
+            const api = new DaemonApi(daemon.client);
+            const repositories = await withTimeout(
+                api.control.listVisibleGitHubRepositories(),
+                2500,
+                'GitHub repository listing timed out.'
+            );
+            return repositories.map((repository) => githubVisibleRepositoryDtoSchema.parse(repository));
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async inspectRepositoryPath(repositoryPath: string): Promise<RepositoryCandidateDto> {
+        const normalizedRepositoryPath = repositoryPath.trim();
+        if (!normalizedRepositoryPath) {
+            throw new Error('Repository registration requires a repositoryPath.');
+        }
+
+        const resolvedRepositoryPath = path.resolve(normalizedRepositoryPath);
+        if (!fs.existsSync(resolvedRepositoryPath)) {
+            throw new Error(`Local checkout path '${normalizedRepositoryPath}' does not exist on the daemon host.`);
+        }
+
+        const repositoryRootPath = resolveGitWorkspaceRoot(resolvedRepositoryPath);
+        if (!repositoryRootPath) {
+            throw new Error(`Mission could not resolve a Git repository from '${normalizedRepositoryPath}'. Select the local checkout root on disk.`);
+        }
+
+        const repositoryIdentity = deriveRepositoryIdentity(repositoryRootPath);
+        return repositoryCandidateDtoSchema.parse({
+            repositoryId: repositoryIdentity.repositoryId,
+            repositoryRootPath: repositoryIdentity.repositoryRootPath,
+            label: repositoryIdentity.githubRepository?.split('/').pop()
+                ?? (path.basename(repositoryIdentity.repositoryRootPath) || repositoryIdentity.repositoryRootPath),
+            description: repositoryIdentity.githubRepository ?? repositoryIdentity.repositoryRootPath,
+            ...(repositoryIdentity.githubRepository ? { githubRepository: repositoryIdentity.githubRepository } : {})
+        });
+    }
+
     public async getRepositorySurfaceSnapshot(input: {
         repositoryId: string;
         repository?: RepositoryCandidateDto;
@@ -545,21 +590,13 @@ export class AirportWebGateway {
         const daemon = await this.connectSharedDaemonClient(repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
-            const status = await withTimeout(
-                api.control.getStatus(),
-                2500,
-                'Repository issue detail status request timed out.'
+            return githubIssueDetailDtoSchema.parse(
+                await withTimeout(
+                    api.control.getGitHubIssueDetail(input.issueNumber),
+                    2500,
+                    'Repository issue detail request timed out.'
+                )
             );
-
-            if (status.control?.trackingProvider !== 'github') {
-                throw new Error('This repository is not configured for GitHub issue tracking.');
-            }
-
-            return this.getGitHubIssueDetail({
-                repositoryRootPath,
-                githubRepository: status.control?.githubRepository,
-                issueNumber: input.issueNumber
-            });
         } finally {
             daemon.dispose();
         }
@@ -574,7 +611,9 @@ export class AirportWebGateway {
             throw new Error('Mission creation from issue requires a repositoryId.');
         }
 
-        const daemon = await this.connectSharedDaemonClient(repositoryId);
+        const repository = await this.resolveRepositoryCandidate({ repositoryId });
+
+		const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -600,7 +639,9 @@ export class AirportWebGateway {
             throw new Error('Mission creation from brief requires a repositoryId.');
         }
 
-        const daemon = await this.connectSharedDaemonClient(repositoryId);
+        const repository = await this.resolveRepositoryCandidate({ repositoryId });
+
+		const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -1074,7 +1115,7 @@ export class AirportWebGateway {
 
     private toRepositoryCandidateDto(repository: MissionRepositoryCandidate & { repositoryId?: string }): RepositoryCandidateDto {
         return repositoryCandidateDtoSchema.parse({
-            repositoryId: repository.repositoryId ?? repository.repositoryRootPath,
+            repositoryId: repository.repositoryId,
             repositoryRootPath: repository.repositoryRootPath,
             label: repository.label,
             description: repository.description,
@@ -1129,21 +1170,6 @@ export class AirportWebGateway {
         }
 
         return repository;
-    }
-
-    private async getGitHubIssueDetail(input: {
-        repositoryRootPath: string;
-        githubRepository?: string;
-        issueNumber: number;
-    }): Promise<GitHubIssueDetailDto> {
-        return githubIssueDetailDtoSchema.parse(
-            await fetchGitHubIssueDetail({
-                workspaceRoot: input.repositoryRootPath,
-                issueNumber: input.issueNumber,
-                repository: input.githubRepository,
-                authToken: this.locals?.githubAuthToken
-            })
-        );
     }
 
     private async connectSharedDaemonClient(surfacePath?: string) {

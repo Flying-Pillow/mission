@@ -32,6 +32,10 @@ import {
 	getMissionWorkflowDefinitionPath,
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
+import {
+	deriveRepositoryIdentity,
+	slugRepositoryIdentitySegment
+} from '../lib/repositoryIdentity.js';
 import type {
 	MissionBrief,
 	OperatorActionExecutionStep,
@@ -270,7 +274,8 @@ export class MissionWorkspace {
 		handle: import('../agent/TerminalAgentTransport.js').TerminalSessionHandle;
 		snapshot: TerminalSessionSnapshot;
 	}> {
-		const sessionId = this.getMissionTerminalSessionId(loadedMission.missionId);
+		const missionWorkspaceRoot = this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir());
+		const sessionId = this.getMissionTerminalSessionId(missionWorkspaceRoot, loadedMission.missionId);
 		const existingHandle = await this.terminalTransport.attachSession(sessionId);
 		if (existingHandle) {
 			const snapshot = await this.terminalTransport.readSnapshot(existingHandle);
@@ -284,7 +289,7 @@ export class MissionWorkspace {
 		}
 
 		const openedHandle = await this.terminalTransport.openSession({
-			workingDirectory: this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir()),
+			workingDirectory: missionWorkspaceRoot,
 			sessionName: sessionId,
 			sessionPrefix: MISSION_TERMINAL_SESSION_PREFIX,
 			command: resolveMissionTerminalCommand(),
@@ -298,8 +303,9 @@ export class MissionWorkspace {
 		};
 	}
 
-	private getMissionTerminalSessionId(missionId: string): string {
-		return `${MISSION_TERMINAL_SESSION_PREFIX}:${missionId}`;
+	private getMissionTerminalSessionId(missionWorkspaceRoot: string, missionId: string): string {
+		const repositoryId = deriveRepositoryIdentity(missionWorkspaceRoot).repositoryId;
+		return `${MISSION_TERMINAL_SESSION_PREFIX}:${repositoryId}:${slugRepositoryIdentitySegment(missionId)}`;
 	}
 
 	public async executeMethod(request: Request): Promise<unknown> {
@@ -318,6 +324,10 @@ export class MissionWorkspace {
 				return this.initializeWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsInitialize);
 			case 'control.workflow.settings.update':
 				return this.updateWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsUpdate);
+				case 'control.github.repositories.list':
+					return this.listVisibleGitHubRepositories(request);
+				case 'control.github.issue.detail':
+					return this.getGitHubIssueDetail((request.params ?? {}) as import('../daemon/protocol/contracts.js').ControlGitHubIssueDetail, request);
 			case 'control.issues.list':
 				return this.listOpenIssues((request.params ?? {}) as ControlIssuesList, request);
 			case 'mission.from-issue':
@@ -404,6 +414,44 @@ export class MissionWorkspace {
 		return adapter.listOpenIssues(limit);
 	}
 
+	private async listVisibleGitHubRepositories(request?: Request) {
+		this.requireGitHubAuthentication(request);
+		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
+		const adapter = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			undefined,
+			authToken ? { authToken } : {}
+		);
+		return adapter.listVisibleRepositories();
+	}
+
+	private async getGitHubIssueDetail(
+		params: import('../daemon/protocol/contracts.js').ControlGitHubIssueDetail,
+		request?: Request
+	) {
+		const githubRepository = this.requireGitHubRepository();
+		this.requireGitHubAuthentication(request);
+		const issueNumber = Number.isFinite(params.issueNumber) ? Math.floor(params.issueNumber) : NaN;
+		if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+			throw new Error('GitHub issue detail requires a positive issue number.');
+		}
+		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
+		const adapter = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			githubRepository,
+			authToken ? { authToken } : {}
+		);
+		return adapter.fetchIssueDetail(String(issueNumber));
+	}
+
 	public async buildDiscoveryStatus(
 		availableMissions: MissionSelectionCandidate[],
 		availableRepositories: MissionControlSource['availableRepositories'] = []
@@ -435,9 +483,10 @@ export class MissionWorkspace {
 			?? (selectedMissionId
 				? await this.resolveLoadedMissionStatus(selectedMissionId).catch(() => undefined)
 				: undefined);
+		const repositoryIdentity = deriveRepositoryIdentity(this.workspaceRoot);
 		return {
-			repositoryId: this.workspaceRoot,
-			repositoryRootPath: this.workspaceRoot,
+			repositoryId: repositoryIdentity.repositoryId,
+			repositoryRootPath: repositoryIdentity.repositoryRootPath,
 			control: discoveryStatus.control!,
 			availableRepositories: input.availableRepositories ?? [],
 			availableMissions,
@@ -450,7 +499,10 @@ export class MissionWorkspace {
 		availableMissions: MissionSelectionCandidate[],
 		openIssues: TrackedIssueSummary[]
 	): OperatorActionDescriptor[] {
-		const repositoryPresentationTargets = [{ scope: 'repository' as const, targetId: this.workspaceRoot }];
+		const repositoryPresentationTargets = [{
+			scope: 'repository' as const,
+			targetId: deriveRepositoryIdentity(this.workspaceRoot).repositoryId
+		}];
 		const issuesCommandEnabled =
 			control.trackingProvider === 'github'
 			&& control.issuesConfigured;
@@ -2310,7 +2362,10 @@ export class MissionWorkspace {
 
 	private findLoadedMissionForSession(sessionId: string): LoadedMission | undefined {
 		for (const loadedMission of this.loadedMissions.values()) {
-			if (sessionId === this.getMissionTerminalSessionId(loadedMission.missionId)) {
+			if (sessionId === this.getMissionTerminalSessionId(
+				this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir()),
+				loadedMission.missionId
+			)) {
 				return loadedMission;
 			}
 			if (loadedMission.mission.getAgentSession(sessionId)) {

@@ -18,7 +18,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
         const airportHome = await gateway.getAirportHomeSnapshot();
         const repositorySurface = await gateway.getRepositorySurfaceSnapshot({
             repositoryId,
-            repositoryRootPath: repositoryId,
             selectedMissionId: missionId
         });
         const missionControl = await gateway.getMissionControlSnapshot({

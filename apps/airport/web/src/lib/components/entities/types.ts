@@ -1,4 +1,5 @@
 import type {
+    GitHubVisibleRepositoryDto,
     GitHubIssueDetailDto,
     MissionAgentSessionDto,
     MissionRuntimeSnapshotDto,
@@ -9,6 +10,7 @@ import type {
 } from "@flying-pillow/mission-core/airport/runtime";
 
 export type RepositorySummary = RepositoryCandidateDto;
+export type GitHubVisibleRepositorySummary = GitHubVisibleRepositoryDto;
 export type MissionSummary = MissionSelectionCandidateDto;
 export type SidebarRepositorySummary = RepositorySummary & {
     missions?: MissionSummary[];

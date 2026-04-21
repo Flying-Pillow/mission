@@ -26,8 +26,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
         return {
             airportRepositories: airportHome.repositories,
             repositorySurface: await gateway.getRepositorySurfaceSnapshot({
-                repositoryId,
-                repositoryRootPath: repositoryId
+				repositoryId
             }),
             repositoryId,
         };

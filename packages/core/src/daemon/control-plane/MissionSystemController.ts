@@ -21,6 +21,8 @@ import { MissionControl } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryAirportRegistry } from './RepositoryAirportRegistry.js';
 import { WorkspaceManager } from '../../workspace/WorkspaceManager.js';
+import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
+import { findRegisteredMissionUserRepoById } from '../../lib/userConfig.js';
 
 type MissionSystemCommand =
 	| {
@@ -184,8 +186,11 @@ export class MissionSystemController {
 			: command.surfacePath?.trim()
 				? this.workspaceManager.resolveWorkspaceRootForSurfacePath(command.surfacePath.trim())
 				: undefined;
+		const scopedRepositoryId = scopedWorkspaceRoot
+			? deriveRepositoryIdentity(scopedWorkspaceRoot).repositoryId
+			: undefined;
 		const selectedMissionId = command.selectionHint?.missionId?.trim()
-			|| (scopedWorkspaceRoot && currentSelection.repositoryId === scopedWorkspaceRoot
+			|| (scopedRepositoryId && currentSelection.repositoryId === scopedRepositoryId
 				? currentSelection.missionId?.trim()
 				: undefined);
 		const source = await this.workspaceManager.readMissionControlSource({
@@ -367,13 +372,19 @@ export class MissionSystemController {
 	private async resolveRepositoryId(clientId: string, surfacePath?: string, repositoryId?: string): Promise<string> {
 		const explicitRepositoryId = repositoryId?.trim();
 		if (explicitRepositoryId) {
-			await this.airportRegistry.activateRepository(explicitRepositoryId, explicitRepositoryId);
+			const registeredRepository = await findRegisteredMissionUserRepoById(explicitRepositoryId);
+			if (!registeredRepository) {
+				throw new Error(`Unknown repository id: ${explicitRepositoryId}`);
+			}
+			const repositoryRootPath = registeredRepository.repositoryRootPath;
+			await this.airportRegistry.activateRepository(explicitRepositoryId, repositoryRootPath);
 			return explicitRepositoryId;
 		}
 		if (surfacePath?.trim()) {
 			const repositoryRootPath = this.workspaceManager.resolveWorkspaceRootForSurfacePath(surfacePath.trim());
-			await this.airportRegistry.activateRepository(repositoryRootPath, repositoryRootPath);
-			return repositoryRootPath;
+			const resolvedRepositoryId = deriveRepositoryIdentity(repositoryRootPath).repositoryId;
+			await this.airportRegistry.activateRepository(resolvedRepositoryId, repositoryRootPath);
+			return resolvedRepositoryId;
 		}
 		const airport = await this.airportRegistry.resolveAirportForRequest(clientId);
 		return airport.repositoryId;

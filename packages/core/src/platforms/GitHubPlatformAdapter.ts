@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
-import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
+import type { GitHubIssueDetail, GitHubVisibleRepository, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export type GitHubBranchSyncStatus = {
 	branchRef: string;
@@ -33,6 +33,16 @@ type GitHubIssuePayload = {
 	labels?: Array<{ name?: string }>;
 	updatedAt?: string;
 	assignees?: Array<{ login?: string }>;
+};
+
+type GitHubRepositoryPayload = {
+	full_name?: string;
+	html_url?: string;
+	private?: boolean;
+	archived?: boolean;
+	owner?: {
+		login?: string;
+	};
 };
 
 function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
@@ -69,6 +79,19 @@ export class GitHubPlatformAdapter {
 		return this.mapIssuePayloadToBrief(payload);
 	}
 
+	public async fetchIssueDetail(issueId: string): Promise<GitHubIssueDetail> {
+		const payload = await this.runJsonProcess<GitHubIssuePayload>([
+			'issue',
+			'view',
+			issueId,
+			'--json',
+			'number,title,body,url,labels,updatedAt,assignees',
+			...(this.repository ? ['--repo', this.repository] : [])
+		]);
+
+		return this.mapIssuePayloadToDetail(payload);
+	}
+
 	public async listOpenIssues(limit = 50): Promise<TrackedIssueSummary[]> {
 		const payload = await this.runJsonProcess<GitHubIssuePayload[]>([
 			'issue',
@@ -94,6 +117,38 @@ export class GitHubPlatformAdapter {
 				.map((assignee) => String(assignee.login ?? '').trim())
 				.filter(Boolean)
 		}));
+	}
+
+	public async listVisibleRepositories(): Promise<GitHubVisibleRepository[]> {
+		const payload = await this.runJsonProcess<GitHubRepositoryPayload[][]>([
+			'api',
+			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
+			'--paginate',
+			'--slurp'
+		]);
+
+		const repositories = new Map<string, GitHubVisibleRepository>();
+		for (const page of payload) {
+			for (const repository of page) {
+				const fullName = repository.full_name?.trim();
+				if (!fullName) {
+					continue;
+				}
+				repositories.set(fullName.toLowerCase(), {
+					fullName,
+					...(repository.owner?.login?.trim()
+						? { ownerLogin: repository.owner.login.trim() }
+						: {}),
+					...(repository.html_url?.trim()
+						? { htmlUrl: repository.html_url.trim() }
+						: {}),
+					visibility: repository.private ? 'private' : 'public',
+					archived: Boolean(repository.archived)
+				});
+			}
+		}
+
+		return [...repositories.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
 	}
 
 	public async createIssue(input: {
@@ -244,6 +299,22 @@ export class GitHubPlatformAdapter {
 			...(payload.url ? { url: payload.url } : {}),
 			...(labels.length > 0 ? { labels } : {})
 		} satisfies MissionBrief;
+	}
+
+	private mapIssuePayloadToDetail(payload: GitHubIssuePayload): GitHubIssueDetail {
+		return {
+			number: payload.number,
+			title: payload.title,
+			body: payload.body?.trim() || 'Issue body not captured yet.',
+			...(payload.url ? { url: payload.url } : {}),
+			...(payload.updatedAt ? { updatedAt: payload.updatedAt } : {}),
+			labels: (payload.labels ?? [])
+				.map((label) => String(label.name ?? '').trim())
+				.filter(Boolean),
+			assignees: (payload.assignees ?? [])
+				.map((assignee) => String(assignee.login ?? '').trim())
+				.filter(Boolean)
+		};
 	}
 
 	private async runJsonProcess<T>(args: string[]): Promise<T> {

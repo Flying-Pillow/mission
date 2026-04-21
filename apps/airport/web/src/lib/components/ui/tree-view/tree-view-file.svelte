@@ -21,7 +21,10 @@
 <button
     bind:this={ref}
     {type}
-    class={cn("flex place-items-center gap-1", className)}
+    class={cn(
+        "flex min-w-0 items-start justify-start gap-1 text-left",
+        className,
+    )}
     {...restProps}
 >
     {#if icon}
@@ -29,5 +32,5 @@
     {:else}
         <FileIcon class="size-4" />
     {/if}
-    <span>{name}</span>
+    <span class="min-w-0 flex-1 break-words text-left">{name}</span>
 </button>

@@ -15,6 +15,18 @@ const workspacePackageRoots = {
 	"@flying-pillow/mission": path.resolve(currentDirectory, "../../../packages/mission/src")
 } as const;
 
+type WorkspacePackageAlias = {
+	find: string;
+	replacement: string;
+};
+
+const workspacePackageAliases: WorkspacePackageAlias[] = Object.entries(workspacePackageRoots).map(
+	([packageName, packageRoot]) => ({
+		find: packageName,
+		replacement: packageRoot
+	})
+);
+
 type ViteHttpServer = HttpServer | HttpsServer;
 
 function missionTerminalWebSocketPlugin() {
@@ -36,10 +48,13 @@ function missionTerminalWebSocketPlugin() {
 export default defineConfig({
 	cacheDir: "/tmp/mission-airport-vite-cache",
 	plugins: [
-		tailwindcss(),
+		...tailwindcss(),
 		sveltekit(),
 		missionTerminalWebSocketPlugin()
 	],
+	resolve: {
+		alias: workspacePackageAliases
+	},
 	ssr: {
 		noExternal: [
 			"@flying-pillow/mission-core",

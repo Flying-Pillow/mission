@@ -22,7 +22,6 @@ import { resolveMissionTerminalRuntimeError } from './mission-terminal-errors';
 const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
 const MISSION_TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/missions\/([^/]+)\/terminal\/ws$/u;
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
-const MISSION_TERMINAL_SESSION_PREFIX = 'mission-shell';
 type UpgradeCapableServer = {
     on(event: 'upgrade', listener: (request: IncomingMessage, socket: Duplex, head: Buffer) => void): unknown;
 };
@@ -246,7 +245,7 @@ async function handleMissionTerminalConnection(
     let api: DaemonApi | undefined;
     let closed = false;
     let subscription: { dispose(): void } | undefined;
-    const sessionId = getMissionTerminalSessionId(missionId);
+    let sessionId: string | undefined;
 
     const dispose = () => {
         if (closed) {
@@ -300,13 +299,21 @@ async function handleMissionTerminalConnection(
     try {
         daemon = await connectDedicatedAuthenticatedDaemonClient({ allowStart: false });
         api = new DaemonApi(daemon.client);
+        const initialState = await api.mission.getMissionTerminalState({ missionId });
+        sessionId = initialState?.sessionId?.trim();
+        if (!sessionId) {
+            sendSnapshot(initialState);
+            sendSnapshot(initialState, 'disconnected');
+            dispose();
+            webSocket.close();
+            return;
+        }
         await daemon.client.request<null>('event.subscribe', {
             eventTypes: ['session.terminal'],
             missionId,
             sessionId
         });
 
-        const initialState = await api.mission.getMissionTerminalState({ missionId });
         sendSnapshot(initialState);
         if (!initialState?.connected || initialState.dead) {
             sendSnapshot(initialState, 'disconnected');
@@ -383,10 +390,6 @@ async function handleMissionTerminalConnection(
         dispose();
         webSocket.close();
     }
-}
-
-function getMissionTerminalSessionId(missionId: string): string {
-    return `${MISSION_TERMINAL_SESSION_PREFIX}:${missionId}`;
 }
 
 function clipTerminalScreen(screen: string): { screen: string; truncated: boolean } {

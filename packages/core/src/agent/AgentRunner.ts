@@ -14,6 +14,10 @@ import {
     TerminalAgentTransport,
     type TerminalAgentTransportOptions
 } from './TerminalAgentTransport.js';
+import {
+	deriveRepositoryIdentity,
+	slugRepositoryIdentitySegment
+} from '../lib/repositoryIdentity.js';
 
 export type AgentRunnerDefinition = {
     id: AgentRunnerId;
@@ -279,6 +283,7 @@ export abstract class AgentRunner {
     ): Promise<AgentSession> {
         const runtime = this.requireTerminalRuntime();
         const requestedSharedSessionName = getRequestedTerminalSessionName(config);
+        const sessionId = buildAgentSessionId(config.task.taskId, this.id);
         const launchArgs = [
             ...runtime.args,
             ...(options.launchArgs ?? [])
@@ -289,23 +294,23 @@ export abstract class AgentRunner {
             args: launchArgs,
             ...(runtime.env ? { env: runtime.env } : {}),
             sessionPrefix: runtime.sessionPrefix,
-            sessionName: buildTaskSessionName(config.task.taskId, this.id),
+            sessionName: buildTaskTerminalSessionName(config.workingDirectory, config.missionId, config.task.taskId, sessionId),
             ...(requestedSharedSessionName ? { sharedSessionName: requestedSharedSessionName } : {})
         });
 
         const snapshot = createRunningSnapshot({
             runnerId: this.id,
-            sessionId: transportHandle.sessionName,
+            sessionId,
             workingDirectory: config.workingDirectory,
             taskId: config.task.taskId,
             missionId: config.missionId,
             stageId: config.task.stageId,
             transport: toSnapshotTransport(transportHandle)
         });
-        this.registerTerminalHandle(transportHandle.sessionName, transportHandle, snapshot);
+        this.registerTerminalHandle(sessionId, transportHandle, snapshot);
         const session = this.createManagedSession({
             snapshot,
-            controller: this.createTerminalSessionController(transportHandle.sessionName)
+            controller: this.createTerminalSessionController(sessionId)
         });
 
         if (!options.skipInitialPromptSubmission && config.initialPrompt?.text) {
@@ -322,11 +327,11 @@ export abstract class AgentRunner {
         }
 
         const transportHandle = reference.transport?.paneId
-            ? await runtime.attachSession(reference.sessionId, {
+            ? await runtime.attachSession(reference.transport.terminalSessionName, {
                 sharedSessionName: reference.transport.terminalSessionName,
                 paneId: reference.transport.paneId
             })
-            : await runtime.attachSession(reference.sessionId, {
+            : await runtime.attachSession(reference.transport?.terminalSessionName ?? reference.sessionId, {
                 sharedSessionName: reference.transport?.terminalSessionName
             });
         if (!transportHandle) {
@@ -948,12 +953,12 @@ function toSnapshotTransport(
 ): NonNullable<AgentSessionSnapshot['transport']> {
     return {
         kind: 'terminal',
-        terminalSessionName: handle.sharedSessionName ?? handle.sessionName,
+        terminalSessionName: handle.sessionName,
         ...(handle.paneId !== handle.sessionName ? { paneId: handle.paneId } : {})
     };
 }
 
-function buildTaskSessionName(taskId: string, runnerId: string): string {
+function buildAgentSessionId(taskId: string, runnerId: string): string {
     const taskSegment = taskId.split('/').at(-1)?.trim() || taskId.trim();
     const normalizedTaskSegment = slugSessionSegment(taskSegment);
     const normalizedRunnerId = slugSessionSegment(runnerId);
@@ -961,6 +966,22 @@ function buildTaskSessionName(taskId: string, runnerId: string): string {
         return normalizedRunnerId || 'mission-agent';
     }
     return normalizedRunnerId ? `${normalizedTaskSegment}-${normalizedRunnerId}` : normalizedTaskSegment;
+}
+
+function buildTaskTerminalSessionName(
+	workingDirectory: string,
+	missionId: string,
+	taskId: string,
+	agentSessionId: string
+): string {
+	const repositoryId = deriveRepositoryIdentity(workingDirectory).repositoryId;
+	return [
+		'agent-shell',
+		repositoryId,
+		slugRepositoryIdentitySegment(missionId) || 'mission',
+		slugSessionSegment(taskId) || 'task',
+		slugSessionSegment(agentSessionId) || 'session'
+	].join(':');
 }
 
 function slugSessionSegment(value: string): string {

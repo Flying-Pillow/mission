@@ -322,10 +322,29 @@ export type MissionSelectionCandidate = {
 };
 
 export type MissionRepositoryCandidate = {
+	repositoryId: string;
 	repositoryRootPath: string;
 	label: string;
 	description: string;
 	githubRepository?: string;
+};
+
+export type GitHubVisibleRepository = {
+	fullName: string;
+	ownerLogin?: string;
+	htmlUrl?: string;
+	visibility: 'private' | 'public';
+	archived: boolean;
+};
+
+export type GitHubIssueDetail = {
+	number: number;
+	title: string;
+	body: string;
+	url?: string;
+	updatedAt?: string;
+	labels: string[];
+	assignees: string[];
 };
 
 export type MissionPreparationStatus =

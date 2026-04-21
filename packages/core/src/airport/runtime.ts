@@ -135,6 +135,14 @@ export const repositoryRegistrationInputSchema = z.object({
     repositoryPath: z.string().trim().min(1)
 });
 
+export const githubVisibleRepositoryDtoSchema = z.object({
+    fullName: z.string().trim().min(1),
+    ownerLogin: z.string().trim().min(1).optional(),
+    htmlUrl: z.string().trim().url().optional(),
+    visibility: z.enum(['private', 'public']),
+    archived: z.boolean()
+});
+
 export const missionFromIssueInputSchema = z.object({
     issueNumber: z.coerce.number().int().positive()
 });
@@ -413,6 +421,7 @@ export type MissionRuntimeSessionCommandInputDto = z.infer<typeof missionRuntime
 export type MissionRuntimeTaskCommandInputDto = z.infer<typeof missionRuntimeTaskCommandSchema>;
 export type MissionRuntimeSnapshotDto = z.infer<typeof missionRuntimeSnapshotDtoSchema>;
 export type RepositoryCandidateDto = z.infer<typeof repositoryCandidateDtoSchema>;
+export type GitHubVisibleRepositoryDto = z.infer<typeof githubVisibleRepositoryDtoSchema>;
 export type RepositorySurfaceSnapshotDto = z.infer<typeof repositorySurfaceSnapshotDtoSchema>;
 export type GitHubIssueDetailDto = z.infer<typeof githubIssueDetailDtoSchema>;
 export type TrackedIssueSummaryDto = z.infer<typeof trackedIssueSummaryDtoSchema>;

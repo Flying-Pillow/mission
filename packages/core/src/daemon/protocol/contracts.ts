@@ -1,6 +1,8 @@
 import type {
+	GitHubIssueDetail,
 	MissionSystemSnapshot,
 	GateIntent,
+	GitHubVisibleRepository,
 	MissionRepositoryCandidate,
 	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
@@ -298,7 +300,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 
 export type Method =
 	| 'ping'
@@ -317,6 +319,8 @@ export type Method =
 	| 'control.workflow.settings.update'
 	| 'control.repositories.list'
 	| 'control.repositories.add'
+	| 'control.github.repositories.list'
+	| 'control.github.issue.detail'
 	| 'control.issues.list'
 	| 'control.action.list'
 	| 'control.action.describe'
@@ -363,6 +367,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'control.workflow.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.add': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.github.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.github.issue.detail': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.issues.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.describe': { includeSurfacePath: true, workspaceRoute: 'control' },
@@ -531,6 +537,12 @@ export type MissionAgentSessionCommandRequest = {
 
 export type ControlRepositoriesList = Record<string, never>;
 
+export type ControlGitHubRepositoriesList = Record<string, never>;
+
+export type ControlGitHubIssueDetail = {
+	issueNumber: number;
+};
+
 export type ControlRepositoriesAdd = {
 	repositoryPath: string;
 };
@@ -640,6 +652,8 @@ export type SuccessResponse = {
 	| ControlDocumentResponse
 	| MissionRepositoryCandidate
 	| MissionRepositoryCandidate[]
+	| GitHubVisibleRepository[]
+	| GitHubIssueDetail
 	| MissionGateResult
 	| WorkflowSettingsGetResult
 	| ControlWorkflowSettingsInitializeResponse

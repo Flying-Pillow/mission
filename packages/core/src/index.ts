@@ -16,6 +16,7 @@ export * from './lib/frontmatter.js';
 export * from './lib/resolveMissionSelection.js';
 export * from './lib/connectAirportControl.js';
 export * from './lib/operatorActionTargeting.js';
+export * from './lib/repositoryIdentity.js';
 export * from './lib/repoConfig.js';
 export * from './lib/userConfig.js';
 export * from './lib/workspacePaths.js';

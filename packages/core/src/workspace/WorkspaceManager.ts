@@ -112,6 +112,14 @@ export class WorkspaceManager {
             return availableRepositories;
         }
 
+        if (request.method === 'control.github.repositories.list') {
+            return primaryWorkspace.executeMethod(request);
+        }
+
+        if (request.method === 'control.github.issue.detail') {
+            return primaryWorkspace.executeMethod(request);
+        }
+
         if (request.method === 'control.repositories.add') {
             const params = (request.params ?? {}) as ControlRepositoriesAdd;
             const candidate = await this.addKnownRepository(params.repositoryPath);
