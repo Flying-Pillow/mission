@@ -1,25 +1,16 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mission Airport",
+  "productName": "Flying Pillow Mission",
   "version": "0.1.0-alpha.0",
   "identifier": "io.flying-pillow.mission.airport",
   "build": {
     "beforeDevCommand": "pnpm run frontend:dev",
     "beforeBuildCommand": "pnpm run frontend:build",
     "devUrl": "http://127.0.0.1:5174",
-    "frontendDist": "../../web/build"
+    "frontendDist": "./fallback-dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Mission Airport",
-        "width": 1440,
-        "height": 960,
-        "minWidth": 1100,
-        "minHeight": 720,
-        "resizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "capabilities": [
         "default"
@@ -29,6 +20,10 @@
   "bundle": {
     "active": false,
     "targets": [],
+    "resources": {
+      "../resources/embedded-server": "embedded-server",
+      "../resources/runtime/node": "runtime/node"
+    },
     "icon": [
       "../../web/static/icon-512x512.png"
     ]

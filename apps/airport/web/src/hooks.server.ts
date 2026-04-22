@@ -39,11 +39,6 @@ async function ensureDaemonState(): Promise<DaemonRuntimeState> {
     });
 }
 
-void ensureDaemonState().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[airport-web] Mission daemon startup check failed: ${message}`);
-});
-
 function resolveGithubStatus(systemStatus?: SystemStatus): GithubStatus {
     if (systemStatus?.github.authenticated) {
         return 'connected';

@@ -14,6 +14,7 @@
     "airport:status": "pnpm run build:packages && node packages/mission/build/mission.js airport:status",
     "build": "turbo run build --filter=!@flying-pillow/mission-airport-native",
     "build:native": "turbo run build --filter=@flying-pillow/mission-airport-native",
+    "build:native:mac": "pnpm --dir ./apps/airport/native run build",
     "build:native-preview:airport": "node ./scripts/tsgo-native-preview.mjs build airport",
     "build:native-preview:core": "node ./scripts/tsgo-native-preview.mjs build core",
     "build:native-preview:mission": "node ./scripts/tsgo-native-preview.mjs build mission",

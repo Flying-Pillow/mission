@@ -52,6 +52,21 @@ pnpm run build:native
 
 On Linux, Tauri now emits `deb` and `AppImage` bundles through the Linux-specific Tauri config override at `src-tauri/tauri.linux.conf.json`.
 
+## macOS builds
+
+Build the macOS desktop artifacts from the native package:
+
+```sh
+pnpm --dir /Users/ronb/mission/apps/airport/native run build
+```
+
+On macOS, the native app now bundles an embedded Node runtime plus the Airport web app's SvelteKit `adapter-node` output, then serves that local web server through Tauri's localhost path in production.
+
+The packaged outputs land under `src-tauri/target/release/bundle/`, including:
+
+- `macos/Mission Airport.app`
+- `dmg/Mission Airport_0.1.0-alpha.0_x64.dmg`
+
 ## Dev container note
 
 The Mission dev container now includes both the Linux system libraries needed to compile the Tauri host and the Xvfb/Fluxbox/x11vnc/noVNC stack needed for virtual Linux desktop sessions. Use `pnpm run dev:native:xvfb` for headless runs and `pnpm run desktop:start` plus `pnpm run dev:native:desktop` when you want to see and interact with the window remotely.

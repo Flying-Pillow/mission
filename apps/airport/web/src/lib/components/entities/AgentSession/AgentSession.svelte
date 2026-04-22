@@ -2,13 +2,15 @@
     import type { AgentSession } from "$lib/client/entities/AgentSession";
     import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
+    import { FitAddon } from "@xterm/addon-fit";
+    import { Terminal, type TerminalResizeEvent } from "@xterm/xterm";
     import {
         missionSessionTerminalSnapshotDtoSchema,
         missionSessionTerminalSocketServerMessageSchema,
         type MissionSessionTerminalSnapshotDto,
         type MissionSessionTerminalSocketServerMessageDto,
     } from "@flying-pillow/mission-core/airport/runtime";
-    import "xterm/css/xterm.css";
+    import "@xterm/xterm/css/xterm.css";
 
     let {
         missionId,
@@ -38,8 +40,8 @@
     let activeTransportSessionId = $state<string | null>(null);
     let transportRunToken = 0;
 
-    let terminal: import("xterm").Terminal | null = null;
-    let fitAddon: import("xterm-addon-fit").FitAddon | null = null;
+    let terminal: Terminal | null = null;
+    let fitAddon: FitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalSocket: WebSocket | null = null;
     let pendingInput = "";
@@ -374,15 +376,10 @@
         error = null;
     }
 
-    async function initializeTerminal(
+    function initializeTerminal(
         target: HTMLDivElement,
         isDisposed: () => boolean,
-    ): Promise<void> {
-        const [{ Terminal }, { FitAddon }] = await Promise.all([
-            import("xterm"),
-            import("xterm-addon-fit"),
-        ]);
-
+    ): void {
         if (isDisposed()) {
             return;
         }
@@ -421,7 +418,7 @@
         terminal.loadAddon(fitAddon);
         terminal.open(target);
         fitAddon.fit();
-        terminal.onResize(({ cols, rows }) => {
+        terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
             if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
                 return;
             }
@@ -434,7 +431,7 @@
             pendingResize = { cols, rows };
             void flushPendingResize();
         });
-        terminal.onData((data) => {
+        terminal.onData((data: string) => {
             if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
                 return;
             }

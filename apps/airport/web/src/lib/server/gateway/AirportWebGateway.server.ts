@@ -56,6 +56,11 @@ import {
 } from '../daemon/connections.server';
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const MISSION_STATUS_TIMEOUT_MS = 8_000;
+const AIRPORT_HOME_STATUS_TIMEOUT_MS = 8_000;
+const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
+const GITHUB_REPOSITORY_LIST_TIMEOUT_MS = 15_000;
+const GITHUB_ISSUE_STATUS_TIMEOUT_MS = 8_000;
+const GITHUB_ISSUE_LIST_TIMEOUT_MS = 12_000;
 
 export class AirportWebGateway {
     public constructor(private readonly locals?: App.Locals) { }
@@ -99,7 +104,7 @@ export class AirportWebGateway {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
                 api.control.getStatus(),
-                2500,
+                GITHUB_ISSUE_STATUS_TIMEOUT_MS,
                 'Repository issues status request timed out.'
             );
 
@@ -109,7 +114,7 @@ export class AirportWebGateway {
 
             const issues = await withTimeout(
                 api.control.listOpenIssues(25),
-                2500,
+                GITHUB_ISSUE_LIST_TIMEOUT_MS,
                 'Issue listing timed out.'
             ).catch(() => []);
 
@@ -452,7 +457,7 @@ export class AirportWebGateway {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
                 api.control.getStatus(),
-                2500,
+                AIRPORT_HOME_STATUS_TIMEOUT_MS,
                 'Airport home status request timed out.'
             );
 
@@ -504,7 +509,7 @@ export class AirportWebGateway {
             const api = new DaemonApi(daemon.client);
             const repositories = await withTimeout(
                 api.control.listVisibleGitHubRepositories(),
-                2500,
+                GITHUB_REPOSITORY_LIST_TIMEOUT_MS,
                 'GitHub repository listing timed out.'
             );
             return repositories.map((repository) => githubVisibleRepositoryDtoSchema.parse(repository));
@@ -1219,7 +1224,7 @@ export class AirportWebGateway {
                 allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
             }),
-            5000,
+            DAEMON_CONNECT_TIMEOUT_MS,
             'Mission daemon connection timed out.'
         );
     }
@@ -1231,7 +1236,7 @@ export class AirportWebGateway {
                 allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
             }),
-            5000,
+            DAEMON_CONNECT_TIMEOUT_MS,
             'Mission daemon connection timed out.'
         );
     }

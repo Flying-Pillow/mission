@@ -1,6 +1,8 @@
 <script lang="ts">
     import { type MissionSessionTerminalHandleDto } from "@flying-pillow/mission-core";
-    import "xterm/css/xterm.css";
+    import { FitAddon } from "@xterm/addon-fit";
+    import { Terminal, type TerminalResizeEvent } from "@xterm/xterm";
+    import "@xterm/xterm/css/xterm.css";
 
     type MissionTerminalSnapshotDto = {
         missionId: string;
@@ -57,8 +59,8 @@
     let activeMissionId = $state<string | null>(null);
     let transportRunToken = 0;
 
-    let terminal: import("xterm").Terminal | null = null;
-    let fitAddon: import("xterm-addon-fit").FitAddon | null = null;
+    let terminal: Terminal | null = null;
+    let fitAddon: FitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalSocket: WebSocket | null = null;
     let pendingInput = "";
@@ -392,15 +394,10 @@
         error = null;
     }
 
-    async function initializeTerminal(
+    function initializeTerminal(
         target: HTMLDivElement,
         isDisposed: () => boolean,
-    ): Promise<void> {
-        const [{ Terminal }, { FitAddon }] = await Promise.all([
-            import("xterm"),
-            import("xterm-addon-fit"),
-        ]);
-
+    ): void {
         if (isDisposed()) {
             return;
         }
@@ -439,7 +436,7 @@
         terminal.loadAddon(fitAddon);
         terminal.open(target);
         fitAddon.fit();
-        terminal.onResize(({ cols, rows }) => {
+        terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
             if (terminalSnapshot?.dead) {
                 return;
             }
@@ -452,7 +449,7 @@
             pendingResize = { cols, rows };
             void flushPendingResize();
         });
-        terminal.onData((data) => {
+        terminal.onData((data: string) => {
             if (terminalSnapshot?.dead) {
                 return;
             }
