@@ -3,7 +3,7 @@
     import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
     import { FitAddon } from "@xterm/addon-fit";
-    import { Terminal, type TerminalResizeEvent } from "@xterm/xterm";
+    import * as XtermModule from "@xterm/xterm";
     import {
         missionSessionTerminalSnapshotDtoSchema,
         missionSessionTerminalSocketServerMessageSchema,
@@ -11,6 +11,34 @@
         type MissionSessionTerminalSocketServerMessageDto,
     } from "@flying-pillow/mission-core/airport/runtime";
     import "@xterm/xterm/css/xterm.css";
+
+    const Terminal = resolveConstructorExport<
+        typeof import("@xterm/xterm").Terminal
+    >(
+        XtermModule as unknown as Record<string, unknown>,
+        "Terminal",
+        "@xterm/xterm",
+    );
+    type XtermTerminal = InstanceType<typeof Terminal>;
+    type XtermFitAddon = InstanceType<typeof FitAddon>;
+
+    function resolveConstructorExport<T>(
+        moduleRecord: Record<string, unknown>,
+        exportName: string,
+        moduleName: string,
+    ): T {
+        const direct = moduleRecord[exportName];
+        const defaultRecord = moduleRecord.default as
+            | Record<string, unknown>
+            | undefined;
+        const resolved = direct ?? defaultRecord?.[exportName];
+        if (!resolved) {
+            throw new Error(
+                `${moduleName} does not expose '${exportName}' in this runtime build.`,
+            );
+        }
+        return resolved as T;
+    }
 
     let {
         missionId,
@@ -40,8 +68,8 @@
     let activeTransportSessionId = $state<string | null>(null);
     let transportRunToken = 0;
 
-    let terminal: Terminal | null = null;
-    let fitAddon: FitAddon | null = null;
+    let terminal: XtermTerminal | null = null;
+    let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalSocket: WebSocket | null = null;
     let pendingInput = "";
@@ -51,6 +79,7 @@
 
     const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
     const TERMINAL_SOCKET_INIT_TIMEOUT_MS = 5000;
+    type TerminalResizeEvent = { cols: number; rows: number };
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
     const terminalSessionId = $derived(session?.sessionId ?? null);

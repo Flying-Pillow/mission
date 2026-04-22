@@ -213,7 +213,7 @@ export class AirportWebGateway {
                     { missionId },
                     input.context,
                 ),
-                2500,
+                8000,
                 'Mission action snapshot request timed out.'
             );
         } finally {

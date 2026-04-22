@@ -1,8 +1,38 @@
 <script lang="ts">
     import { type MissionSessionTerminalHandleDto } from "@flying-pillow/mission-core";
     import { FitAddon } from "@xterm/addon-fit";
-    import { Terminal, type TerminalResizeEvent } from "@xterm/xterm";
+    import * as XtermModule from "@xterm/xterm";
     import "@xterm/xterm/css/xterm.css";
+
+    const Terminal = resolveConstructorExport<
+        typeof import("@xterm/xterm").Terminal
+    >(
+        XtermModule as unknown as Record<string, unknown>,
+        "Terminal",
+        "@xterm/xterm",
+    );
+    type XtermTerminal = InstanceType<typeof Terminal>;
+    type XtermFitAddon = InstanceType<typeof FitAddon>;
+
+    function resolveConstructorExport<T>(
+        moduleRecord: Record<string, unknown>,
+        exportName: string,
+        moduleName: string,
+    ): T {
+        const direct = moduleRecord[exportName];
+        const defaultRecord = moduleRecord.default as
+            | Record<string, unknown>
+            | undefined;
+        const resolved = direct ?? defaultRecord?.[exportName];
+        if (!resolved) {
+            throw new Error(
+                `${moduleName} does not expose '${exportName}' in this runtime build.`,
+            );
+        }
+        return resolved as T;
+    }
+
+    type TerminalResizeEvent = { cols: number; rows: number };
 
     type MissionTerminalSnapshotDto = {
         missionId: string;
@@ -59,8 +89,8 @@
     let activeMissionId = $state<string | null>(null);
     let transportRunToken = 0;
 
-    let terminal: Terminal | null = null;
-    let fitAddon: FitAddon | null = null;
+    let terminal: XtermTerminal | null = null;
+    let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalSocket: WebSocket | null = null;
     let pendingInput = "";
