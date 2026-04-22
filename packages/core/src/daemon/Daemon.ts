@@ -256,9 +256,11 @@ export class Daemon {
 		}
 
 		void this.decorateEvent(event).then((resolvedEvent) => {
-			this.logLine?.(
-				`Broadcasting ${resolvedEvent.type}${'missionId' in resolvedEvent ? ` mission=${resolvedEvent.missionId}` : ''}`
-			);
+			if (this.shouldLogBroadcastEvent(resolvedEvent)) {
+				this.logLine?.(
+					`Broadcasting ${resolvedEvent.type}${'missionId' in resolvedEvent ? ` mission=${resolvedEvent.missionId}` : ''}`
+				);
+			}
 			const message: EventMessage = { type: 'event', event: resolvedEvent };
 			const wire = JSON.stringify(message) + '\n';
 			for (const client of this.clients) {
@@ -279,6 +281,12 @@ export class Daemon {
 				});
 			}
 		});
+	}
+
+	private shouldLogBroadcastEvent(event: Notification): boolean {
+		return event.type !== 'session.console'
+			&& event.type !== 'session.event'
+			&& event.type !== 'session.terminal';
 	}
 
 	private hasExplicitSubscriberForEvent(event: Notification): boolean {

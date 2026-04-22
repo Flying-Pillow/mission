@@ -9,7 +9,7 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
     "check": "tsc --noEmit -p tsconfig.json",
-    "daemon:dev": "nodemon --watch src --ext ts --signal SIGTERM --exec \"tsx src/daemon/main.ts\"",
+    "daemon:dev": "node ./scripts/daemon-dev.mjs",
     "lint": "vp lint src",
     "test": "vp test run --config ../../vitest.config.ts --project core"
   },

@@ -5,6 +5,15 @@ import {
     resolveAirportDaemonRuntimeMode
 } from '@flying-pillow/mission-core/node';
 
+function resolveDaemonAutoStart(allowStart: boolean): boolean {
+    const supervisedDaemon = process.env['MISSION_DAEMON_SUPERVISED']?.trim();
+    if (supervisedDaemon === '1' || supervisedDaemon === 'true') {
+        return false;
+    }
+
+    return allowStart;
+}
+
 export async function openDaemonConnection(input: {
     surfacePath: string;
     allowStart: boolean;
@@ -16,7 +25,7 @@ export async function openDaemonConnection(input: {
     const client = await connectAirportDaemon({
         surfacePath: input.surfacePath,
         runtimeMode: resolveAirportDaemonRuntimeMode(import.meta.url),
-        allowStart: input.allowStart,
+        allowStart: resolveDaemonAutoStart(input.allowStart),
         ...(input.authToken ? { authToken: input.authToken } : {})
     });
 
