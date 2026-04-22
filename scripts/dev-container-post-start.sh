@@ -18,6 +18,48 @@ export TMP="${TMPDIR}"
 export PATH="${LOCAL_BIN_HOME}:${CARGO_HOME}/bin:${PATH}"
 export DOCKER_HOST="unix:///var/run/docker.sock"
 
+prepend_path_once() {
+  local candidate_path="$1"
+  if [[ -z "${candidate_path}" ]]; then
+    return
+  fi
+  case ":${PATH}:" in
+    *":${candidate_path}:"*) ;;
+    *) export PATH="${candidate_path}:${PATH}" ;;
+  esac
+}
+
+ensure_mission_gh_path_in_bashrc() {
+  local bashrc_path="/home/dev/.bashrc"
+  local begin_marker="# mission: gh-path-begin"
+
+  if grep -Fq "${begin_marker}" "${bashrc_path}"; then
+    return
+  fi
+
+  cat >> "${bashrc_path}" <<'EOF'
+
+# mission: gh-path-begin
+mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null)"
+if [[ -n "${mission_gh_binary}" ]]; then
+  mission_gh_dir="$(dirname "${mission_gh_binary}")"
+  case ":${PATH}:" in
+    *":${mission_gh_dir}:"*) ;;
+    *) export PATH="${mission_gh_dir}:${PATH}" ;;
+  esac
+fi
+unset mission_gh_binary mission_gh_dir
+# mission: gh-path-end
+EOF
+}
+
+mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null || true)"
+if [[ -n "${mission_gh_binary}" ]]; then
+  prepend_path_once "$(dirname "${mission_gh_binary}")"
+fi
+unset mission_gh_binary
+ensure_mission_gh_path_in_bashrc
+
 mkdir -p "${CARGO_HOME}" \
          "${RUSTUP_HOME}" \
          "${XDG_CACHE_HOME}" \

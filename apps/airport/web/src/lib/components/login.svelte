@@ -18,7 +18,6 @@
         error,
         probe,
         redirectTo = "/",
-        oauth,
         device,
     }: {
         githubStatus: "connected" | "disconnected" | "unknown";
@@ -33,11 +32,6 @@
             message: string;
         };
         redirectTo?: string;
-        oauth: {
-            available: boolean;
-            error?: string;
-            startHref: string;
-        };
         device: {
             available: boolean;
             error?: string;
@@ -392,9 +386,8 @@
                     Sign in with GitHub
                 </Card.Title>
                 <Card.Description class="pt-1 text-sm leading-6">
-                    Continue with the normal GitHub approval screen, or use a
-                    device code if you prefer to approve access in another
-                    browser or on another machine.
+                    Continue with GitHub using a device code that you can
+                    approve in this browser or any other browser session.
                 </Card.Description>
             </Card.Header>
 
@@ -410,33 +403,15 @@
                 <div
                     class="rounded-2xl border bg-background/70 p-4 text-sm text-muted-foreground"
                 >
-                    Mission signs you in through GitHub, validates the approved
-                    account on the server, and then uses that session for
-                    authenticated repository operations.
+                    Mission signs you in through GitHub device flow, validates
+                    the approved account on the server, and then uses that
+                    session for authenticated repository operations.
                 </div>
 
                 <div class="space-y-3">
-                    {#if oauth.available}
-                        <Button
-                            href={oauth.startHref}
-                            size="lg"
-                            class="w-full rounded-2xl"
-                        >
-                            <BrandGithubIcon class="size-4" />
-                            Continue with GitHub
-                            <ArrowRightIcon class="size-4" />
-                        </Button>
-                    {:else}
-                        <Button size="lg" class="w-full rounded-2xl" disabled>
-                            <BrandGithubIcon class="size-4" />
-                            GitHub OAuth Not Configured
-                        </Button>
-                    {/if}
-
                     {#if device.available}
                         <Button
                             type="button"
-                            variant="outline"
                             size="lg"
                             class="w-full rounded-2xl"
                             onclick={() => {
@@ -447,7 +422,7 @@
                             <DeviceMobileIcon class="size-4" />
                             {deviceFlowStarting
                                 ? "Starting device sign-in..."
-                                : "Use a device code instead"}
+                                : "Continue with GitHub (Device Code)"}
                         </Button>
                     {:else if device.error}
                         <div

@@ -1,10 +1,8 @@
-import { fail, redirect, type Actions } from '@sveltejs/kit';
+import { redirect, type Actions } from '@sveltejs/kit';
 import {
     clearGithubAuthSession,
     getGitHubDeviceConfigurationError,
     hasGitHubDeviceConfiguration,
-    getGitHubOAuthConfigurationError,
-    hasGitHubOAuthConfiguration,
     normalizeRedirectTarget
 } from '$lib/server/github-auth.server';
 import type { PageServerLoad } from './$types';
@@ -13,43 +11,35 @@ export const prerender = false;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
     const redirectTo = normalizeRedirectTarget(url.searchParams.get('redirectTo'));
-    const oauthError = url.searchParams.get('githubAuthError')?.trim();
-    const oauthConfigurationError = getGitHubOAuthConfigurationError();
+    const authError = url.searchParams.get('githubAuthError')?.trim();
     const deviceConfigurationError = getGitHubDeviceConfigurationError();
+    const deviceAvailable = hasGitHubDeviceConfiguration();
     const githubStatus = locals.appContext.githubStatus;
 
     if (githubStatus !== 'connected') {
         return {
             redirectTo,
-            oauth: {
-                available: hasGitHubOAuthConfiguration(),
-                error: oauthError || oauthConfigurationError,
-                startHref: `/auth/github?redirectTo=${encodeURIComponent(redirectTo)}`
-            },
+            error: authError,
             device: {
-                available: hasGitHubDeviceConfiguration(),
+                available: deviceAvailable,
                 error: deviceConfigurationError,
                 startHref: `/auth/github/device?redirectTo=${encodeURIComponent(redirectTo)}`,
                 pollHref: '/auth/github/device/poll'
             },
             githubProbe: {
                 status: 'idle' as const,
-                message: oauthConfigurationError && deviceConfigurationError
-                    ? 'GitHub OAuth is not configured for Airport web yet.'
-                    : 'Sign in with the configured GitHub App to unlock daemon-backed repository workflows.'
+                message: !deviceAvailable
+                    ? 'GitHub device flow is not configured for Airport web yet.'
+                    : 'Sign in with the configured GitHub App device flow to unlock daemon-backed repository workflows.'
             }
         };
     }
 
     return {
         redirectTo,
-        oauth: {
-            available: hasGitHubOAuthConfiguration(),
-            error: oauthError,
-            startHref: `/auth/github?redirectTo=${encodeURIComponent(redirectTo)}`
-        },
+        error: authError,
         device: {
-            available: hasGitHubDeviceConfiguration(),
+            available: deviceAvailable,
             error: deviceConfigurationError,
             startHref: `/auth/github/device?redirectTo=${encodeURIComponent(redirectTo)}`,
             pollHref: '/auth/github/device/poll'

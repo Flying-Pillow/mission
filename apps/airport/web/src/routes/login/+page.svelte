@@ -17,11 +17,7 @@
                 status: "idle" | "success" | "error";
                 message: string;
             };
-            oauth: {
-                available: boolean;
-                error?: string;
-                startHref: string;
-            };
+            error?: string;
             device: {
                 available: boolean;
                 error?: string;
@@ -50,10 +46,9 @@
         <Login
             githubStatus={data.appContext.githubStatus}
             user={data.appContext.user}
-            error={data.oauth.error}
+            error={data.error}
             probe={data.githubProbe}
             redirectTo={data.redirectTo}
-            oauth={data.oauth}
             device={data.device}
         />
     </div>
