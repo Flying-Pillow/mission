@@ -347,6 +347,67 @@ describe('MissionWorkflowRequestExecutor', () => {
 			runnerId: 'fake-runner',
 			transportId: 'terminal'
 		});
+		expect(startedEvent?.sessionId).toMatch(/^task-1-fake-runner-[a-z0-9]{8}$/);
+	});
+
+	it('starts a new runtime session id when relaunching the same task after termination', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as FilesystemAdapter,
+			runners: new Map([[runner.id, runner]])
+		});
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow: createDefaultWorkflowSettings()
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const task = createTask();
+		runtime.tasks = [task];
+
+		const firstLaunchEvents = await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-1',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		const firstSessionId = firstLaunchEvents.find((event) => event.type === 'session.started')?.sessionId;
+		if (!firstSessionId) {
+			throw new Error('Expected first launch to emit session.started.');
+		}
+
+		await executor.terminateRuntimeSession(firstSessionId, 'restart task', task.taskId);
+
+		const secondLaunchEvents = await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-2',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		const secondSessionId = secondLaunchEvents.find((event) => event.type === 'session.started')?.sessionId;
+		if (!secondSessionId) {
+			throw new Error('Expected second launch to emit session.started.');
+		}
+
+		expect(secondSessionId).not.toBe(firstSessionId);
 	});
 
 	it('preserves canonical task identity when cancelling an unattached runtime session', async () => {

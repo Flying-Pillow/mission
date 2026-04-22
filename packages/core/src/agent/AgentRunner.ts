@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { AgentSession } from './AgentSession.js';
 import type {
     AgentCommand,
@@ -283,7 +284,7 @@ export abstract class AgentRunner {
     ): Promise<AgentSession> {
         const runtime = this.requireTerminalRuntime();
         const requestedSharedSessionName = getRequestedTerminalSessionName(config);
-        const sessionId = buildAgentSessionId(config.task.taskId, this.id);
+        const sessionId = buildFreshAgentSessionId(config.task.taskId, this.id);
         const launchArgs = [
             ...runtime.args,
             ...(options.launchArgs ?? [])
@@ -958,14 +959,17 @@ function toSnapshotTransport(
     };
 }
 
-function buildAgentSessionId(taskId: string, runnerId: string): string {
+function buildFreshAgentSessionId(taskId: string, runnerId: string): string {
     const taskSegment = taskId.split('/').at(-1)?.trim() || taskId.trim();
     const normalizedTaskSegment = slugSessionSegment(taskSegment);
     const normalizedRunnerId = slugSessionSegment(runnerId);
+    const suffix = randomUUID().slice(0, 8);
     if (!normalizedTaskSegment) {
-        return normalizedRunnerId || 'mission-agent';
+        return normalizedRunnerId ? `${normalizedRunnerId}-${suffix}` : `mission-agent-${suffix}`;
     }
-    return normalizedRunnerId ? `${normalizedTaskSegment}-${normalizedRunnerId}` : normalizedTaskSegment;
+    return normalizedRunnerId
+        ? `${normalizedTaskSegment}-${normalizedRunnerId}-${suffix}`
+        : `${normalizedTaskSegment}-${suffix}`;
 }
 
 function buildTaskTerminalSessionName(

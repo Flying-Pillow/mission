@@ -124,7 +124,7 @@ describe('CopilotCliAgentRunner', () => {
 
 		expect(snapshot.runnerId).toBe('copilot-cli');
 		expect(snapshot.transport?.kind).toBe('terminal');
-		expect(snapshot.sessionId).toBe('task-1-copilot-cli');
+		expect(snapshot.sessionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
 		expect(snapshot.transport?.terminalSessionName).toBe('mission-mission');
 		expect(snapshot.transport?.paneId).toBe('terminal_4');
 		expect(snapshot.status).toBe('running');
@@ -191,7 +191,7 @@ describe('CopilotCliAgentRunner', () => {
 		const session = await runner.startSession(createLaunchConfig());
 		const snapshot = session.getSnapshot();
 
-		expect(snapshot.sessionId).toBe('task-1-copilot-cli');
+		expect(snapshot.sessionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
 		expect(snapshot.transport?.terminalSessionName).toBe(snapshot.sessionId);
 		expect(snapshot.transport?.paneId).toBeUndefined();
 		expect(state.lastLaunchCommand).toContain("'-i'");
@@ -219,7 +219,23 @@ describe('CopilotCliAgentRunner', () => {
 			}
 		}));
 
-		expect(session.getSnapshot().sessionId).toBe('01-spec-from-prd-copilot-cli');
+		expect(session.getSnapshot().sessionId).toMatch(/^01-spec-from-prd-copilot-cli-[a-z0-9]{8}$/);
+	});
+
+	it('creates a fresh session id for each new launch of the same task', async () => {
+		const runner = new CopilotCliAgentRunner({
+			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
+			executor,
+			sharedSessionName: 'mission-mission',
+			pollIntervalMs: 500
+		});
+
+		const firstSession = await runner.startSession(createLaunchConfig());
+		const secondSession = await runner.startSession(createLaunchConfig());
+
+		expect(firstSession.getSnapshot().sessionId).not.toBe(secondSession.getSnapshot().sessionId);
 	});
 
 	it('submits prompts by sending literal keys into terminal transport', async () => {
