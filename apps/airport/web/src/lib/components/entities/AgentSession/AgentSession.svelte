@@ -87,13 +87,24 @@
     type TerminalResizeEvent = { cols: number; rows: number };
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const canShowTerminal = $derived(
+        Boolean(
+            session?.isTerminalBacked() || session?.hasPersistedTerminalLog(),
+        ),
+    );
+    const canSendTerminalInput = $derived(
+        Boolean(active && session?.isRunning() && session?.isTerminalBacked()),
+    );
     const terminalSessionId = $derived(session?.sessionId ?? null);
     const terminalStateLabel = $derived.by(() => {
         if (!session) {
             return "No session";
         }
-        if (!canAttachTerminal) {
+        if (!canShowTerminal) {
             return "Not terminal-backed";
+        }
+        if (!canAttachTerminal && session.hasPersistedTerminalLog()) {
+            return "Transcript";
         }
         if (loading && !terminalSnapshot) {
             return "Connecting";
@@ -132,7 +143,7 @@
 
     $effect(() => {
         const transportKey =
-            terminalSessionId && canAttachTerminal
+            terminalSessionId && canShowTerminal
                 ? `session:${terminalSessionId}:${missionId}:${repositoryRootPath}:${repositoryId}`
                 : null;
 
@@ -143,7 +154,7 @@
         terminalTransport?.dispose();
         terminalTransport = null;
 
-        if (!terminalSessionId || !canAttachTerminal) {
+        if (!terminalSessionId || !canShowTerminal) {
             activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
@@ -258,7 +269,7 @@
     });
 
     async function flushPendingInput(): Promise<void> {
-        if (!session || !canAttachTerminal || pendingInput.length === 0) {
+        if (!session || !canSendTerminalInput || pendingInput.length === 0) {
             return;
         }
         if (!terminalTransport) {
@@ -327,7 +338,7 @@
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
             if (
                 !session ||
-                !canAttachTerminal ||
+                !canSendTerminalInput ||
                 !active ||
                 terminalSnapshot?.dead
             ) {
@@ -345,7 +356,7 @@
         terminal.onData((data: string) => {
             if (
                 !session ||
-                !canAttachTerminal ||
+                !canSendTerminalInput ||
                 !active ||
                 terminalSnapshot?.dead
             ) {
@@ -368,7 +379,7 @@
     }
 
     async function flushPendingResize(): Promise<void> {
-        if (!session || !canAttachTerminal || !pendingResize) {
+        if (!session || !canSendTerminalInput || !pendingResize) {
             return;
         }
         if (!terminalTransport) {
@@ -490,7 +501,7 @@
             >
                 No session resolves from the current mission-control selection.
             </div>
-        {:else if !canAttachTerminal}
+        {:else if !canShowTerminal}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
