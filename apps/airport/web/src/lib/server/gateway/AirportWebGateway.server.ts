@@ -760,7 +760,7 @@ export class AirportWebGateway {
                 });
             }
 
-            const terminalScreen = clipTerminalScreen(state.screen);
+            const terminalScreen = clipMissionSessionTerminalScreen(state);
 
             return missionSessionTerminalSnapshotDtoSchema.parse({
                 missionId,
@@ -1257,6 +1257,18 @@ function clipTerminalScreen(screen: string): { screen: string; truncated: boolea
         screen: screen.slice(-AIRPORT_WEB_TERMINAL_SCREEN_LIMIT),
         truncated: true
     };
+}
+
+function clipMissionSessionTerminalScreen(state: {
+    connected: boolean;
+    dead: boolean;
+    screen: string;
+}): { screen: string; truncated: boolean } {
+    if (!state.connected && state.dead) {
+        return { screen: state.screen, truncated: false };
+    }
+
+    return clipTerminalScreen(state.screen);
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

@@ -1,9 +1,11 @@
 <script lang="ts">
     import type { AgentSession } from "$lib/client/entities/AgentSession";
+    import Anser from "anser";
     import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
+    import sanitizeHtml from "sanitize-html";
     import {
         missionSessionTerminalSnapshotDtoSchema,
         missionSessionTerminalSocketServerMessageSchema,
@@ -83,6 +85,12 @@
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
     let renderWriteToken = 0;
+    let maxScrollLine = $state(0);
+    let viewportRows = $state(24);
+    let scrollbarViewport = $state<HTMLDivElement | null>(null);
+    let syncingScrollbar = false;
+
+    const SCROLLBAR_LINE_HEIGHT_PX = 16;
 
     type TerminalResizeEvent = { cols: number; rows: number };
 
@@ -101,6 +109,12 @@
         Boolean(active && session?.isRunning() && canAttachTerminal),
     );
     const terminalSessionId = $derived(session?.sessionId ?? null);
+    const isPersistedTranscriptSnapshot = $derived(
+        Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
+    );
+    const persistedTranscriptHtml = $derived.by(() =>
+        renderPersistedTranscriptHtml(terminalSnapshot?.screen ?? ""),
+    );
     const terminalStateLabel = $derived.by(() => {
         if (!session) {
             return "No session";
@@ -131,8 +145,23 @@
         }
         return "Connecting";
     });
+    const scrollbarContentHeight = $derived(
+        `${Math.max(maxScrollLine + viewportRows, viewportRows, 1) * SCROLLBAR_LINE_HEIGHT_PX}px`,
+    );
 
     $effect(() => {
+        if (isPersistedTranscriptSnapshot) {
+            resizeObserver?.disconnect();
+            terminal?.dispose();
+            resizeObserver = null;
+            fitAddon = null;
+            terminal = null;
+            lastRenderedScreen = "";
+            maxScrollLine = 0;
+            viewportRows = 24;
+            return;
+        }
+
         if (!container || terminal) {
             return;
         }
@@ -227,45 +256,64 @@
     $effect(() => {
         const screen = terminalSnapshot?.screen ?? "";
         const chunk = terminalSnapshot?.chunk;
-        if (!terminal || !active || typeof screen !== "string") {
+        if (
+            !terminal ||
+            !active ||
+            typeof screen !== "string" ||
+            isPersistedTranscriptSnapshot
+        ) {
             return;
         }
 
-        if ((!chunk || chunk.length === 0) && screen === lastRenderedScreen) {
+        const preparedScreen = prepareScreenForTerminal(
+            screen,
+            isPersistedTranscriptSnapshot,
+        );
+
+        if (
+            (!chunk || chunk.length === 0) &&
+            preparedScreen === lastRenderedScreen
+        ) {
             return;
         }
 
         const writeToken = ++renderWriteToken;
 
         if (typeof chunk === "string" && chunk.length > 0) {
-            lastRenderedScreen = screen;
+            lastRenderedScreen = preparedScreen;
             terminal.write(chunk, () => {
                 if (renderWriteToken !== writeToken) {
                     return;
                 }
+
+                syncScrollState();
             });
             return;
         }
 
-        const nextRender = normalizeScreen(screen);
+        const nextRender = normalizeScreen(preparedScreen);
         const previousRender = normalizeScreen(lastRenderedScreen);
         if (nextRender.startsWith(previousRender)) {
             const appendedOutput = nextRender.slice(previousRender.length);
-            lastRenderedScreen = screen;
+            lastRenderedScreen = preparedScreen;
             terminal.write(appendedOutput, () => {
                 if (renderWriteToken !== writeToken) {
                     return;
                 }
+
+                syncScrollState();
             });
             return;
         }
 
-        lastRenderedScreen = screen;
+        lastRenderedScreen = preparedScreen;
         terminal.reset();
         terminal.write(nextRender, () => {
             if (renderWriteToken !== writeToken) {
                 return;
             }
+
+            syncScrollState();
         });
     });
 
@@ -344,6 +392,10 @@
         terminal.loadAddon(fitAddon);
         terminal.open(target);
         fitAddon.fit();
+        syncScrollState();
+        terminal.onScroll(() => {
+            syncScrollState();
+        });
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
             if (
                 !session ||
@@ -383,6 +435,7 @@
 
         resizeObserver = new ResizeObserver(() => {
             fitAddon?.fit();
+            syncScrollState();
         });
         resizeObserver.observe(target);
     }
@@ -408,6 +461,103 @@
 
     function normalizeScreen(screen: string): string {
         return screen.replace(/\r?\n/g, "\r\n");
+    }
+
+    function prepareScreenForTerminal(
+        screen: string,
+        stripAlternateScreen: boolean,
+    ): string {
+        if (!stripAlternateScreen) {
+            return screen;
+        }
+
+        return screen.replace(/\u001b\[\?(?:47|1047|1048|1049)[hl]/g, "");
+    }
+
+    function renderPersistedTranscriptHtml(screen: string): string {
+        if (!screen) {
+            return "No transcript output captured.";
+        }
+
+        const normalizedTranscript = screen
+            .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+            .replace(
+                /\u001b\[\?(?:47|1047|1048|1049|1002|1004|1006|2004|2026)[hl]/g,
+                "\n",
+            )
+            .replace(/\u001b\[(?:\d+;)*\d*[Hf]/g, "\n")
+            .replace(/\u001b\[2K/g, "")
+            .replace(/\u001b\[(?:\d+;)*\d*[ABCDGJKSTsu]/g, "\n")
+            .replace(/\u001b(?:\(|\))[A-Za-z0-9]/g, "")
+            .replace(/\u001b[A-Z\\]/g, "")
+            .replace(/\r/g, "\n")
+            .replace(/\u0007/g, "")
+            .replace(/[ \t]+\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+
+        return sanitizeHtml(
+            Anser.ansiToHtml(normalizedTranscript, {
+                escape_xml: true,
+                use_classes: false,
+            }),
+            {
+                allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+                    "span",
+                    "br",
+                ]),
+                allowedAttributes: {
+                    ...sanitizeHtml.defaults.allowedAttributes,
+                    span: ["style"],
+                },
+                allowedStyles: {
+                    span: {
+                        color: [/^.*$/],
+                        "background-color": [/^.*$/],
+                        "font-weight": [/^.*$/],
+                        "font-style": [/^.*$/],
+                        "text-decoration": [/^.*$/],
+                    },
+                },
+            },
+        );
+    }
+
+    function syncScrollState(): void {
+        if (!terminal) {
+            maxScrollLine = 0;
+            viewportRows = 24;
+            return;
+        }
+
+        const activeBuffer = terminal.buffer.active;
+        viewportRows = Math.max(terminal.rows, 1);
+        maxScrollLine = Math.max(activeBuffer.length - viewportRows, 0);
+        const viewportLine = Math.min(activeBuffer.viewportY, maxScrollLine);
+
+        if (scrollbarViewport) {
+            const nextScrollTop = viewportLine * SCROLLBAR_LINE_HEIGHT_PX;
+
+            if (Math.abs(scrollbarViewport.scrollTop - nextScrollTop) > 1) {
+                syncingScrollbar = true;
+                scrollbarViewport.scrollTop = nextScrollTop;
+                syncingScrollbar = false;
+            }
+        }
+    }
+
+    function handleScrollbarScroll(event: Event): void {
+        if (!terminal || syncingScrollbar) {
+            return;
+        }
+
+        const scrollbarElement = event.currentTarget as HTMLDivElement;
+        const nextValue = Math.round(
+            scrollbarElement.scrollTop / SCROLLBAR_LINE_HEIGHT_PX,
+        );
+
+        terminal.scrollToLine(Math.min(Math.max(nextValue, 0), maxScrollLine));
+        syncScrollState();
     }
 
     function sanitizeTerminalInputData(data: string): string {
@@ -517,17 +667,100 @@
                 This session is not terminal-backed, so Mission Control cannot
                 attach an interactive console.
             </div>
+        {:else if isPersistedTranscriptSnapshot}
+            <div
+                class="h-full min-h-[24rem] overflow-auto bg-slate-950 px-3 py-2"
+            >
+                <div class="agent-session-transcript">
+                    {@html persistedTranscriptHtml}
+                </div>
+            </div>
         {:else}
             <div class="h-full min-h-[24rem] overflow-hidden">
                 <div
-                    class="h-full min-h-0 overflow-hidden bg-slate-950 px-2 py-2"
+                    class="agent-session-terminal-shell flex h-full min-h-0 overflow-hidden bg-slate-950 py-2 pl-2 pr-1"
                 >
                     <div
                         bind:this={container}
-                        class="h-full w-full min-h-0"
+                        class="h-full min-h-0 flex-1"
                     ></div>
+
+                    <div
+                        bind:this={scrollbarViewport}
+                        class={`agent-session-scrollbar ${maxScrollLine > 0 ? "opacity-100" : "opacity-40"}`}
+                        onscroll={handleScrollbarScroll}
+                    >
+                        <div
+                            class="agent-session-scrollbar-spacer"
+                            style={`height: ${scrollbarContentHeight};`}
+                            aria-label="Scroll agent session transcript"
+                        ></div>
+                    </div>
                 </div>
             </div>
         {/if}
     </div>
 </section>
+
+<style>
+    :global(
+            .agent-session-terminal-shell
+                .xterm
+                .xterm-scrollable-element
+                > .scrollbar.vertical
+        ) {
+        display: none !important;
+    }
+
+    .agent-session-scrollbar {
+        width: 1rem;
+        min-width: 1rem;
+        overflow-y: scroll;
+        overflow-x: hidden;
+        border-left: 1px solid rgba(71, 85, 105, 0.45);
+        padding-left: 0.25rem;
+        transition: opacity 120ms linear;
+        scrollbar-width: auto;
+        scrollbar-color: rgba(148, 163, 184, 0.82) rgba(15, 23, 42, 0.95);
+    }
+
+    .agent-session-scrollbar-spacer {
+        width: 1px;
+    }
+
+    .agent-session-scrollbar::-webkit-scrollbar {
+        width: 0.875rem;
+    }
+
+    .agent-session-scrollbar::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.95);
+        border-radius: 999px;
+    }
+
+    .agent-session-scrollbar::-webkit-scrollbar-thumb {
+        border: 3px solid #020617;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.82);
+    }
+
+    .agent-session-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(226, 232, 240, 0.92);
+    }
+
+    .agent-session-transcript {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            Liberation Mono,
+            monospace;
+        font-size: 0.8125rem;
+        line-height: 1.35;
+        color: #e2e8f0;
+    }
+</style>

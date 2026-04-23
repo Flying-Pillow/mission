@@ -26,7 +26,7 @@
 	});
 </script>
 
-<article bind:this={articleElement} class="markdown">
+<article bind:this={articleElement} class="markdown markdown-body">
 	{@render children()}
 </article>
 

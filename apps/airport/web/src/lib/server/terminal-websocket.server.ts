@@ -121,7 +121,7 @@ async function handleTerminalConnection(
     };
 
     const sendSnapshot = (state: MissionAgentTerminalState | null, type: 'snapshot' | 'disconnected' = 'snapshot') => {
-        const terminalScreen = clipTerminalScreen(state?.screen ?? '');
+        const terminalScreen = clipMissionSessionTerminalScreen(state);
         const snapshot = missionSessionTerminalSnapshotDtoSchema.parse({
             missionId: query.missionId,
             sessionId,
@@ -455,4 +455,14 @@ function clipTerminalScreen(screen: string): { screen: string; truncated: boolea
         screen: screen.slice(-AIRPORT_WEB_TERMINAL_SCREEN_LIMIT),
         truncated: true
     };
+}
+
+function clipMissionSessionTerminalScreen(
+    state: Pick<MissionAgentTerminalState, 'connected' | 'dead' | 'screen'> | null,
+): { screen: string; truncated: boolean } {
+    if (state && !state.connected && state.dead) {
+        return { screen: state.screen, truncated: false };
+    }
+
+    return clipTerminalScreen(state?.screen ?? '');
 }

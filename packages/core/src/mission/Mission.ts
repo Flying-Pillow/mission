@@ -217,7 +217,7 @@ export class Mission {
 		});
 		this.syncAgentSessions(document);
 		const snapshot = {
-			actions: this.buildActionList(document),
+			actions: await this.buildActionList(document),
 			revision: this.buildActionRevision(document)
 		};
 		this.lastKnownActionSnapshot = snapshot;
@@ -497,11 +497,10 @@ export class Mission {
 		}
 		if (actionId.startsWith('task.rework.')) {
 			const taskId = actionId.slice('task.rework.'.length);
-			const reasonCode = requireTextActionStep(steps, 'task.rework.reasonCode').value.trim();
-			const summary = requireTextActionStep(steps, 'task.rework.summary').value.trim();
+			const summary = requireTextActionStep(steps, 'task.rework.instruction').value.trim();
 			await this.reworkTask(taskId, {
 				actor: 'human',
-				reasonCode,
+				reasonCode: 'manual.instruction',
 				summary,
 				artifactRefs: []
 			});
@@ -653,6 +652,7 @@ export class Mission {
 		if (!persistedDocument) {
 			return this.buildDraftStatus();
 		}
+		const hydratedWorkflowTasks = await this.hydrateRuntimeTasksForActions(persistedDocument.runtime.tasks);
 		const stages = await this.buildWorkflowStageStatuses(persistedDocument);
 		const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
 		const currentStageId = this.resolveCurrentStageFromWorkflow(persistedDocument);
@@ -693,7 +693,7 @@ export class Mission {
 					runningTaskIds: [...stage.runningTaskIds],
 					completedTaskIds: [...stage.completedTaskIds]
 				})),
-				tasks: persistedDocument.runtime.tasks.map((task) => ({
+				tasks: hydratedWorkflowTasks.map((task) => ({
 					...task,
 					title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 					dependsOn: [...task.dependsOn],
@@ -771,7 +771,7 @@ export class Mission {
 		};
 	}
 
-	private buildActionList(document?: MissionRuntimeRecord): OperatorActionDescriptor[] {
+	private async buildActionList(document?: MissionRuntimeRecord): Promise<OperatorActionDescriptor[]> {
 		if (!document) {
 			const workflow = this.workflowResolver();
 			const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -1129,16 +1129,46 @@ export class Mission {
 		} as MissionWorkflowEvent;
 	}
 
-	private buildAvailableActions(
+	private async buildAvailableActions(
 		configuration: MissionRuntimeRecord['configuration'],
 		runtime: MissionRuntimeRecord['runtime'],
 		sessions: MissionAgentSessionRecord[]
-	): OperatorActionDescriptor[] {
+	): Promise<OperatorActionDescriptor[]> {
+		const runtimeTasksForActions = await this.hydrateRuntimeTasksForActions(runtime.tasks);
 		return buildMissionAvailableActions({
 			missionId: this.descriptor.missionId,
 			configuration,
-			runtime,
+			runtime: {
+				...runtime,
+				tasks: runtimeTasksForActions
+			},
 			sessions
+		});
+	}
+
+	private async hydrateRuntimeTasksForActions(
+		tasks: MissionRuntimeRecord['runtime']['tasks']
+	): Promise<MissionRuntimeRecord['runtime']['tasks']> {
+		const fileTasksById = new Map<string, MissionTaskState>();
+		const fileTaskGroups = await Promise.all(
+			MISSION_STAGES.map((stageId) => this.adapter.listTaskStates(this.missionDir, stageId).catch(() => []))
+		);
+
+		for (const fileTasks of fileTaskGroups) {
+			for (const fileTask of fileTasks) {
+				fileTasksById.set(fileTask.taskId, fileTask);
+			}
+		}
+
+		return tasks.map((task) => {
+			const fileTask = fileTasksById.get(task.taskId);
+			const taskKind = task.taskKind ?? fileTask?.taskKind;
+			const pairedTaskId = task.pairedTaskId ?? fileTask?.pairedTaskId;
+			return {
+				...task,
+				...(taskKind ? { taskKind } : {}),
+				...(pairedTaskId ? { pairedTaskId } : {})
+			};
 		});
 	}
 
@@ -2089,33 +2119,23 @@ function buildTaskReworkAction(input: MissionAvailableActionsInput, task: Missio
 	});
 	return {
 		id: `task.rework.${task.taskId}`,
-		label: 'Rework Task',
+		label: 'Instruct',
 		action: '/task rework',
 		scope: 'task',
 		targetId: task.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
-		ui: { toolbarLabel: 'REWORK', requiresConfirmation: true, confirmationPrompt: 'Restart this task with audited rework context?' },
+		ui: { toolbarLabel: 'INSTRUCT', requiresConfirmation: true, confirmationPrompt: 'Restart this task with corrective guidance?' },
 		flow: {
 			targetLabel: 'TASK',
-			actionLabel: 'REWORK',
+			actionLabel: 'INSTRUCT',
 			steps: [
 				{
 					kind: 'text',
-					id: 'task.rework.reasonCode',
-					label: 'Reason Code',
-					title: 'Enter a machine-readable reason code',
-					helperText: 'Use a stable, workflow-defined code such as verification.failed or review.requested.',
-					placeholder: 'verification.failed',
-					inputMode: 'compact',
-					format: 'plain'
-				},
-				{
-					kind: 'text',
-					id: 'task.rework.summary',
-					label: 'Summary',
-					title: 'Describe why the task is being restarted',
-					helperText: 'This summary is recorded as audited rework context and appended to the next launch prompt.',
-					placeholder: 'Describe what failed and what the next attempt must correct.',
+					id: 'task.rework.instruction',
+					label: 'Instruction',
+					title: 'Describe what the next attempt must do differently',
+					helperText: 'This guidance is recorded as rework context and appended to the next launch prompt.',
+					placeholder: 'Explain what was wrong and how the next attempt should correct it.',
 					inputMode: 'expanded',
 					format: 'markdown'
 				}
@@ -2147,17 +2167,17 @@ function buildVerificationDerivedTaskReworkAction(
 
 	return {
 		id: `task.rework.from-verification.${task.taskId}`,
-		label: 'Rework Verified Task',
+		label: 'Send Back',
 		action: '/task rework',
 		scope: 'task',
 		targetId: targetTask.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
 		ui: {
-			toolbarLabel: 'REWORK TARGET',
+			toolbarLabel: 'SEND BACK',
 			requiresConfirmation: true,
-			confirmationPrompt: `Restart '${targetTask.title}' using the evidence captured by verification task '${task.title}'?`
+			confirmationPrompt: `Send '${targetTask.title}' back for fixes using the evidence captured by verification task '${task.title}'?`
 		},
-		flow: { targetLabel: 'TASK', actionLabel: 'REWORK TARGET', steps: [] },
+		flow: { targetLabel: 'TASK', actionLabel: 'SEND BACK', steps: [] },
 		presentationTargets: [{ scope: 'task', targetId: task.taskId }, { scope: 'stage', targetId: task.stageId as MissionStageId }],
 		metadata: { stageId: task.stageId as MissionStageId },
 		ordering: { group: 'recovery' }

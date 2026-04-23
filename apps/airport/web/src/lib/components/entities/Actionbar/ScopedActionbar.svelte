@@ -389,10 +389,6 @@
             return;
         }
 
-        if (!(await requestActionConfirmation(flowAction))) {
-            return;
-        }
-
         flowError = null;
         const succeeded = await submitAction(
             flowAction,
