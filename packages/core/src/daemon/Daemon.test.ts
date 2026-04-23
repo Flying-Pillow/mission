@@ -1253,11 +1253,11 @@ exit 1
 					const snapshot = await editorUpdate;
 					expect(snapshot.state.airport.panes.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
-						targetId: artifactNode!.sourcePath,
+						targetId: artifact!.filePath,
 						mode: 'view'
 					});
-					expect(snapshot.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
-					expect(snapshot.airportProjections.briefingRoom.launchPath).toBe(artifactNode!.sourcePath);
+					expect(snapshot.airportProjections.briefingRoom.artifactPath).toBe(artifact!.filePath);
+					expect(snapshot.airportProjections.briefingRoom.launchPath).toBe(artifact!.filePath);
 				} finally {
 					dashboardClient.dispose();
 					editorClient.dispose();
