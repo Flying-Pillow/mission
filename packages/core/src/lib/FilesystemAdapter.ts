@@ -505,6 +505,15 @@ export class FilesystemAdapter {
 		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.metadata.json`);
 	}
 
+	public resolveMissionSessionLogPath(missionDir: string, sessionLogPath: string): string | undefined {
+		const resolvedLogPath = path.resolve(missionDir, sessionLogPath);
+		const relativeLogPath = path.relative(missionDir, resolvedLogPath);
+		if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
+			return undefined;
+		}
+		return resolvedLogPath;
+	}
+
 	public async readMissionRuntimeRecord(
 		missionDir: string
 	): Promise<MissionRuntimeRecord | undefined> {
@@ -608,6 +617,24 @@ export class FilesystemAdapter {
 		const filePath = this.getMissionSessionLogPath(missionDir, sessionId);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		await fs.appendFile(filePath, chunk, 'utf8');
+	}
+
+	public async readMissionSessionLog(
+		missionDir: string,
+		sessionLogPath: string
+	): Promise<string | undefined> {
+		const filePath = this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return undefined;
+		}
+		try {
+			return await fs.readFile(filePath, 'utf8');
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return undefined;
+			}
+			throw error;
+		}
 	}
 
 	public async readMissionRuntimeEventLog(

@@ -744,40 +744,12 @@ export class AirportWebGateway {
         const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const sessions = await withTimeout(
-                api.mission.listSessions({ missionId }),
-                2500,
-                'Mission session listing timed out.'
-            );
-            const session = sessions.find((candidate) => candidate.sessionId === sessionId);
-            if (session && !isActiveSessionLifecycleState(session.lifecycleState) && session.sessionLogPath) {
-                const persistedSnapshot = this.readPersistedSessionLogSnapshot({
-                    missionId,
-                    sessionId,
-                    sessionLogPath: session.sessionLogPath,
-                    surfacePath: input.surfacePath
-                });
-                if (persistedSnapshot) {
-                    return persistedSnapshot;
-                }
-            }
             const state = await withTimeout(
                 api.mission.getSessionTerminalState({ missionId }, sessionId),
                 2500,
                 'Mission terminal snapshot request timed out.'
             );
             if (!state) {
-                if (session?.sessionLogPath) {
-                    const persistedSnapshot = this.readPersistedSessionLogSnapshot({
-                        missionId,
-                        sessionId,
-                        sessionLogPath: session.sessionLogPath,
-                        surfacePath: input.surfacePath
-                    });
-                    if (persistedSnapshot) {
-                        return persistedSnapshot;
-                    }
-                }
                 return missionSessionTerminalSnapshotDtoSchema.parse({
                     missionId,
                     sessionId,
@@ -803,39 +775,6 @@ export class AirportWebGateway {
         } finally {
             daemon.dispose();
         }
-    }
-
-    private readPersistedSessionLogSnapshot(input: {
-        missionId: string;
-        sessionId: string;
-        sessionLogPath: string;
-        surfacePath?: string;
-    }): MissionSessionTerminalSnapshotDto | undefined {
-        const surfacePath = input.surfacePath?.trim();
-        if (!surfacePath) {
-            return undefined;
-        }
-
-        const missionDir = path.resolve(surfacePath, '.mission', 'missions', input.missionId);
-        const resolvedLogPath = path.resolve(missionDir, input.sessionLogPath);
-        const relativeLogPath = path.relative(missionDir, resolvedLogPath);
-        if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
-            return undefined;
-        }
-        if (!fs.existsSync(resolvedLogPath)) {
-            return undefined;
-        }
-
-        const terminalScreen = clipTerminalScreen(fs.readFileSync(resolvedLogPath, 'utf8'));
-        return missionSessionTerminalSnapshotDtoSchema.parse({
-            missionId: input.missionId,
-            sessionId: input.sessionId,
-            connected: false,
-            dead: true,
-            exitCode: null,
-            screen: terminalScreen.screen,
-            ...(terminalScreen.truncated ? { truncated: true } : {})
-        });
     }
 
     public async sendMissionSessionTerminalInput(input: {

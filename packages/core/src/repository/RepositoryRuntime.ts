@@ -966,14 +966,24 @@ export class RepositoryRuntime {
 	): Promise<MissionAgentTerminalState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		const session = loadedMission.mission.getAgentSession(params.sessionId);
-		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+		const terminalAttachment = session
+			? await this.resolveSessionTerminalAttachment(loadedMission, session)
+			: undefined;
+		if (!session) {
 			return null;
 		}
+		if (!terminalAttachment) {
+			return await this.readPersistedAgentTerminalState(loadedMission, session);
+		}
 
-		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
-			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		const handle = await this.terminalTransport.attachSession(terminalAttachment.terminalSessionName, {
+			...(terminalAttachment.terminalPaneId ? { paneId: terminalAttachment.terminalPaneId } : {})
 		});
 		if (!handle) {
+			const persistedState = await this.readPersistedAgentTerminalState(loadedMission, session);
+			if (persistedState) {
+				return persistedState;
+			}
 			return this.toAgentTerminalState(session.sessionId);
 		}
 
@@ -985,12 +995,15 @@ export class RepositoryRuntime {
 	): Promise<MissionAgentTerminalState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		const session = loadedMission.mission.getAgentSession(params.sessionId);
-		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+		const terminalAttachment = session
+			? await this.resolveSessionTerminalAttachment(loadedMission, session)
+			: undefined;
+		if (!session || !terminalAttachment) {
 			return null;
 		}
 
-		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
-			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		const handle = await this.terminalTransport.attachSession(terminalAttachment.terminalSessionName, {
+			...(terminalAttachment.terminalPaneId ? { paneId: terminalAttachment.terminalPaneId } : {})
 		});
 		if (!handle) {
 			return this.toAgentTerminalState(session.sessionId);
@@ -2709,6 +2722,33 @@ export class RepositoryRuntime {
 		return `${missionId}:${sessionId}`;
 	}
 
+	private async resolveSessionTerminalAttachment(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): Promise<{ terminalSessionName: string; terminalPaneId?: string } | undefined> {
+		if (session.transportId === 'terminal' && session.terminalSessionName) {
+			return {
+				terminalSessionName: session.terminalSessionName,
+				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {})
+			};
+		}
+		if (!session.sessionLogPath) {
+			return undefined;
+		}
+
+		const metadata = await this.store.readMissionSessionMetadata<Partial<SessionLogMetadata>>(
+			loadedMission.mission.getMissionDir(),
+			session.sessionId
+		);
+		if (metadata?.transportId !== 'terminal' || typeof metadata.terminalSessionName !== 'string') {
+			return undefined;
+		}
+		return {
+			terminalSessionName: metadata.terminalSessionName,
+			...(typeof metadata.terminalPaneId === 'string' ? { terminalPaneId: metadata.terminalPaneId } : {})
+		};
+	}
+
 	private findMissionAgentSessionByTerminalSessionName(
 		loadedMission: LoadedMission,
 		sessionIdOrTerminalName: string
@@ -2717,7 +2757,42 @@ export class RepositoryRuntime {
 		if (directSession) {
 			return directSession;
 		}
-		return loadedMission.mission.getAgentSessionByTerminalSessionName(sessionIdOrTerminalName);
+		const matchedSession = loadedMission.mission.getAgentSessionByTerminalSessionName(sessionIdOrTerminalName);
+		if (matchedSession) {
+			return matchedSession;
+		}
+		for (const session of loadedMission.mission.getAgentSessions()) {
+			const metadata = this.sessionLogWriters.get(this.getSessionLogWriterKey(loadedMission.missionId, session.sessionId))?.metadata;
+			if (metadata?.terminalSessionName === sessionIdOrTerminalName) {
+				return session;
+			}
+		}
+		return undefined;
+	}
+
+	private async readPersistedAgentTerminalState(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): Promise<MissionAgentTerminalState | null> {
+		if (this.isRunningSession(session) || !session.sessionLogPath) {
+			return null;
+		}
+
+		const screen = await this.store.readMissionSessionLog(
+			loadedMission.mission.getMissionDir(),
+			session.sessionLogPath
+		);
+		if (screen === undefined) {
+			return null;
+		}
+
+		return {
+			sessionId: session.sessionId,
+			connected: false,
+			dead: true,
+			exitCode: null,
+			screen
+		};
 	}
 
 	private toAgentTerminalState(

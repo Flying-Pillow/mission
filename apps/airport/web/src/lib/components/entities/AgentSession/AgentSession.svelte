@@ -86,14 +86,19 @@
 
     type TerminalResizeEvent = { cols: number; rows: number };
 
-    const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const canAttachTerminal = $derived(
+        Boolean(
+            session?.isTerminalBacked() ||
+                (session?.isRunning() && session?.hasPersistedTerminalLog()),
+        ),
+    );
     const canShowTerminal = $derived(
         Boolean(
             session?.isTerminalBacked() || session?.hasPersistedTerminalLog(),
         ),
     );
     const canSendTerminalInput = $derived(
-        Boolean(active && session?.isRunning() && session?.isTerminalBacked()),
+        Boolean(active && session?.isRunning() && canAttachTerminal),
     );
     const terminalSessionId = $derived(session?.sessionId ?? null);
     const terminalStateLabel = $derived.by(() => {
@@ -103,7 +108,11 @@
         if (!canShowTerminal) {
             return "Not terminal-backed";
         }
-        if (!canAttachTerminal && session.hasPersistedTerminalLog()) {
+        if (
+            !session.isRunning() &&
+            !canAttachTerminal &&
+            session.hasPersistedTerminalLog()
+        ) {
             return "Transcript";
         }
         if (loading && !terminalSnapshot) {
