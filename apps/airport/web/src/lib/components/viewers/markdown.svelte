@@ -85,7 +85,7 @@
         <pre class="markdown-frontmatter">{document.frontmatter}</pre>
     {/if}
 
-    <div class="markdown">
+    <div class="markdown markdown-body">
         {@html rendered}
     </div>
 </div>

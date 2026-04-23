@@ -346,17 +346,15 @@ describe('Mission', () => {
                     targetId: taskId,
                     flow: {
                         targetLabel: 'TASK',
-                        actionLabel: 'REWORK',
+                        actionLabel: 'INSTRUCT',
                         steps: [
-                            expect.objectContaining({ id: 'task.rework.reasonCode', kind: 'text' }),
-                            expect.objectContaining({ id: 'task.rework.summary', kind: 'text' })
+                            expect.objectContaining({ id: 'task.rework.instruction', kind: 'text' })
                         ]
                     }
                 });
 
                 const nextStatus = await mission.executeAction(`task.rework.${taskId}`, [
-                    { kind: 'text', stepId: 'task.rework.reasonCode', value: 'review.requested' },
-                    { kind: 'text', stepId: 'task.rework.summary', value: 'The previous output missed the requested review criteria.' }
+                    { kind: 'text', stepId: 'task.rework.instruction', value: 'The previous output missed the requested review criteria.' }
                 ]);
 
                 const workflowTask = nextStatus.workflow?.tasks.find((task) => task.taskId === taskId);
@@ -366,11 +364,11 @@ describe('Mission', () => {
                     reworkIterationCount: 1,
                     reworkRequest: expect.objectContaining({
                         actor: 'human',
-                        reasonCode: 'review.requested',
+                        reasonCode: 'manual.instruction',
                         summary: 'The previous output missed the requested review criteria.'
                     }),
                     pendingLaunchContext: expect.objectContaining({
-                        reasonCode: 'review.requested',
+                        reasonCode: 'manual.instruction',
                         summary: 'The previous output missed the requested review criteria.'
                     })
                 });
@@ -494,7 +492,147 @@ describe('Mission', () => {
                     enabled: true,
                     targetId: 'implementation/02-boundary',
                     flow: {
-                        actionLabel: 'REWORK TARGET',
+                        actionLabel: 'SEND BACK',
+                        steps: []
+                    },
+                    presentationTargets: expect.arrayContaining([
+                        expect.objectContaining({ scope: 'task', targetId: 'implementation/02-boundary-verify' })
+                    ])
+                });
+
+                const nextStatus = await reloaded.executeAction('task.rework.from-verification.implementation/02-boundary-verify');
+                const implementationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary');
+                const verificationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary-verify');
+
+                expect(implementationTask).toMatchObject({
+                    taskId: 'implementation/02-boundary',
+                    reworkRequest: expect.objectContaining({
+                        actor: 'workflow',
+                        reasonCode: 'verification.failed',
+                        sourceTaskId: 'implementation/02-boundary-verify',
+                        artifactRefs: expect.arrayContaining([
+                            expect.objectContaining({ path: '03-IMPLEMENTATION/tasks/02-boundary-verify.md' })
+                        ])
+                    })
+                });
+                expect(verificationTask?.lifecycle).toBe('pending');
+            } finally {
+                reloaded.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('resolves verification-driven rework from file task metadata when runtime pairing metadata is absent', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(2043, 'Mission verification-triggered rework action from file metadata'),
+                branchRef: adapter.deriveMissionBranchName(2043, 'Mission verification-triggered rework action from file metadata')
+            }, createWorkflowBindings(runner));
+
+            const missionId = mission.getRecord().id;
+            const missionDir = mission.getMissionDir();
+
+            try {
+                await mission.startWorkflow();
+                await adapter.writeTaskRecord(missionDir, 'implementation', '02-boundary.md', {
+                    subject: 'Implement Boundary',
+                    instruction: 'Build the boundary slice.',
+                    taskKind: 'implementation',
+                    pairedTaskId: 'implementation/02-boundary-verify',
+                    agent: 'copilot-cli'
+                });
+                await adapter.writeTaskRecord(missionDir, 'implementation', '02-boundary-verify.md', {
+                    subject: 'Verify Boundary',
+                    instruction: 'Validate the boundary slice and document failures.',
+                    taskKind: 'verification',
+                    pairedTaskId: 'implementation/02-boundary',
+                    dependsOn: ['02-boundary'],
+                    agent: 'copilot-cli'
+                });
+
+                const persisted = await adapter.readMissionRuntimeRecord(missionDir);
+                if (!persisted) {
+                    throw new Error('Expected a persisted mission runtime record.');
+                }
+
+                persisted.runtime.activeStageId = 'implementation';
+                persisted.runtime.tasks = [
+                    {
+                        taskId: 'implementation/02-boundary',
+                        stageId: 'implementation',
+                        title: 'Implement Boundary',
+                        instruction: 'Build the boundary slice.',
+                        dependsOn: [],
+                        lifecycle: 'completed',
+                        waitingOnTaskIds: [],
+                        runtime: { autostart: false },
+                        retries: 0,
+                        createdAt: '2026-04-14T10:00:00.000Z',
+                        updatedAt: '2026-04-14T10:10:00.000Z',
+                        completedAt: '2026-04-14T10:10:00.000Z'
+                    },
+                    {
+                        taskId: 'implementation/02-boundary-verify',
+                        stageId: 'implementation',
+                        title: 'Verify Boundary',
+                        instruction: 'Validate the boundary slice and document failures.',
+                        dependsOn: ['implementation/02-boundary'],
+                        lifecycle: 'completed',
+                        waitingOnTaskIds: [],
+                        runtime: { autostart: false },
+                        retries: 0,
+                        createdAt: '2026-04-14T10:11:00.000Z',
+                        updatedAt: '2026-04-14T10:20:00.000Z',
+                        completedAt: '2026-04-14T10:20:00.000Z'
+                    }
+                ];
+                persisted.runtime.stages = persisted.runtime.stages.map((stage) =>
+                    stage.stageId === 'implementation'
+                        ? {
+                            ...stage,
+                            lifecycle: 'active',
+                            taskIds: ['implementation/02-boundary', 'implementation/02-boundary-verify'],
+                            readyTaskIds: [],
+                            queuedTaskIds: [],
+                            runningTaskIds: [],
+                            completedTaskIds: ['implementation/02-boundary', 'implementation/02-boundary-verify'],
+                            enteredAt: '2026-04-14T10:00:00.000Z'
+                        }
+                        : {
+                            ...stage,
+                            taskIds: [],
+                            readyTaskIds: [],
+                            queuedTaskIds: [],
+                            runningTaskIds: [],
+                            completedTaskIds: []
+                        }
+                );
+                await adapter.writeMissionRuntimeRecord(missionDir, persisted);
+            } finally {
+                mission.dispose();
+            }
+
+            const reloaded = await Factory.load(adapter, { missionId }, createWorkflowBindings(runner));
+            if (!reloaded) {
+                throw new Error('Expected mission to reload.');
+            }
+
+            try {
+                const reworkAction = (await reloaded.listAvailableActions()).find(
+                    (action) => action.id === 'task.rework.from-verification.implementation/02-boundary-verify'
+                );
+                expect(reworkAction).toMatchObject({
+                    action: '/task rework',
+                    enabled: true,
+                    targetId: 'implementation/02-boundary',
+                    flow: {
+                        actionLabel: 'SEND BACK',
                         steps: []
                     },
                     presentationTargets: expect.arrayContaining([
