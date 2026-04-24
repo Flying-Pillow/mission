@@ -1,25 +1,38 @@
-// /apps/airport/web/src/lib/client/entities/Stage.ts: OO browser entity for a mission workflow stage with task accessors.
+// /apps/airport/web/src/lib/client/entities/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
 import type {
     MissionRuntimeSnapshot,
     Stage as StageSnapshotRecord
 } from '@flying-pillow/mission-core/airport/runtime';
-import type { EntityModel } from '$lib/client/entities/EntityModel';
-import type { Task } from '$lib/client/entities/Task';
+import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
+import type { Task } from '$lib/client/entities/Task.svelte.js';
 
 export type StageSnapshot = NonNullable<
     NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
->[number] & Stage;
+>[number];
 
 export class Stage implements EntityModel<StageSnapshot> {
-    private snapshot: StageSnapshot;
+    private snapshotState = $state<StageSnapshot | undefined>();
     private readonly resolveTask: (taskId: string) => Task | undefined;
 
     public constructor(
         snapshot: StageSnapshot,
         resolveTask: (taskId: string) => Task | undefined
     ) {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
         this.resolveTask = resolveTask;
+    }
+
+    private get snapshot(): StageSnapshot {
+        const snapshot = this.snapshotState;
+        if (!snapshot) {
+            throw new Error('Stage snapshot is not initialized.');
+        }
+
+        return snapshot;
+    }
+
+    private set snapshot(snapshot: StageSnapshot) {
+        this.snapshotState = structuredClone(snapshot);
     }
 
     public get stageId(): string {
@@ -39,7 +52,7 @@ export class Stage implements EntityModel<StageSnapshot> {
     }
 
     public get artifacts(): StageSnapshot['artifacts'] {
-        return structuredClone(this.snapshot.artifacts);
+        return structuredClone($state.snapshot(this.snapshot.artifacts));
     }
 
     public listTasks(): Task[] {
@@ -49,12 +62,12 @@ export class Stage implements EntityModel<StageSnapshot> {
     }
 
     public updateFromSnapshot(snapshot: StageSnapshot): this {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
         return this;
     }
 
     public toSnapshot(): StageSnapshot {
-        return structuredClone(this.snapshot);
+        return structuredClone($state.snapshot(this.snapshot));
     }
 
     public toJSON(): StageSnapshot {

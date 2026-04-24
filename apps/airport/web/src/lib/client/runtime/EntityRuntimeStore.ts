@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/client/runtime/EntityRuntimeStore.ts: Generic runtime store for loading, caching, and refreshing entity models by identity.
-import type { EntityModel } from '$lib/client/entities/EntityModel';
+import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
 
 export class EntityRuntimeStore<
     TId extends string,

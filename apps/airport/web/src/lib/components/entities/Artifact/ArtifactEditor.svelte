@@ -2,6 +2,7 @@
     import { browser } from "$app/environment";
     import DeviceFloppyIcon from "@tabler/icons-svelte/icons/device-floppy";
     import XIcon from "@tabler/icons-svelte/icons/x";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
 
     const MONACO_VERSION = "0.52.2";
@@ -50,18 +51,16 @@
     let monacoLoaderPromise: Promise<MonacoNamespace> | null = null;
 
     let {
-        missionId,
-        repositoryRootPath,
         artifactPath,
         artifactLabel,
         onCloseRequested,
     }: {
-        missionId: string;
-        repositoryRootPath: string;
         artifactPath?: string;
         artifactLabel?: string;
         onCloseRequested: () => void;
     } = $props();
+    const appContext = getAppContext();
+    const mission = $derived(appContext.airport.activeMission);
 
     let content = $state("");
     let originalContent = $state("");
@@ -223,21 +222,11 @@
         error = null;
 
         try {
-            const searchParams = new URLSearchParams({
-                path,
-                repositoryRootPath,
-            });
-            const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/documents?${searchParams.toString()}`,
-            );
-            if (!response.ok) {
-                throw new Error(`Artifact load failed (${response.status}).`);
+            if (!mission) {
+                throw new Error("Artifact loading is unavailable until the app context is synchronized.");
             }
 
-            const payload = (await response.json()) as {
-                content: string;
-                updatedAt?: string;
-            };
+            const payload = await mission.readDocument(path);
             content = payload.content;
             originalContent = payload.content;
             saveStatus = "idle";
@@ -263,28 +252,11 @@
         saveError = null;
 
         try {
-            const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/documents`,
-                {
-                    method: "POST",
-                    headers: {
-                        "content-type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        path,
-                        repositoryRootPath,
-                        content: nextContent,
-                    }),
-                },
-            );
-            if (!response.ok) {
-                throw new Error(`Artifact save failed (${response.status}).`);
+            if (!mission) {
+                throw new Error("Artifact saving is unavailable until the app context is synchronized.");
             }
 
-            const payload = (await response.json()) as {
-                content: string;
-                updatedAt?: string;
-            };
+            const payload = await mission.writeDocument(path, nextContent);
 
             originalContent = payload.content;
             loadedPath = path;

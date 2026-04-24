@@ -1,10 +1,10 @@
-// /apps/airport/web/src/lib/client/entities/AgentSession.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
+// /apps/airport/web/src/lib/client/entities/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type {
     AgentCommand as AgentCommand,
     AgentPrompt as AgentPrompt,
     AgentSession as AgentSessionSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
-import type { EntityModel } from '$lib/client/entities/EntityModel';
+import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
 
 export type AgentSessionCommandOwner = {
     completeSession(sessionId: string): Promise<void>;
@@ -15,12 +15,25 @@ export type AgentSessionCommandOwner = {
 };
 
 export class AgentSession implements EntityModel<AgentSessionSnapshot> {
-    private data: AgentSessionSnapshot;
+    private dataState = $state<AgentSessionSnapshot | undefined>();
     private readonly owner: AgentSessionCommandOwner;
 
     public constructor(data: AgentSessionSnapshot, owner: AgentSessionCommandOwner) {
-        this.data = structuredClone(data);
+        this.data = data;
         this.owner = owner;
+    }
+
+    private get data(): AgentSessionSnapshot {
+        const data = this.dataState;
+        if (!data) {
+            throw new Error('Agent session snapshot is not initialized.');
+        }
+
+        return data;
+    }
+
+    private set data(data: AgentSessionSnapshot) {
+        this.dataState = structuredClone(data);
     }
 
     public get sessionId(): string {
@@ -108,7 +121,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
     }
 
     public updateFromSnapshot(data: AgentSessionSnapshot): this {
-        this.data = structuredClone(data);
+        this.data = data;
         return this;
     }
 
@@ -116,11 +129,11 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this.updateFromSnapshot(data);
     }
 
-    public toSnapshot(): AgentSessionSnapshotSnapshot {
-        return structuredClone(this.data);
+    public toSnapshot(): AgentSessionSnapshot {
+        return structuredClone($state.snapshot(this.data));
     }
 
-    public toJSON(): AgentSessionSnapshotSnapshot {
+    public toJSON(): AgentSessionSnapshot {
         return this.toSnapshot();
     }
 }

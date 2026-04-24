@@ -1,26 +1,33 @@
 <script lang="ts">
     import { Badge } from "$lib/components/ui/badge/index.js";
-    import type { Repository } from "$lib/client/entities/Repository";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
     import Issue from "$lib/components/entities/Issue/Issue.svelte";
     import type { SelectedIssueSummary } from "$lib/components/entities/types";
 
     let {
-        repository,
         selectedIssue = $bindable<SelectedIssueSummary | null>(null),
         issueError = $bindable<string | null>(null),
         issueLoadingNumber = $bindable<number | null>(null),
     }: {
-        repository: Repository;
         selectedIssue?: SelectedIssueSummary | null;
         issueError?: string | null;
         issueLoadingNumber?: number | null;
     } = $props();
+    const appContext = getAppContext();
+    const activeRepository = $derived.by(() => {
+        const resolvedRepository = appContext.airport.activeRepository;
+        if (!resolvedRepository) {
+            throw new Error("Issue list requires an active repository in the app context.");
+        }
+
+        return resolvedRepository;
+    });
 
     let remoteStartFromIssueError = $state<string | null>(null);
 
     const repositoryIssueState = $derived(
-        await repository
+        await activeRepository
             .listIssues()
             .then((issues) => ({
                 issues,
@@ -40,7 +47,7 @@
         issueError = null;
 
         try {
-            selectedIssue = await repository.getIssue(issueNumber);
+            selectedIssue = await activeRepository.getIssue(issueNumber);
         } catch (error) {
             issueError = error instanceof Error ? error.message : String(error);
         } finally {
@@ -95,7 +102,6 @@
                 {:else}
                     {#each repositoryIssues as issue (issue.number)}
                         <Issue
-                            {repository}
                             {issue}
                             {issueLoadingNumber}
                             onViewIssue={(issueNumber) =>

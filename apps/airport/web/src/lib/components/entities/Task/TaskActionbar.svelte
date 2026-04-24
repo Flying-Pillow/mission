@@ -3,17 +3,11 @@
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
 
     let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
         refreshNonce,
         stageId,
         taskId,
         onActionExecuted,
     }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
         refreshNonce: number;
         stageId?: MissionStageId;
         taskId?: string;
@@ -22,9 +16,6 @@
 </script>
 
 <ScopedActionbar
-    {missionId}
-    {repositoryId}
-    {repositoryRootPath}
     {refreshNonce}
     {stageId}
     {taskId}

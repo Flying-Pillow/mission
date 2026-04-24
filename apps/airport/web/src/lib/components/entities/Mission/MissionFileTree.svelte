@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import MissionFileTreeNodes from "$lib/components/entities/Mission/MissionFileTreeNodes.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -8,22 +9,19 @@
     } from "$lib/types/mission-file-tree";
 
     let {
-        missionId,
-        repositoryRootPath,
         activePath,
         refreshNonce = 0,
         title = "Worktree files",
         class: className,
         onSelectPath,
     }: {
-        missionId: string;
-        repositoryRootPath: string;
         activePath?: string;
         refreshNonce?: number;
         title?: string;
         class?: string;
         onSelectPath?: (node: MissionFileTreeNode) => void;
     } = $props();
+    const appContext = getAppContext();
 
     let branchOverrides = $state<Record<string, boolean>>({});
     let tree = $state<MissionFileTreeNode[]>([]);
@@ -31,6 +29,9 @@
     let error = $state<string | null>(null);
     let loading = $state(true);
     let requestVersion = 0;
+    const mission = $derived(appContext.airport.activeMission);
+    const missionId = $derived(mission?.missionId ?? "");
+    const repositoryRootPath = $derived(mission?.missionWorktreePath ?? "");
 
     $effect(() => {
         const normalizedMissionId = missionId?.trim();
@@ -49,23 +50,16 @@
         loading = true;
         error = null;
 
-        const query = new URLSearchParams({
-            repositoryRootPath: normalizedRepositoryRootPath,
-        });
-
         void (async () => {
             try {
-                const response = await fetch(
-                    `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/worktree?${query.toString()}`,
-                );
-                if (!response.ok) {
+                if (!mission) {
                     throw new Error(
-                        `Worktree file tree load failed (${response.status}).`,
+                        "Mission worktree is unavailable until the app context is synchronized.",
                     );
                 }
 
-                const payload =
-                    (await response.json()) as MissionFileTreeResponse;
+                const payload: MissionFileTreeResponse =
+                    await mission.getWorktree();
                 if (currentVersion !== requestVersion) {
                     return;
                 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
     AirportHomeSnapshot,
     GitHubIssueDetail,
+    RepositorySurfaceSnapshot,
     TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
@@ -11,6 +12,7 @@ import {
     executeEntityCommand,
     executeEntityForm,
     executeEntityQuery,
+    getRepositoryThroughEntityBoundary,
     getRepositoryIssueThroughEntityBoundary,
     listAirportRepositoriesThroughEntityBoundary,
     listRepositoryIssuesThroughEntityBoundary,
@@ -21,6 +23,7 @@ import {
 
 function createGateway(): EntityRemoteGateway & {
     getAirportHomeSnapshot: ReturnType<typeof vi.fn>;
+    getRepositorySurfaceSnapshot: ReturnType<typeof vi.fn>;
     getRepositoryIssues: ReturnType<typeof vi.fn>;
     getRepositoryIssueDetail: ReturnType<typeof vi.fn>;
     createMissionFromIssue: ReturnType<typeof vi.fn>;
@@ -53,9 +56,15 @@ function createGateway(): EntityRemoteGateway & {
         labels: ['bug'],
         assignees: ['octocat']
     };
+    const repositorySurface: RepositorySurfaceSnapshot = {
+        repository: airportHome.repositories[0],
+        operationalMode: 'repository',
+        missions: []
+    } as RepositorySurfaceSnapshot;
 
     return {
         getAirportHomeSnapshot: vi.fn(async () => airportHome),
+        getRepositorySurfaceSnapshot: vi.fn(async () => repositorySurface),
         getRepositoryIssues: vi.fn(async () => issueList),
         getRepositoryIssueDetail: vi.fn(async () => issueDetail),
         createMissionFromIssue: vi.fn(async () => ({ missionId: 'mission-42' })),
@@ -119,6 +128,21 @@ describe('entity remote dispatch', () => {
                     repositoryId: 'repo-1',
                     repositoryRootPath: '/workspace/repo-1'
                 },
+                method: 'read',
+                args: {}
+            })
+        ).resolves.toEqual(
+            expect.objectContaining({
+                repository: expect.objectContaining({ repositoryId: 'repo-1' })
+            })
+        );
+        await expect(
+            executeEntityQuery(gateway, {
+                reference: {
+                    entity: 'Repository',
+                    repositoryId: 'repo-1',
+                    repositoryRootPath: '/workspace/repo-1'
+                },
                 method: 'listIssues',
                 args: {}
             })
@@ -138,6 +162,10 @@ describe('entity remote dispatch', () => {
         ).resolves.toEqual(expect.objectContaining({ number: 42 }));
 
         expect(gateway.getAirportHomeSnapshot).toHaveBeenCalledTimes(1);
+        expect(gateway.getRepositorySurfaceSnapshot).toHaveBeenCalledWith({
+            repositoryId: 'repo-1',
+            repositoryRootPath: '/workspace/repo-1'
+        });
         expect(gateway.getRepositoryIssues).toHaveBeenCalledWith({
             repositoryId: 'repo-1',
             repositoryRootPath: '/workspace/repo-1'
@@ -152,6 +180,16 @@ describe('entity remote dispatch', () => {
     it('routes repository commands and forms through the generic dispatcher', async () => {
         const gateway = createGateway();
 
+        await expect(
+            executeEntityCommand(gateway, {
+                reference: { entity: 'Repository', repositoryId: 'repo-1' },
+                method: 'startMissionFromBrief',
+                args: { title: 'Title', body: 'Body', type: 'feature' }
+            })
+        ).resolves.toEqual({
+            missionId: 'mission-brief',
+            redirectTo: '/repository/repo-1/missions/mission-brief'
+        });
         await expect(
             executeEntityCommand(gateway, {
                 reference: { entity: 'Repository', repositoryId: 'repo-1' },
@@ -195,6 +233,16 @@ describe('transitional remote glue', () => {
         await expect(listAirportRepositoriesThroughEntityBoundary(gateway)).resolves.toEqual([
             expect.objectContaining({ repositoryId: 'repo-1' })
         ]);
+        await expect(
+            getRepositoryThroughEntityBoundary(gateway, {
+                repositoryId: 'repo-1',
+                repositoryRootPath: '/workspace/repo-1'
+            })
+        ).resolves.toEqual(
+            expect.objectContaining({
+                repository: expect.objectContaining({ repositoryId: 'repo-1' })
+            })
+        );
         await expect(
             listRepositoryIssuesThroughEntityBoundary(gateway, {
                 repositoryId: 'repo-1',

@@ -1,20 +1,34 @@
-// /apps/airport/web/src/lib/client/entities/Mission.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
+// /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
 import type {
     AgentCommand as AgentCommand,
     AgentPrompt as AgentPrompt,
     AgentSession as AgentSessionSnapshot,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
-import { AgentSession } from '$lib/client/entities/AgentSession';
-import { EntityRegistry, type EntityModel } from '$lib/client/entities/EntityModel';
-import { Stage, type StageSnapshot } from '$lib/client/entities/Stage';
+import type {
+    OperatorActionExecutionStep,
+    OperatorActionListSnapshot,
+    OperatorActionQueryContext,
+    OperatorStatus
+} from '@flying-pillow/mission-core/types.js';
+import { AgentSession } from '$lib/client/entities/AgentSession.svelte.js';
+import { EntityRegistry, type EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
+import { Stage, type StageSnapshot } from '$lib/client/entities/Stage.svelte.js';
+import type { MissionControlSnapshot } from '$lib/types/mission-control';
+import type { MissionFileTreeResponse } from '$lib/types/mission-file-tree';
 import {
     Task,
     type TaskSnapshot,
     type TaskStartOptions
-} from '$lib/client/entities/Task';
+} from '$lib/client/entities/Task.svelte.js';
 
 export type MissionSnapshotLoader = (missionId: string) => Promise<MissionRuntimeSnapshot>;
+
+export type MissionDocumentPayload = {
+    filePath: string;
+    content: string;
+    updatedAt?: string;
+};
 
 export type MissionCommandGateway = {
     pauseMission(input: {
@@ -72,6 +86,31 @@ export type MissionCommandGateway = {
         sessionId: string;
         command: AgentCommand;
     }): Promise<MissionRuntimeSnapshot>;
+    getMissionControl(input: {
+        missionId: string;
+    }): Promise<MissionControlSnapshot>;
+    getMissionActions(input: {
+        missionId: string;
+        context?: OperatorActionQueryContext;
+    }): Promise<OperatorActionListSnapshot>;
+    executeMissionAction(input: {
+        missionId: string;
+        actionId: string;
+        steps?: OperatorActionExecutionStep[];
+        terminalSessionName?: string;
+    }): Promise<OperatorStatus>;
+    readMissionDocument(input: {
+        missionId: string;
+        path: string;
+    }): Promise<MissionDocumentPayload>;
+    writeMissionDocument(input: {
+        missionId: string;
+        path: string;
+        content: string;
+    }): Promise<MissionDocumentPayload>;
+    getMissionWorktree(input: {
+        missionId: string;
+    }): Promise<MissionFileTreeResponse>;
 };
 
 const unavailableMissionCommands: MissionCommandGateway = {
@@ -116,13 +155,33 @@ const unavailableMissionCommands: MissionCommandGateway = {
     },
     sendSessionCommand: async () => {
         throw new Error('Mission session commands are unavailable in this client context.');
+    },
+    getMissionControl: async () => {
+        throw new Error('Mission control queries are unavailable in this client context.');
+    },
+    getMissionActions: async () => {
+        throw new Error('Mission action queries are unavailable in this client context.');
+    },
+    executeMissionAction: async () => {
+        throw new Error('Mission action commands are unavailable in this client context.');
+    },
+    readMissionDocument: async () => {
+        throw new Error('Mission document queries are unavailable in this client context.');
+    },
+    writeMissionDocument: async () => {
+        throw new Error('Mission document commands are unavailable in this client context.');
+    },
+    getMissionWorktree: async () => {
+        throw new Error('Mission worktree queries are unavailable in this client context.');
     }
 };
 
 export class Mission implements EntityModel<MissionRuntimeSnapshot> {
     private readonly loadSnapshot: MissionSnapshotLoader;
     private readonly commands: MissionCommandGateway;
-    private snapshot: MissionRuntimeSnapshot;
+    private snapshotState = $state<MissionRuntimeSnapshot | undefined>();
+    private controlSnapshotState = $state<MissionControlSnapshot | undefined>();
+    private worktreePathState = $state<string | undefined>();
     private readonly sessions = new EntityRegistry<string, AgentSessionSnapshot, AgentSession>();
     private readonly stages = new EntityRegistry<string, StageSnapshot, Stage>();
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
@@ -132,12 +191,25 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
         loadSnapshot: MissionSnapshotLoader,
         commands: MissionCommandGateway = unavailableMissionCommands
     ) {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
         this.loadSnapshot = loadSnapshot;
         this.commands = commands;
         this.applySessionSnapshots(snapshot.sessions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
+    }
+
+    private get snapshot(): MissionRuntimeSnapshot {
+        const snapshot = this.snapshotState;
+        if (!snapshot) {
+            throw new Error('Mission snapshot is not initialized.');
+        }
+
+        return snapshot;
+    }
+
+    private set snapshot(snapshot: MissionRuntimeSnapshot) {
+        this.snapshotState = structuredClone(snapshot);
     }
 
     public get missionId(): string {
@@ -158,6 +230,31 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
 
     public get workflowUpdatedAt(): string | undefined {
         return this.snapshot.status.workflow?.updatedAt;
+    }
+
+    public get controlSnapshot(): MissionControlSnapshot | undefined {
+        const snapshot = $state.snapshot(this.controlSnapshotState);
+        return snapshot ? structuredClone(snapshot) : undefined;
+    }
+
+    public get missionWorktreePath(): string | undefined {
+        return this.worktreePathState;
+    }
+
+    public setRouteState(input: {
+        controlSnapshot?: MissionControlSnapshot;
+        worktreePath?: string;
+    }): this {
+        this.worktreePathState = input.worktreePath?.trim() || undefined;
+
+        if (!input.controlSnapshot) {
+            this.controlSnapshotState = undefined;
+            return this;
+        }
+
+        this.controlSnapshotState = structuredClone(input.controlSnapshot);
+        this.applySnapshot(input.controlSnapshot.missionRuntime);
+        return this;
     }
 
     public async pause(): Promise<this> {
@@ -188,6 +285,65 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
     public async deliver(): Promise<this> {
         this.applySnapshot(await this.commands.deliverMission({ missionId: this.missionId }));
         return this;
+    }
+
+    public async getControlSnapshot(): Promise<MissionControlSnapshot> {
+        const snapshot = await this.commands.getMissionControl({
+            missionId: this.missionId
+        });
+        this.setRouteState({
+            controlSnapshot: snapshot,
+            worktreePath: this.worktreePathState
+        });
+        return snapshot;
+    }
+
+    public async listAvailableActions(
+        context?: OperatorActionQueryContext
+    ): Promise<OperatorActionListSnapshot> {
+        return this.commands.getMissionActions({
+            missionId: this.missionId,
+            ...(context ? { context } : {})
+        });
+    }
+
+    public async executeAction(input: {
+        actionId: string;
+        steps?: OperatorActionExecutionStep[];
+        terminalSessionName?: string;
+    }): Promise<OperatorStatus> {
+        return this.commands.executeMissionAction({
+            missionId: this.missionId,
+            actionId: input.actionId,
+            ...(input.steps ? { steps: input.steps } : {}),
+            ...(input.terminalSessionName?.trim()
+                ? { terminalSessionName: input.terminalSessionName.trim() }
+                : {})
+        });
+    }
+
+    public async readDocument(path: string): Promise<MissionDocumentPayload> {
+        return this.commands.readMissionDocument({
+            missionId: this.missionId,
+            path
+        });
+    }
+
+    public async writeDocument(
+        path: string,
+        content: string
+    ): Promise<MissionDocumentPayload> {
+        return this.commands.writeMissionDocument({
+            missionId: this.missionId,
+            path,
+            content
+        });
+    }
+
+    public async getWorktree(): Promise<MissionFileTreeResponse> {
+        return this.commands.getMissionWorktree({
+            missionId: this.missionId
+        });
     }
 
     public listStages(): Stage[] {
@@ -224,10 +380,30 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
     }
 
     public updateFromSnapshot(snapshot: MissionRuntimeSnapshot): this {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
+        const controlSnapshot = this.controlSnapshot;
+        if (controlSnapshot) {
+            this.controlSnapshotState = {
+                ...controlSnapshot,
+                missionRuntime: structuredClone(snapshot)
+            };
+        }
         this.applySessionSnapshots(snapshot.sessions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
+        return this;
+    }
+
+    public applyOperatorStatus(status: OperatorStatus): this {
+        const controlSnapshot = this.controlSnapshot;
+        if (!controlSnapshot) {
+            return this;
+        }
+
+        this.controlSnapshotState = {
+            ...controlSnapshot,
+            operatorStatus: structuredClone(status)
+        };
         return this;
     }
 
@@ -237,7 +413,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
 
     public toSnapshot(): MissionRuntimeSnapshot {
         return {
-            ...structuredClone(this.snapshot),
+            ...structuredClone($state.snapshot(this.snapshot)),
             sessions: this.listSessions().map((session) => session.toSnapshot())
         };
     }

@@ -1,4 +1,4 @@
-import { isMissionStageId } from "@flying-pillow/mission-core";
+import { isMissionStageId } from "@flying-pillow/mission-core/types.js";
 import { z } from "zod";
 
 export const missionActionQuerySchema = z.object({
@@ -8,7 +8,7 @@ export const missionActionQuerySchema = z.object({
         .string()
         .trim()
         .min(1)
-        .refine(isMissionStageId, "Invalid mission stage id.")
+        .refine(isMissionStageId, { error: "Invalid mission stage id." })
         .optional(),
     taskId: z.string().trim().min(1).optional(),
     sessionId: z.string().trim().min(1).optional(),

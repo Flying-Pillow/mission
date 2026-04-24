@@ -413,7 +413,7 @@
         "agentRunner": "copilot-cli",
         "retries": 0,
         "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       },
       {
         "taskId": "implementation/03-promote-app-context-to-singleton-entity-container-verify",
@@ -724,9 +724,39 @@
         "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
         "runnerId": "copilot-cli",
         "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c.ansi",
-        "lifecycle": "running",
+        "lifecycle": "terminated",
         "launchedAt": "2026-04-23T18:47:12.031Z",
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T19:30:37.669Z",
+        "terminatedAt": "2026-04-23T19:30:37.669Z"
+      },
+      {
+        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-eb940ab5",
+        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+        "runnerId": "copilot-cli",
+        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-eb940ab5.ansi",
+        "lifecycle": "terminated",
+        "launchedAt": "2026-04-23T19:30:38.020Z",
+        "updatedAt": "2026-04-23T19:51:41.368Z",
+        "terminatedAt": "2026-04-23T19:51:41.368Z"
+      },
+      {
+        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-43bea68e",
+        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+        "runnerId": "copilot-cli",
+        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-43bea68e.ansi",
+        "lifecycle": "terminated",
+        "launchedAt": "2026-04-23T19:51:41.900Z",
+        "updatedAt": "2026-04-23T21:15:04.208Z",
+        "terminatedAt": "2026-04-23T21:15:04.208Z"
+      },
+      {
+        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-97048d76",
+        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+        "runnerId": "copilot-cli",
+        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-97048d76.ansi",
+        "lifecycle": "running",
+        "launchedAt": "2026-04-23T21:15:04.760Z",
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       }
     ],
     "gates": [
@@ -738,7 +768,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       },
       {
         "gateId": "verify",
@@ -748,7 +778,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       },
       {
         "gateId": "audit",
@@ -758,7 +788,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       },
       {
         "gateId": "deliver",
@@ -768,10 +798,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-23T18:47:12.031Z"
+        "updatedAt": "2026-04-23T21:15:04.760Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-23T18:47:12.031Z"
+    "updatedAt": "2026-04-23T21:15:04.760Z"
   }
 }

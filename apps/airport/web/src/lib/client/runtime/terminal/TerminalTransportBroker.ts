@@ -6,6 +6,14 @@ import type {
     MissionTerminalSocketServerMessageDto,
     MissionTerminalSnapshotDto,
 } from '@flying-pillow/mission-core/airport/runtime';
+import {
+    missionSessionTerminalSnapshotSchema,
+    missionSessionTerminalSocketServerMessageSchema,
+    missionTerminalSnapshotSchema,
+    missionTerminalSocketServerMessageSchema,
+    type MissionSessionTerminalSnapshot,
+    type MissionTerminalSnapshot,
+} from '@flying-pillow/mission-core/airport/runtime';
 
 type TerminalSnapshotBase = {
     connected: boolean;
@@ -98,6 +106,88 @@ export function subscribeSharedTerminalTransport<
 ): SharedTerminalTransportSubscription<TSnapshot> {
     const channel = getOrCreateTerminalChannel(config);
     return channel.subscribe(listener);
+}
+
+export function subscribeMissionTerminalTransport(
+    input: {
+        missionId: string;
+        repositoryId: string;
+        repositoryRootPath: string;
+    },
+    listener: TerminalBrokerListener<MissionTerminalSnapshot>,
+): SharedTerminalTransportSubscription<MissionTerminalSnapshot> {
+    const missionId = input.missionId.trim();
+    const repositoryId = input.repositoryId.trim();
+    const repositoryRootPath = input.repositoryRootPath.trim();
+    const transportKey = [missionId, repositoryId, repositoryRootPath].join(':');
+
+    return subscribeSharedTerminalTransport({
+        key: `mission-terminal:${transportKey}`,
+        loadSnapshot: async () => {
+            const response = await fetch(
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+            );
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => null) as {
+                    message?: string;
+                } | null;
+                throw new Error(
+                    errorBody?.message?.trim()
+                    || `Terminal snapshot request failed (${response.status}).`,
+                );
+            }
+
+            return missionTerminalSnapshotSchema.parse(await response.json());
+        },
+        createSocket: () => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = new URL(
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal/ws?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+                `${wsProtocol}//${window.location.host}`,
+            );
+            return new WebSocket(wsUrl);
+        },
+        parseMessage: (value) => missionTerminalSocketServerMessageSchema.parse(value),
+    }, listener);
+}
+
+export function subscribeMissionSessionTerminalTransport(
+    input: {
+        missionId: string;
+        repositoryId: string;
+        repositoryRootPath: string;
+        sessionId: string;
+    },
+    listener: TerminalBrokerListener<MissionSessionTerminalSnapshot>,
+): SharedTerminalTransportSubscription<MissionSessionTerminalSnapshot> {
+    const missionId = input.missionId.trim();
+    const repositoryId = input.repositoryId.trim();
+    const repositoryRootPath = input.repositoryRootPath.trim();
+    const sessionId = input.sessionId.trim();
+    const transportKey = [missionId, repositoryId, repositoryRootPath, sessionId].join(':');
+
+    return subscribeSharedTerminalTransport({
+        key: `mission-session-terminal:${transportKey}`,
+        loadSnapshot: async () => {
+            const response = await fetch(
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+            );
+            if (!response.ok) {
+                throw new Error(`Terminal snapshot request failed (${response.status}).`);
+            }
+
+            return missionSessionTerminalSnapshotSchema.parse(await response.json());
+        },
+        createSocket: () => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = new URL(
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+                `${wsProtocol}//${window.location.host}`,
+            );
+            return new WebSocket(wsUrl);
+        },
+        parseMessage: (value) => missionSessionTerminalSocketServerMessageSchema.parse(value),
+    }, listener);
 }
 
 class TerminalTransportChannel<

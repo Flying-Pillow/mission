@@ -1,9 +1,9 @@
-// /apps/airport/web/src/lib/client/entities/Task.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
+// /apps/airport/web/src/lib/client/entities/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type {
     MissionRuntimeSnapshot,
     Task as TaskRecord
 } from '@flying-pillow/mission-core/airport/runtime';
-import type { EntityModel } from '$lib/client/entities/EntityModel';
+import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
 
 export type TaskData = NonNullable<
     NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
@@ -25,12 +25,25 @@ export type TaskCommandOwner = {
 };
 
 export class Task implements EntityModel<TaskSnapshot> {
-    private snapshot: TaskSnapshot;
+    private snapshotState = $state<TaskSnapshot | undefined>();
     private readonly owner: TaskCommandOwner;
 
     public constructor(snapshot: TaskSnapshot, owner: TaskCommandOwner) {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
         this.owner = owner;
+    }
+
+    private get snapshot(): TaskSnapshot {
+        const snapshot = this.snapshotState;
+        if (!snapshot) {
+            throw new Error('Task snapshot is not initialized.');
+        }
+
+        return snapshot;
+    }
+
+    private set snapshot(snapshot: TaskSnapshot) {
+        this.snapshotState = structuredClone(snapshot);
     }
 
     public get taskId(): string {
@@ -77,7 +90,7 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public updateFromSnapshot(snapshot: TaskSnapshot): this {
-        this.snapshot = structuredClone(snapshot);
+        this.snapshot = snapshot;
         return this;
     }
 
@@ -89,11 +102,11 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public toSnapshot(): TaskSnapshot {
-        return structuredClone(this.snapshot);
+        return structuredClone($state.snapshot(this.snapshot));
     }
 
     public toJSON(): TaskData {
-        return structuredClone(this.snapshot.task);
+        return structuredClone($state.snapshot(this.snapshot.task));
     }
 
     public toStageSnapshot(): TaskSnapshot {
@@ -101,8 +114,9 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public withStage(stageId: string): this {
+        const snapshot = $state.snapshot(this.snapshot);
         this.snapshot = {
-            ...this.snapshot,
+            ...snapshot,
             stageId
         };
         return this;

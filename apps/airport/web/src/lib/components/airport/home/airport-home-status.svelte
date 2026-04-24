@@ -1,30 +1,58 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import type { RepositorySummary } from "$lib/components/entities/types";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    let {
-        daemonStatusTone,
-        githubStatusTone,
-        githubAccountLabel,
-        daemonMessage,
-        loginHref,
-        repositoryCountLabel,
-        githubRepositoryCountLabel,
-        selectedRepository,
-    }: {
-        daemonStatusTone: "connected" | "disconnected";
-        githubStatusTone: "connected" | "disconnected" | "unknown";
-        githubAccountLabel: string;
-        daemonMessage: string;
-        loginHref: string;
-        repositoryCountLabel: string;
-        githubRepositoryCountLabel: string;
-        selectedRepository?: RepositorySummary;
-    } = $props();
-
+    const appContext = getAppContext();
+    const airportHomeState = $derived(appContext.application.airportHomeState);
+    const daemonStatusTone = $derived(
+        appContext.daemon.running ? "connected" : "disconnected",
+    );
+    const githubStatusTone = $derived(appContext.githubStatus);
+    const githubAccountLabel = $derived(
+        appContext.user?.name ??
+            (githubStatusTone === "connected"
+                ? "Authenticated GitHub account"
+                : "No authenticated GitHub account"),
+    );
+    const daemonMessage = $derived(appContext.daemon.message);
+    const loginHref = $derived(
+        airportHomeState?.loginHref ?? "/login?redirectTo=/airport",
+    );
+    const repositories = $derived(
+        airportHomeState?.airportHome.repositories ?? [],
+    );
+    const repositoryCountLabel = $derived(
+        repositories.length === 1
+            ? "1 repository registered"
+            : `${repositories.length} repositories registered`,
+    );
+    const githubRepositoryCountLabel = $derived(
+        airportHomeState?.githubRepositories.length === 1
+            ? "1 visible GitHub repository"
+            : `${airportHomeState?.githubRepositories.length ?? 0} visible GitHub repositories`,
+    );
+    const selectedRepository = $derived.by(() =>
+        repositories.find(
+            (repository) =>
+                repository.repositoryRootPath ===
+                airportHomeState?.airportHome.selectedRepositoryRoot,
+        ),
+    );
     const isGitHubConnected = $derived(githubStatusTone === "connected");
+    let logoutPending = $state(false);
+
+    async function handleLogout(): Promise<void> {
+        logoutPending = true;
+
+        try {
+            await goto(await appContext.application.logout());
+        } finally {
+            logoutPending = false;
+        }
+    }
 </script>
 
 <section
@@ -121,16 +149,18 @@
 
                 <div class="mt-4">
                     {#if isGitHubConnected}
-                        <form method="POST" action="?/logout" class="w-full">
-                            <Button
-                                type="submit"
-                                variant="outline"
-                                size="lg"
-                                class="w-full justify-center"
-                            >
-                                Log out
-                            </Button>
-                        </form>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="lg"
+                            class="w-full justify-center"
+                            disabled={logoutPending}
+                            onclick={() => {
+                                void handleLogout();
+                            }}
+                        >
+                            {logoutPending ? "Logging out..." : "Log out"}
+                        </Button>
                     {:else}
                         <Button
                             href={loginHref}

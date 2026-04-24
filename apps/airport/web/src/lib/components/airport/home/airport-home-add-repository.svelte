@@ -1,25 +1,11 @@
 <script lang="ts">
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepositoryList from "$lib/components/entities/Repository/GithubRepositoryList.svelte";
-    import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
 
-    let {
-        githubRepositories,
-        githubStatusTone,
-        githubRepositoriesError,
-        formState,
-    }: {
-        githubRepositories: GitHubVisibleRepositorySummary[];
-        githubStatusTone: "connected" | "disconnected" | "unknown";
-        githubRepositoriesError?: string;
-        formState?: {
-            addRepository?: {
-                error?: string;
-                success?: boolean;
-                repositoryPath?: string;
-                githubRepository?: string;
-            };
-        };
-    } = $props();
+    const appContext = getAppContext();
+    const githubRepositories = $derived(
+        appContext.application.airportHomeState?.githubRepositories ?? [],
+    );
 </script>
 
 <section
@@ -36,11 +22,6 @@
     </div>
 
     <div class="mt-5 flex min-h-0 flex-1">
-        <GithubRepositoryList
-            repositories={githubRepositories}
-            {githubStatusTone}
-            {githubRepositoriesError}
-            {formState}
-        />
+        <GithubRepositoryList />
     </div>
 </section>

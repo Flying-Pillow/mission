@@ -1,27 +1,17 @@
 <script lang="ts">
-    import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepository from "$lib/components/entities/Repository/GithubRepository.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
-    let {
-        repositories,
-        githubStatusTone,
-        githubRepositoriesError,
-        formState,
-    }: {
-        repositories: GitHubVisibleRepositorySummary[];
-        githubStatusTone: "connected" | "disconnected" | "unknown";
-        githubRepositoriesError?: string;
-        formState?: {
-            addRepository?: {
-                error?: string;
-                success?: boolean;
-                repositoryPath?: string;
-                githubRepository?: string;
-            };
-        };
-    } = $props();
+    const appContext = getAppContext();
+    const repositories = $derived(
+        appContext.application.airportHomeState?.githubRepositories ?? [],
+    );
+    const githubStatusTone = $derived(appContext.githubStatus);
+    const githubRepositoriesError = $derived(
+        appContext.application.airportHomeState?.githubRepositoriesError,
+    );
 
     const repositoryCountLabel = $derived(
         repositories.length === 1
@@ -66,10 +56,7 @@
                 </div>
             {:else}
                 {#each repositories as repository (repository.fullName)}
-                    <GithubRepository
-                        {repository}
-                        addRepositoryState={formState?.addRepository}
-                    />
+                    <GithubRepository {repository} />
                 {/each}
             {/if}
         </div>

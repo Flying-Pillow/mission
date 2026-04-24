@@ -1,16 +1,67 @@
 <!-- /apps/airport/web/src/lib/components/entities/Brief/BriefForm.svelte: Brief creation form with mission type selector and body input. -->
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
     import DatabaseIcon from "@tabler/icons-svelte/icons/database";
     import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
     import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
+    import { missionFromBriefInputSchema } from "@flying-pillow/mission-core/airport/runtime";
+    import type { inferFlattenedErrors } from "zod";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-    import { startMissionFromBrief } from "../../../../routes/repository/[repositoryId]/mission.remote";
 
-    let briefType = $state<string>("feature");
+    type BriefInput = {
+        title: string;
+        body: string;
+        type: "feature" | "fix" | "docs" | "refactor" | "task";
+    };
+
+    type BriefErrors = inferFlattenedErrors<BriefInput>["fieldErrors"];
+
+    const appContext = getAppContext();
+
+    let title = $state("");
+    let briefBody = $state("");
+    let briefType = $state<BriefInput["type"]>("feature");
+    let submitPending = $state(false);
+    let submitError = $state<string | null>(null);
+    let fieldErrors = $state<BriefErrors>({});
+    const repository = $derived(appContext.airport.activeRepository);
+
+    async function handleSubmit(event: SubmitEvent): Promise<void> {
+        event.preventDefault();
+        submitError = null;
+        fieldErrors = {};
+
+        if (!repository) {
+            submitError = "Repository context is unavailable until the app context is synchronized.";
+            return;
+        }
+
+        const parsed = missionFromBriefInputSchema.safeParse({
+            title,
+            body: briefBody,
+            type: briefType,
+        });
+
+        if (!parsed.success) {
+            fieldErrors = parsed.error.flatten().fieldErrors as BriefErrors;
+            return;
+        }
+
+        submitPending = true;
+        try {
+            const result = await repository.startMissionFromBrief(parsed.data);
+            await goto(result.redirectTo);
+        } catch (error) {
+            submitError = error instanceof Error ? error.message : String(error);
+        } finally {
+            submitPending = false;
+        }
+    }
 </script>
 
 <section
@@ -22,21 +73,18 @@
         not tied to a tracked issue.
     </p>
 
-    <form
-        {...startMissionFromBrief}
-        class="mt-4 flex min-h-0 flex-1 flex-col gap-3"
-    >
+    <form class="mt-4 flex min-h-0 flex-1 flex-col gap-3" onsubmit={handleSubmit}>
         <div class="grid gap-2">
             <label class="text-sm font-medium text-foreground" for="brief-title"
                 >Title</label
             >
             <Input
                 id="brief-title"
-                {...startMissionFromBrief.fields.title.as("text")}
+                bind:value={title}
                 placeholder="Improve repository mission selection"
             />
-            {#each startMissionFromBrief.fields.title.issues() as issue (`title:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.title ?? [] as issue (`title:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
@@ -44,10 +92,7 @@
             <label class="text-sm font-medium text-foreground" for="brief-type"
                 >Type</label
             >
-            <input
-                id="brief-type"
-                {...startMissionFromBrief.fields.type.as("hidden", briefType)}
-            />
+            <input id="brief-type" name="brief-type" type="hidden" value={briefType} />
             <ToggleGroup.Root
                 type="single"
                 bind:value={briefType}
@@ -92,8 +137,8 @@
                     Task
                 </ToggleGroup.Item>
             </ToggleGroup.Root>
-            {#each startMissionFromBrief.fields.type.issues() as issue (`type:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.type ?? [] as issue (`type:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
@@ -103,21 +148,21 @@
             >
             <textarea
                 id="brief-body"
-                {...startMissionFromBrief.fields.body.as("text")}
+                bind:value={briefBody}
                 class="min-h-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm resize-none"
                 placeholder="Describe the mission intent, scope, and expected outcome."
             ></textarea>
-            {#each startMissionFromBrief.fields.body.issues() as issue (`body:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.body ?? [] as issue (`body:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
-        {#each startMissionFromBrief.fields.allIssues() as issue (`all:${issue.message}`)}
-            <p class="text-sm text-rose-600">{issue.message}</p>
-        {/each}
+        {#if submitError}
+            <p class="text-sm text-rose-600">{submitError}</p>
+        {/if}
 
-        <Button type="submit" disabled={!!startMissionFromBrief.pending}>
-            {startMissionFromBrief.pending
+        <Button type="submit" disabled={submitPending}>
+            {submitPending
                 ? "Creating mission..."
                 : "Create mission"}
         </Button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
@@ -6,9 +7,6 @@
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
 
     let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
         refreshNonce,
         artifactPath,
         artifactLabel,
@@ -17,9 +15,6 @@
         onEditRequested,
         onActionExecuted,
     }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
         refreshNonce: number;
         artifactPath?: string;
         artifactLabel?: string;
@@ -28,38 +23,17 @@
         onEditRequested: () => void;
         onActionExecuted: () => Promise<void>;
     } = $props();
+    const appContext = getAppContext();
+    const mission = $derived(appContext.airport.activeMission);
 
     const panelLabel = $derived(
         artifactLabel ?? basename(artifactPath) ?? "Resolved artifact",
     );
     const artifactDocumentPromise = $derived(
-        artifactPath
-            ? loadArtifactDocument(missionId, repositoryRootPath, artifactPath)
+        artifactPath && mission
+            ? mission.readDocument(artifactPath)
             : null,
     );
-
-    async function loadArtifactDocument(
-        missionId: string,
-        repositoryRootPath: string,
-        path: string,
-    ): Promise<{ content: string }> {
-        const searchParams = new URLSearchParams({
-            path,
-            repositoryRootPath,
-        });
-        const response = await fetch(
-            `/api/runtime/missions/${encodeURIComponent(missionId)}/documents?${searchParams.toString()}`,
-        );
-        if (!response.ok) {
-            throw new Error(`Artifact load failed (${response.status}).`);
-        }
-
-        const payload = (await response.json()) as {
-            content: string;
-            updatedAt?: string;
-        };
-        return { content: payload.content };
-    }
 
     function basename(filePath: string | undefined): string | undefined {
         if (!filePath) {
@@ -88,9 +62,6 @@
         {/if}
 
         <TaskActionbar
-            {missionId}
-            {repositoryId}
-            {repositoryRootPath}
             {refreshNonce}
             {stageId}
             {taskId}

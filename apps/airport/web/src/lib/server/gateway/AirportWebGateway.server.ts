@@ -153,7 +153,7 @@ export class AirportWebGateway {
         try {
             const api = new DaemonApi(daemon.client);
             const operatorStatus = await withTimeout(
-                api.mission.getStatus({ missionId }),
+                api.mission.getOperatorStatus({ missionId }),
                 MISSION_STATUS_TIMEOUT_MS,
                 'Mission operator status request timed out.'
             );

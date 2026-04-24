@@ -2,24 +2,31 @@
     import { goto } from "$app/navigation";
     import EyeIcon from "@tabler/icons-svelte/icons/eye";
     import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { Repository } from "$lib/client/entities/Repository";
     import type { IssueSummary } from "$lib/components/entities/types";
 
     let {
-        repository,
         issue,
         issueLoadingNumber,
         onViewIssue,
         onStartIssueError,
     }: {
-        repository: Repository;
         issue: IssueSummary;
         issueLoadingNumber: number | null;
         onViewIssue: (issueNumber: number) => void;
         onStartIssueError?: (message: string | null) => void;
     } = $props();
+    const appContext = getAppContext();
+    const activeRepository = $derived.by(() => {
+        const resolvedRepository = appContext.airport.activeRepository;
+        if (!resolvedRepository) {
+            throw new Error("Issue actions require an active repository in the app context.");
+        }
+
+        return resolvedRepository;
+    });
 
     let missionCreationPending = $state(false);
 
@@ -28,7 +35,7 @@
         onStartIssueError?.(null);
 
         try {
-            const result = await repository.startMissionFromIssue(issue.number);
+            const result = await activeRepository.startMissionFromIssue(issue.number);
             await goto(result.redirectTo);
         } catch (error) {
             onStartIssueError?.(

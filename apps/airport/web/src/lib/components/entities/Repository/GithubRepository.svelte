@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { enhance } from "$app/forms";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -9,21 +9,21 @@
 
     let {
         repository,
-        addRepositoryState,
     }: {
         repository: GitHubVisibleRepositorySummary;
-        addRepositoryState?: {
-            error?: string;
-            success?: boolean;
-            repositoryPath?: string;
-            githubRepository?: string;
-        };
     } = $props();
 
+    const appContext = getAppContext();
     const uid = $props.id();
     const defaultRepositoryPath = "/repositories";
     let detailsOpen = $state(false);
     let repositoryPath = $state(defaultRepositoryPath);
+    const addRepositoryState = $derived(
+        appContext.application.addRepositoryState,
+    );
+    const addRepositoryPending = $derived(
+        appContext.application.addRepositoryPending,
+    );
     const cloneTargetPath = $derived(
         `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.fullName}`,
     );
@@ -36,6 +36,19 @@
 
     function handleUseRepository(): void {
         repositoryPath = cloneState?.repositoryPath ?? defaultRepositoryPath;
+    }
+
+    async function handleClone(event: SubmitEvent): Promise<void> {
+        event.preventDefault();
+
+        try {
+            await appContext.application.addRepository({
+                repositoryPath,
+                githubRepository: repository.fullName,
+            });
+        } catch {
+            return;
+        }
     }
 </script>
 
@@ -102,10 +115,8 @@
                     </Dialog.Header>
 
                     <form
-                        method="POST"
-                        action="?/addRepository"
-                        use:enhance
                         class="grid gap-5"
+                        onsubmit={handleClone}
                     >
                         <input
                             type="hidden"
@@ -229,12 +240,15 @@
                                             type="button"
                                             variant="ghost"
                                             {...props}
+                                            disabled={addRepositoryPending}
                                         >
                                             Close
                                         </Button>
                                     {/snippet}
                                 </Dialog.Close>
-                                <Button type="submit">Clone repository</Button>
+                                        <Button type="submit" disabled={addRepositoryPending}>
+                                            {addRepositoryPending ? "Cloning repository..." : "Clone repository"}
+                                        </Button>
                             </div>
                         </Dialog.Footer>
                     </form>

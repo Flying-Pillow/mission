@@ -3,34 +3,30 @@ import type {
     AirportRuntimeEventEnvelope,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
-import { Mission } from '$lib/client/entities/Mission';
-import {
-    createEntityRuntimeClient,
-    type EntityRuntimeClient
-} from '$lib/client/runtime/RuntimeClientFactory';
+import { Mission } from '$lib/client/entities/Mission.svelte.js';
+import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 import { MissionCommandTransport } from '$lib/client/runtime/transport/MissionCommandTransport';
 import { MissionRuntimeTransport } from '$lib/client/runtime/transport/MissionRuntimeTransport';
+import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
 
 type EventSourceFactory = (url: string) => EventSource;
 
 export class AirportClientRuntime {
-    private readonly missions: EntityRuntimeClient<
-        string,
-        MissionRuntimeSnapshot,
-        Mission,
-        AirportRuntimeEventEnvelope
-    >;
+    private readonly missionTransport: MissionRuntimeTransport;
+    private readonly missionCommands: MissionCommandTransport;
+    private readonly missions: EntityRuntimeStore<string, MissionRuntimeSnapshot, Mission>;
 
     public constructor(input: {
         fetch?: typeof fetch;
         createEventSource?: EventSourceFactory;
+        repositoryRootPath?: string;
     } = {}) {
-        const missionTransport = new MissionRuntimeTransport(input);
-        const missionCommands = new MissionCommandTransport(input);
-        this.missions = createEntityRuntimeClient({
-            transport: missionTransport,
-            createEntity: (snapshot, loadSnapshot) => new Mission(snapshot, loadSnapshot, missionCommands),
-            selectEntityId: (snapshot) => snapshot.missionId
+        this.missionTransport = new MissionRuntimeTransport(input);
+        this.missionCommands = new MissionCommandTransport(input);
+        this.missions = new EntityRuntimeStore({
+            loadSnapshot: (missionId) => this.missionTransport.getMissionRuntimeSnapshot(missionId),
+            createEntity: (snapshot, loadSnapshot) => new Mission(snapshot, loadSnapshot, this.missionCommands),
+            selectId: (snapshot) => snapshot.missionId
         });
     }
 
@@ -38,14 +34,26 @@ export class AirportClientRuntime {
         return this.missions.get(missionId);
     }
 
+    public hydrateMissionSnapshot(snapshot: MissionRuntimeSnapshot): Mission {
+        return this.missions.upsertSnapshot(snapshot);
+    }
+
+    public async refreshMission(missionId: string): Promise<Mission> {
+        const snapshot = await this.missionTransport.getMissionRuntimeSnapshot(missionId);
+        return this.hydrateMissionSnapshot(snapshot);
+    }
+
     public observeMission(input: {
         missionId: string;
         onUpdate?: (mission: Mission, event: AirportRuntimeEventEnvelope) => void;
         onError?: (error: Error) => void;
-    }): { dispose(): void } {
-        return this.missions.observe({
-            id: input.missionId,
-            onUpdate: input.onUpdate,
+    }): RuntimeSubscription {
+        return this.missionTransport.observeMissionRuntime({
+            missionId: input.missionId,
+            onEvent: async (event) => {
+                const mission = await this.refreshMission(input.missionId);
+                input.onUpdate?.(mission, event);
+            },
             onError: input.onError
         });
     }

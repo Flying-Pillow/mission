@@ -11,14 +11,6 @@
                 "-y",
                 "@upstash/context7-mcp@latest"
             ]
-        },
-        "stitch": {
-            "type": "http",
-            "url": "https://stitch.googleapis.com/mcp",
-            "headers": {
-                "Accept": "application/json",
-                "X-Goog-Api-Key": "${env:GOOGLE_STITCH_API_KEY}"
-            }
         }
     }
 }

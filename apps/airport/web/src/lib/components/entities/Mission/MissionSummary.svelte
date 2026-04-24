@@ -1,18 +1,22 @@
 <script lang="ts">
-    import type { Mission } from "$lib/client/entities/Mission";
-    import type { Stage } from "$lib/client/entities/Stage";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import type { Mission } from "$lib/client/entities/Mission.svelte.js";
+    import type { Stage } from "$lib/client/entities/Stage.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    let {
-        selectedMissionId,
-        selectedMission,
-    }: {
-        selectedMissionId?: string;
-        selectedMission?: Mission;
-    } = $props();
+    const appContext = getAppContext();
+    const mission = $derived.by(() => {
+        const resolvedMission = appContext.airport.activeMission;
+        if (!resolvedMission) {
+            throw new Error("Mission summary requires an active mission in the app context.");
+        }
 
-    const stages = $derived(selectedMission?.listStages() ?? []);
+        return resolvedMission;
+    });
+    const missionId = $derived(mission.missionId);
+
+    const stages = $derived(mission.listStages());
     const completedStageCount = $derived(
         stages.filter((stage) => stage.lifecycle === "completed").length,
     );
@@ -76,21 +80,21 @@
 >
     <div class="flex items-center justify-between gap-4">
         <h2 class="text-lg font-semibold text-foreground">Selected mission</h2>
-        {#if selectedMissionId}
-            <Badge variant="secondary">{selectedMissionId}</Badge>
+        {#if missionId}
+            <Badge variant="secondary">{missionId}</Badge>
         {/if}
     </div>
 
-    {#if selectedMission}
+    {#if mission}
         <div class="mt-4 space-y-4">
             <header class="rounded-xl border bg-background/70 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <p class="text-sm font-semibold text-foreground">
-                        Lifecycle: {selectedMission.workflowLifecycle ??
+                        Lifecycle: {mission.workflowLifecycle ??
                             "unknown"}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Updated: {selectedMission.workflowUpdatedAt ??
+                        Updated: {mission.workflowUpdatedAt ??
                             "Unknown"}
                     </p>
                 </div>
@@ -115,7 +119,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("pause", () =>
-                                selectedMission.pause(),
+                                mission.pause(),
                             )}
                     >
                         {missionActionPending === "pause"
@@ -128,7 +132,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("resume", () =>
-                                selectedMission.resume(),
+                                mission.resume(),
                             )}
                     >
                         {missionActionPending === "resume"
@@ -141,7 +145,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("panic", () =>
-                                selectedMission.panic(),
+                                mission.panic(),
                             )}
                     >
                         {missionActionPending === "panic"
@@ -154,7 +158,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("clearPanic", () =>
-                                selectedMission.clearPanic(),
+                                mission.clearPanic(),
                             )}
                     >
                         {missionActionPending === "clearPanic"
@@ -167,7 +171,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("restartQueue", () =>
-                                selectedMission.restartQueue(),
+                                mission.restartQueue(),
                             )}
                     >
                         {missionActionPending === "restartQueue"
@@ -179,7 +183,7 @@
                         disabled={missionActionPending !== null}
                         onclick={() =>
                             runMissionAction("deliver", () =>
-                                selectedMission.deliver(),
+                                mission.deliver(),
                             )}
                     >
                         {missionActionPending === "deliver"

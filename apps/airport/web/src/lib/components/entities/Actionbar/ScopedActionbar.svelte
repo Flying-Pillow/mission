@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -29,9 +30,6 @@
     };
 
     let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
         refreshNonce,
         scope,
         stageId,
@@ -44,9 +42,6 @@
         defaultVariant = "default",
         showEmptyState = true,
     }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
         refreshNonce: number;
         scope: "mission" | "task" | "session";
         stageId?: MissionStageId;
@@ -74,6 +69,28 @@
     let loadedContextKey = $state<string | null>(null);
     let lastRefreshNonce = $state<number | null>(null);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
+    const appContext = getAppContext();
+    const mission = $derived.by(() => {
+        const activeMission = appContext.airport.activeMission;
+        if (!activeMission) {
+            throw new Error("Mission actions require an active mission in the app context.");
+        }
+
+        return activeMission;
+    });
+    const activeRepository = $derived.by(() => {
+        const repository = appContext.airport.activeRepository;
+        if (!repository) {
+            throw new Error("Mission actions require an active repository in the app context.");
+        }
+
+        return repository;
+    });
+    const missionId = $derived(mission.missionId);
+    const repositoryId = $derived(activeRepository.repositoryId);
+    const repositoryRootPath = $derived(
+        mission.missionWorktreePath || activeRepository.repositoryRootPath,
+    );
 
     const actionContext = $derived.by(
         () =>
@@ -201,34 +218,16 @@
         actionLoading = true;
         actionError = null;
         try {
-            const query = new URLSearchParams();
-            if (context.repositoryId) {
-                query.set("repositoryId", context.repositoryId);
-            }
-            if (context.repositoryRootPath) {
-                query.set("repositoryRootPath", context.repositoryRootPath);
-            }
-            if (context.stageId) {
-                query.set("stageId", context.stageId);
-            }
-            if (context.taskId) {
-                query.set("taskId", context.taskId);
-            }
-            if (context.sessionId) {
-                query.set("sessionId", context.sessionId);
+            if (!mission) {
+                throw new Error("Mission actions are unavailable until the app context is synchronized.");
             }
 
-            const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/actions?${query.toString()}`,
-            );
-            if (!response.ok) {
-                throw new Error(
-                    `Action list load failed (${response.status}).`,
-                );
-            }
-
-            actionSnapshot =
-                (await response.json()) as OperatorActionListSnapshot;
+            actionSnapshot = await mission.listAvailableActions({
+                repositoryId: context.repositoryId,
+                ...(context.stageId ? { stageId: context.stageId } : {}),
+                ...(context.taskId ? { taskId: context.taskId } : {}),
+                ...(context.sessionId ? { sessionId: context.sessionId } : {}),
+            });
             loadedContextKey = contextKey;
         } catch (loadError) {
             actionError =
@@ -406,25 +405,14 @@
         actionPending = action.id;
         actionError = null;
         try {
-            const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/actions?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-                {
-                    method: "POST",
-                    headers: {
-                        accept: "application/json",
-                        "content-type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        actionId: action.id,
-                        ...(steps.length > 0 ? { steps } : {}),
-                    }),
-                },
-            );
-            if (!response.ok) {
-                throw new Error(
-                    `Action '${action.label}' failed (${response.status}).`,
-                );
+            if (!mission) {
+                throw new Error("Mission actions are unavailable until the app context is synchronized.");
             }
+
+            await mission.executeAction({
+                actionId: action.id,
+                ...(steps.length > 0 ? { steps } : {}),
+            });
 
             loadedContextKey = null;
             await onActionExecuted();

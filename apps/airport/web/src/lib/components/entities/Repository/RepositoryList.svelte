@@ -1,58 +1,44 @@
 <script lang="ts">
+    import { page } from "$app/state";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-    import type {
-        MissionSummary,
-        RepositorySummary,
-    } from "$lib/components/entities/types";
 
-    let {
-        mode = "missions",
-        missions = [],
-        repositories = [],
-        missionCountLabel,
-        repositoryCountLabel = "",
-        repositoryId,
-        selectedMissionId,
-        selectedRepositoryRoot,
-        heading,
-        description,
-        emptyMessage,
-    }: {
-        mode?: "missions" | "repositories";
-        missions?: MissionSummary[];
-        repositories?: RepositorySummary[];
-        missionCountLabel?: string;
-        repositoryCountLabel?: string;
-        repositoryId?: string;
-        selectedMissionId?: string;
-        selectedRepositoryRoot?: string;
-        heading?: string;
-        description?: string;
-        emptyMessage?: string;
-    } = $props();
+    const appContext = getAppContext();
+    const mode = $derived.by(() =>
+        page.url.pathname.startsWith("/airport") ? "repositories" : "missions",
+    );
+    const activeRepository = $derived(appContext.airport.activeRepository);
+    const repositories = $derived(appContext.airport.repositories);
+    const missions = $derived(activeRepository?.missions ?? []);
+    const repositoryId = $derived(activeRepository?.repositoryId ?? "");
+    const selectedMissionId = $derived(appContext.airport.activeMissionId);
+    const selectedRepositoryRoot = $derived(
+        appContext.airport.activeRepositoryRootPath,
+    );
 
     const resolvedHeading = $derived(
-        heading ??
-            (mode === "repositories"
-                ? "Registered repositories"
-                : "Repository missions"),
+        mode === "repositories"
+            ? "Repositories registered"
+            : "Repository missions",
     );
     const resolvedDescription = $derived(
-        description ??
-            (mode === "repositories"
-                ? "Select a repository here before routing Tower, Briefing Room, and Runway into mission-specific views."
-                : "Pick an existing mission in this repository or create a new mission from the issue list or a fresh brief."),
+        mode === "repositories"
+            ? "Your saved local repositories, ready to open and work from."
+            : "Pick an existing mission in this repository or create a new mission from the issue list or a fresh brief.",
     );
     const resolvedCountLabel = $derived(
-        mode === "repositories" ? repositoryCountLabel : missionCountLabel,
+        mode === "repositories"
+            ? (repositories.length === 1
+                ? "1 repository registered"
+                : `${repositories.length} repositories registered`)
+            : (activeRepository?.missionCountLabel || "0 missions"),
     );
     const resolvedEmptyMessage = $derived(
-        emptyMessage ??
-            (mode === "repositories"
-                ? "No repositories are registered yet. Add one from the form to start using Airport as a multi-repository control surface."
-                : "No missions are available in this repository yet."),
+        mode === "repositories"
+            ? "No repositories are registered yet. Add one from the form to start using Airport as a multi-repository control surface."
+            : "No missions are available in this repository yet.",
     );
 </script>
 
@@ -178,7 +164,7 @@
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <Button
-                                    href={`/repository/${encodeURIComponent(repositoryId ?? "")}/missions/${encodeURIComponent(mission.missionId)}`}
+                                    href={`/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`}
                                     variant="outline"
                                 >
                                     Select mission

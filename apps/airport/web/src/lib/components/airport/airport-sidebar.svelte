@@ -93,7 +93,7 @@
                     class="data-[slot=sidebar-menu-button]:!p-1.5"
                 >
                     {#snippet child({ props })}
-                        <a href="/" {...props}>
+                                        <a href="/airport" {...props}>
                             <img
                                 src={logo}
                                 alt="Flying-Pillow logo"
