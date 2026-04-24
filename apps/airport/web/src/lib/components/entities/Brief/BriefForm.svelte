@@ -8,7 +8,7 @@
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
     import { missionFromBriefInputSchema } from "@flying-pillow/mission-core/airport/runtime";
     import type { inferFlattenedErrors } from "zod";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
@@ -21,7 +21,7 @@
 
     type BriefErrors = inferFlattenedErrors<BriefInput>["fieldErrors"];
 
-    const appContext = getAppContext();
+    const repositoryScope = getScopedRepositoryContext();
 
     let title = $state("");
     let briefBody = $state("");
@@ -29,7 +29,7 @@
     let submitPending = $state(false);
     let submitError = $state<string | null>(null);
     let fieldErrors = $state<BriefErrors>({});
-    const repository = $derived(appContext.airport.activeRepository);
+    const repository = $derived(repositoryScope.repository);
 
     async function handleSubmit(event: SubmitEvent): Promise<void> {
         event.preventDefault();
@@ -37,7 +37,7 @@
         fieldErrors = {};
 
         if (!repository) {
-            submitError = "Repository context is unavailable until the app context is synchronized.";
+            submitError = "Repository context is unavailable until the repository route is loaded.";
             return;
         }
 

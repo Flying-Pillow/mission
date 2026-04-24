@@ -2,7 +2,7 @@
     import { goto } from "$app/navigation";
     import EyeIcon from "@tabler/icons-svelte/icons/eye";
     import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import type { IssueSummary } from "$lib/components/entities/types";
@@ -18,14 +18,14 @@
         onViewIssue: (issueNumber: number) => void;
         onStartIssueError?: (message: string | null) => void;
     } = $props();
-    const appContext = getAppContext();
+    const repositoryScope = getScopedRepositoryContext();
     const activeRepository = $derived.by(() => {
-        const resolvedRepository = appContext.airport.activeRepository;
-        if (!resolvedRepository) {
-            throw new Error("Issue actions require an active repository in the app context.");
+        const repository = repositoryScope.repository;
+        if (!repository) {
+            throw new Error("Issue actions require a scoped repository context.");
         }
 
-        return resolvedRepository;
+        return repository;
     });
 
     let missionCreationPending = $state(false);

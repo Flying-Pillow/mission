@@ -1,12 +1,15 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import type { Mission as MissionEntity } from "$lib/client/entities/Mission.svelte.js";
+    import { onMount } from "svelte";
+    import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
+    import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { AirportRuntimeEventEnvelope } from "@flying-pillow/mission-core";
     import type { OperatorStatus } from "@flying-pillow/mission-core/types.js";
-    import type { AgentSession as AgentSessionModel } from "$lib/client/entities/AgentSession.svelte.js";
+    import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
@@ -20,7 +23,7 @@
         createInitialSelectedNodeId,
         type MissionControlComputedState,
     } from "$lib/components/entities/Mission/missionControl";
-    import { getMissionSnapshotBundle } from "../../../../routes/api/airport/airport.remote";
+    import { operatorStatusSchema } from "$lib/types/mission-control";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -30,79 +33,32 @@
     import * as Tabs from "$lib/components/ui/tabs/index.js";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { MissionControlSnapshot } from "$lib/types/mission-control";
+    import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 
     const appContext = getAppContext();
-    const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
-    const routeMissionId = $derived(page.params.missionId?.trim() ?? "");
-    const missionSnapshotBundleQuery = $derived(
-        repositoryId && routeMissionId
-            ? getMissionSnapshotBundle({ repositoryId, missionId: routeMissionId })
-            : null
-    );
-    const missionSnapshotBundle = $derived(missionSnapshotBundleQuery?.current);
-    let missionSyncError = $state<string | null>(null);
-    let lastSyncedMissionSnapshotBundle:
-        | NonNullable<typeof missionSnapshotBundle>
-        | null = null;
-    $effect(() => {
-        if (!missionSnapshotBundle) {
-            lastSyncedMissionSnapshotBundle = null;
-            missionSyncError = null;
-            return;
-        }
-
-        if (missionSnapshotBundle === lastSyncedMissionSnapshotBundle) {
-            return;
-        }
-
-        try {
-            appContext.application.syncMissionSnapshotBundle(
-                missionSnapshotBundle,
-            );
-            lastSyncedMissionSnapshotBundle = missionSnapshotBundle;
-            missionSyncError = null;
-        } catch (error) {
-            lastSyncedMissionSnapshotBundle = null;
-            missionSyncError = error instanceof Error ? error.message : String(error);
-        }
+    const repositoryId = page.params.repositoryId?.trim() ?? "";
+    const routeMissionId = page.params.missionId?.trim() ?? "";
+    const missionScopeState = $state<{
+        repositoryId?: string;
+        missionId?: string;
+        mission?: MissionEntity;
+        repository?: RepositoryEntity;
+        loading: boolean;
+        error?: string | null;
+    }>({
+        repositoryId: repositoryId || undefined,
+        missionId: routeMissionId || undefined,
+        loading: true,
     });
-    const activeRepository = $derived.by(() => {
-        const resolvedRepository = appContext.airport.activeRepository;
-        if (!resolvedRepository || resolvedRepository.repositoryId !== repositoryId) {
-            return undefined;
-        }
-
-        return resolvedRepository;
-    });
-    const activeMission = $derived.by(() => {
-        const resolvedMission = appContext.airport.activeMission;
-        if (!resolvedMission || resolvedMission.missionId !== routeMissionId) {
-            return undefined;
-        }
-
-        return resolvedMission;
-    });
-    const missionQueryError = $derived.by(() => {
-        const error = missionSnapshotBundleQuery?.error;
-        if (!error) {
-            return null;
-        }
-
-        return error instanceof Error ? error.message : String(error);
-    });
-    const missionLoading = $derived(
-        (missionSnapshotBundleQuery?.loading ?? false)
-            || Boolean(
-                missionSnapshotBundle
-                && activeMission?.missionId !== routeMissionId
-                && !missionSyncError,
-            ),
-    );
-    const missionLoadError = $derived(missionSyncError ?? missionQueryError);
+    const missionScope = setScopedMissionContext(missionScopeState);
+    const activeRepository = $derived(missionScope.repository);
+    const activeMission = $derived(missionScope.mission);
+    const missionLoading = $derived(missionScope.loading);
+    const missionLoadError = $derived(missionScope.error);
     const controlSnapshot = $derived(activeMission?.controlSnapshot);
     const repositorySummary = $derived(activeRepository?.summary);
     const missionWorktreePath = $derived(activeMission?.missionWorktreePath ?? "");
-    const missionId = $derived(activeMission?.missionId ?? routeMissionId);
+    const missionId = $derived(activeMission?.missionId ?? missionScope.missionId ?? "");
 
     let controlLoading = $state(false);
     let controlError = $state<string | null>(null);
@@ -115,7 +71,6 @@
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
     let controlRefreshTimer: number | null = null;
-    let missionRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
 
@@ -168,6 +123,18 @@
     const displayArtifactLabel = $derived(
         selectedWorktreeFile?.name ?? selectionState.activeArtifact?.displayLabel,
     );
+    const displayArtifact = $derived.by((): ArtifactEntity | undefined => {
+        if (!activeMission || !displayArtifactPath) {
+            return undefined;
+        }
+
+        return activeMission.resolveArtifact({
+            filePath: displayArtifactPath,
+            ...(displayArtifactLabel ? { label: displayArtifactLabel } : {}),
+            ...(displayStageId ? { stageId: displayStageId } : {}),
+            ...(displayTaskId ? { taskId: displayTaskId } : {})
+        });
+    });
     const displayStageId = $derived(
         selectedWorktreeFile
             ? undefined
@@ -206,7 +173,25 @@
     const workflowLifecycle = $derived(operatorStatus.workflow?.lifecycle);
     const workflowUpdatedAt = $derived(operatorStatus.workflow?.updatedAt);
     const currentStageId = $derived(operatorStatus.workflow?.currentStageId);
-    const missionTitle = $derived(operatorStatus?.title ?? activeMission?.missionId ?? routeMissionId);
+    const missionTitle = $derived(operatorStatus?.title ?? activeMission?.missionId ?? missionScope.missionId);
+
+    onMount(async () => {
+        try {
+            const mission = await appContext.application.openMissionRoute({
+                repositoryId,
+                missionId: routeMissionId,
+            });
+            missionScope.mission = mission;
+            missionScope.repository = appContext.application.resolveRepository(repositoryId);
+            missionScope.error = null;
+        } catch (error) {
+            missionScope.mission = undefined;
+            missionScope.repository = undefined;
+            missionScope.error = error instanceof Error ? error.message : String(error);
+        } finally {
+            missionScope.loading = false;
+        }
+    });
 
     $effect(() => {
         if (!controlSnapshot) {
@@ -248,13 +233,16 @@
     });
 
     $effect(() => {
-        if (!missionWorktreePath) {
+        const normalizedMissionId = missionId?.trim();
+        const normalizedWorktreePath = missionWorktreePath?.trim();
+
+        if (!normalizedMissionId || !normalizedWorktreePath) {
             return;
         }
 
         const subscription = appContext.observeMission({
-            missionId,
-            repositoryRootPath: missionWorktreePath,
+            missionId: normalizedMissionId,
+            repositoryRootPath: normalizedWorktreePath,
             onUpdate: (_, event) => {
                 runtimeError = null;
                 handleMissionRuntimeEvent(event);
@@ -269,28 +257,11 @@
             if (controlRefreshTimer !== null) {
                 window.clearTimeout(controlRefreshTimer);
             }
-            if (missionRefreshTimer !== null) {
-                window.clearTimeout(missionRefreshTimer);
-            }
         };
     });
 
     function currentStageLabel(stageId: string | undefined): string {
         return stageId ? `Current stage ${stageId}` : "No active stage";
-    }
-
-    async function refreshMissionRuntimeSnapshot(): Promise<void> {
-        if (!activeMission) {
-            return;
-        }
-
-        try {
-            await activeMission.refresh();
-            runtimeError = null;
-        } catch (error) {
-            runtimeError =
-                error instanceof Error ? error.message : String(error);
-        }
     }
 
     async function refreshControlSnapshot(): Promise<void> {
@@ -307,9 +278,15 @@
         controlError = null;
         try {
             const nextSnapshot = await activeMission.getControlSnapshot();
-            appContext.application.syncMissionControlState({
+            activeMission.setRouteState({
                 controlSnapshot: nextSnapshot,
-                repositoryRootPath: missionWorktreePath,
+                worktreePath: missionWorktreePath,
+            });
+            appContext.setActiveMissionOutline({
+                title: nextSnapshot.operatorStatus.title,
+                currentStageId: nextSnapshot.operatorStatus.workflow?.currentStageId,
+                briefPath: nextSnapshot.operatorStatus.productFiles?.brief,
+                treeNodes: nextSnapshot.operatorStatus.tower?.treeNodes ?? [],
             });
         } catch (error) {
             controlError =
@@ -333,16 +310,6 @@
         }, 150);
     }
 
-    function scheduleMissionRuntimeRefresh(): void {
-        if (missionRefreshTimer !== null) {
-            window.clearTimeout(missionRefreshTimer);
-        }
-        missionRefreshTimer = window.setTimeout(() => {
-            missionRefreshTimer = null;
-            void refreshMissionRuntimeSnapshot();
-        }, 100);
-    }
-
     function applyMissionStatusEvent(
         event: AirportRuntimeEventEnvelope,
     ): void {
@@ -351,18 +318,20 @@
         }
 
         const payload = event.payload as {
-            status?: MissionControlSnapshot["operatorStatus"];
+            status?: unknown;
         };
         if (!payload.status) {
             return;
         }
 
-        activeMission.applyOperatorStatus(payload.status);
+        const status = operatorStatusSchema.parse(payload.status);
+
+        activeMission.applyOperatorStatus(status);
         appContext.setActiveMissionOutline({
-            title: payload.status.title,
-            currentStageId: payload.status.workflow?.currentStageId,
-            briefPath: payload.status.productFiles?.brief,
-            treeNodes: payload.status.tower?.treeNodes ?? [],
+            title: status.title,
+            currentStageId: status.workflow?.currentStageId,
+            briefPath: status.productFiles?.brief,
+            treeNodes: status.tower?.treeNodes ?? [],
         });
     }
 
@@ -372,9 +341,6 @@
         switch (event.type) {
             case "mission.status":
                 applyMissionStatusEvent(event);
-                return;
-            case "session.lifecycle":
-                scheduleMissionRuntimeRefresh();
                 return;
             case "mission.actions.changed":
                 actionRefreshNonce += 1;
@@ -568,31 +534,33 @@
                         </Tabs.List>
                     </div>
 
-                    <Tabs.Content
-                        value="control"
-                        class="min-h-0 flex-1 overflow-hidden p-0"
-                    >
-                        <MissionControlTree
-                            outline={missionOutline}
-                            {missionId}
-                            activeNodeId={selectedNodeId}
-                            title="Mission control"
-                            class="h-full rounded-none border-0 bg-transparent"
-                            onSelectNode={handleSelectNode}
-                        />
-                    </Tabs.Content>
-
-                    <Tabs.Content
-                        value="files"
-                        class="min-h-0 flex-1 overflow-hidden p-0"
-                    >
-                        <MissionFileTree
-                            activePath={selectedWorktreeFile?.absolutePath}
-                            refreshNonce={actionRefreshNonce}
-                            class="h-full rounded-none border-0 bg-transparent"
-                            onSelectPath={handleSelectWorktreeNode}
-                        />
-                    </Tabs.Content>
+                    {#if leftTreeMode === "control"}
+                        <Tabs.Content
+                            value="control"
+                            class="min-h-0 flex-1 overflow-hidden p-0"
+                        >
+                            <MissionControlTree
+                                outline={missionOutline}
+                                {missionId}
+                                activeNodeId={selectedNodeId}
+                                title="Mission control"
+                                class="h-full rounded-none border-0 bg-transparent"
+                                onSelectNode={handleSelectNode}
+                            />
+                        </Tabs.Content>
+                    {:else}
+                        <Tabs.Content
+                            value="files"
+                            class="min-h-0 flex-1 overflow-hidden p-0"
+                        >
+                            <MissionFileTree
+                                activePath={selectedWorktreeFile?.absolutePath}
+                                refreshNonce={actionRefreshNonce}
+                                class="h-full rounded-none border-0 bg-transparent"
+                                onSelectPath={handleSelectWorktreeNode}
+                            />
+                        </Tabs.Content>
+                    {/if}
                 </Tabs.Root>
             </ResizablePane>
 
@@ -605,17 +573,13 @@
             >
                 {#if showArtifactEditor}
                     <ArtifactEditor
-                        artifactPath={displayArtifactPath}
-                        artifactLabel={displayArtifactLabel}
+                        artifact={displayArtifact}
                         onCloseRequested={handleCloseArtifactEditor}
                     />
                 {:else}
                     <ArtifactViewer
                         refreshNonce={actionRefreshNonce}
-                        artifactPath={displayArtifactPath}
-                        artifactLabel={displayArtifactLabel}
-                        stageId={displayStageId}
-                        taskId={displayTaskId}
+                        artifact={displayArtifact}
                         onEditRequested={handleEditArtifact}
                         onActionExecuted={handleMissionMutated}
                     />
@@ -645,25 +609,20 @@
                     </div>
 
                     <div class="relative min-h-0 flex-1 overflow-hidden p-0">
-                        <div
-                            class={`absolute inset-0 min-h-0 overflow-hidden ${rightPanelMode === "terminal" ? "block" : "hidden"}`}
-                            aria-hidden={rightPanelMode !== "terminal"}
-                        >
-                            <MissionTerminal active={rightPanelMode === "terminal"} />
-                        </div>
-
-                        <div
-                            class={`absolute inset-0 min-h-0 overflow-hidden ${rightPanelMode === "agent" ? "block" : "hidden"}`}
-                            aria-hidden={rightPanelMode !== "agent"}
-                        >
-                            <AgentSession
-                                refreshNonce={actionRefreshNonce}
-                                stageId={selectionState.resolvedSelection?.stageId}
-                                session={resolvedSession}
-                                active={rightPanelMode === "agent"}
-                                onActionExecuted={handleMissionMutated}
-                            />
-                        </div>
+                        {#if rightPanelMode === "terminal"}
+                            <div class="absolute inset-0 min-h-0 overflow-hidden">
+                                <MissionTerminal />
+                            </div>
+                        {:else}
+                            <div class="absolute inset-0 min-h-0 overflow-hidden">
+                                <AgentSession
+                                    refreshNonce={actionRefreshNonce}
+                                    stageId={selectionState.resolvedSelection?.stageId}
+                                    session={resolvedSession}
+                                    onActionExecuted={handleMissionMutated}
+                                />
+                            </div>
+                        {/if}
                     </div>
                 </Tabs.Root>
             </ResizablePane>

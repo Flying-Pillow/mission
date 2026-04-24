@@ -1,47 +1,32 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
+    import ArtifactActionbar from "$lib/components/entities/Artifact/ArtifactActionbar.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import TaskActionbar from "$lib/components/entities/Task/TaskActionbar.svelte";
-    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
 
     let {
         refreshNonce,
-        artifactPath,
-        artifactLabel,
-        stageId,
-        taskId,
+        artifact,
         onEditRequested,
         onActionExecuted,
     }: {
         refreshNonce: number;
-        artifactPath?: string;
-        artifactLabel?: string;
-        stageId?: MissionStageId;
-        taskId?: string;
+        artifact?: Artifact;
         onEditRequested: () => void;
         onActionExecuted: () => Promise<void>;
     } = $props();
-    const appContext = getAppContext();
-    const mission = $derived(appContext.airport.activeMission);
+    const missionScope = getScopedMissionContext();
+    const mission = $derived(missionScope.mission);
 
-    const panelLabel = $derived(
-        artifactLabel ?? basename(artifactPath) ?? "Resolved artifact",
-    );
+    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
     const artifactDocumentPromise = $derived(
-        artifactPath && mission
-            ? mission.readDocument(artifactPath)
+        artifact && mission
+            ? artifact.read()
             : null,
     );
-
-    function basename(filePath: string | undefined): string | undefined {
-        if (!filePath) {
-            return undefined;
-        }
-        const normalized = filePath.replace(/\\/g, "/");
-        return normalized.split("/").pop() ?? normalized;
-    }
 </script>
 
 <section
@@ -54,23 +39,33 @@
             </h2>
         </div>
 
-        {#if artifactPath}
+        {#if artifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
                 <PencilIcon />
                 Edit
             </Button>
         {/if}
 
-        <TaskActionbar
-            {refreshNonce}
-            {stageId}
-            {taskId}
-            {onActionExecuted}
-        />
+        <div class="flex flex-wrap items-center gap-2">
+            <TaskActionbar
+                {refreshNonce}
+                stageId={artifact?.stageId}
+                taskId={artifact?.taskId}
+                {onActionExecuted}
+            />
+
+            <ArtifactActionbar
+                {refreshNonce}
+                stageId={artifact?.stageId}
+                taskId={artifact?.taskId}
+                artifactPath={artifact?.filePath}
+                {onActionExecuted}
+            />
+        </div>
     </header>
 
     <div class="min-h-0 overflow-auto p-2">
-        {#if artifactPath}
+        {#if artifact}
             {#if artifactDocumentPromise}
                 {#await artifactDocumentPromise}
                     <div

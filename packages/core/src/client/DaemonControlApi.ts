@@ -25,8 +25,9 @@ import type {
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
-import type { Repository } from '../repository/Repository.js';
+import type { Repository } from '../entities/Repository/Repository.js';
 import type {
+	ControlStatus,
 	ControlGitHubIssueDetail,
 	ControlGitHubRepositoriesClone,
 	ControlRepositoriesAdd
@@ -35,8 +36,9 @@ import type {
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }
 
-	public async getStatus(): Promise<OperatorStatus> {
-		return this.client.request<OperatorStatus>('control.status');
+	public async getStatus(options: ControlStatus = {}): Promise<OperatorStatus> {
+		const params = options.includeMissions === false ? { includeMissions: false } : undefined;
+		return this.client.request<OperatorStatus>('control.status', params);
 	}
 
 	public async listAvailableActions(context?: OperatorActionQueryContext): Promise<OperatorActionDescriptor[]> {

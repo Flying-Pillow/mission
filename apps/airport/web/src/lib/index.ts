@@ -16,12 +16,13 @@ export {
 } from '$lib/client/runtime/transport/EntityRuntimeTransport';
 export { MissionCommandTransport } from '$lib/client/runtime/transport/MissionCommandTransport';
 export { MissionRuntimeTransport } from '$lib/client/runtime/transport/MissionRuntimeTransport';
-export { Mission } from '$lib/client/entities/Mission.svelte.js';
-export { AgentSession } from '$lib/client/entities/AgentSession.svelte.js';
-export { Stage } from '$lib/client/entities/Stage.svelte.js';
-export { Task } from '$lib/client/entities/Task.svelte.js';
-export { Repository } from '$lib/client/entities/Repository.svelte.js';
-export { EntityRegistry, type EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
+export { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
+export { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
+export { Artifact } from '$lib/components/entities/Artifact/Artifact.svelte.js';
+export { Stage } from '$lib/components/entities/Stage/Stage.svelte.js';
+export { Task } from '$lib/components/entities/Task/Task.svelte.js';
+export { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
+export { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 export type {
     AgentCommand,
     AgentPrompt,

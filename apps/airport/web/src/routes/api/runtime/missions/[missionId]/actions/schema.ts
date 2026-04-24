@@ -11,6 +11,7 @@ export const missionActionQuerySchema = z.object({
         .refine(isMissionStageId, { error: "Invalid mission stage id." })
         .optional(),
     taskId: z.string().trim().min(1).optional(),
+    artifactPath: z.string().trim().min(1).optional(),
     sessionId: z.string().trim().min(1).optional(),
 });
 

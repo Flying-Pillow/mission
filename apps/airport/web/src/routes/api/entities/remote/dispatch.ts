@@ -4,12 +4,11 @@ import {
     githubIssueDetailSchema,
     missionFromBriefInputSchema,
     missionFromIssueInputSchema,
-    repositorySchema,
-    repositorySurfaceSnapshotSchema,
+    repositorySnapshotSchema,
     trackedIssueSummarySchema,
     type AirportHomeSnapshot,
     type GitHubIssueDetail,
-    type RepositorySurfaceSnapshot,
+    type RepositorySnapshot,
     type TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 
@@ -79,24 +78,24 @@ export type MissionMutationResult = z.infer<typeof missionMutationResultSchema>;
 
 export type EntityRemoteGateway = {
     getAirportHomeSnapshot(): Promise<AirportHomeSnapshot>;
-    getRepositorySurfaceSnapshot(input: {
+    readRepository(input: {
         repositoryId: string;
         repositoryRootPath?: string;
-    }): Promise<RepositorySurfaceSnapshot>;
-    getRepositoryIssues(input: {
+    }): Promise<RepositorySnapshot>;
+    listRepositoryIssues(input: {
         repositoryId: string;
         repositoryRootPath?: string;
     }): Promise<TrackedIssueSummary[]>;
-    getRepositoryIssueDetail(input: {
+    readRepositoryIssue(input: {
         repositoryId: string;
         repositoryRootPath?: string;
         issueNumber: number;
     }): Promise<GitHubIssueDetail>;
-    createMissionFromIssue(input: {
+    startMissionFromIssue(input: {
         repositoryId: string;
         issueNumber: number;
     }): Promise<{ missionId?: string | undefined }>;
-    createMissionFromBrief(input: {
+    startMissionFromBrief(input: {
         repositoryId: string;
         brief: z.infer<typeof missionFromBriefInputSchema>;
     }): Promise<{ missionId?: string | undefined }>;
@@ -110,12 +109,10 @@ export async function executeEntityQuery(
 
     switch (invocation.method) {
         case 'listRepositories':
-            return z.array(repositorySchema).parse(
-                airportHomeSnapshotSchema.parse(await gateway.getAirportHomeSnapshot()).repositories
-            );
+            return airportHomeSnapshotSchema.parse(await gateway.getAirportHomeSnapshot()).repositories;
         case 'read':
-            return repositorySurfaceSnapshotSchema.parse(
-                await gateway.getRepositorySurfaceSnapshot({
+            return repositorySnapshotSchema.parse(
+                await gateway.readRepository({
                     repositoryId: invocation.reference.repositoryId,
                     ...(invocation.reference.repositoryRootPath
                         ? { repositoryRootPath: invocation.reference.repositoryRootPath }
@@ -124,7 +121,7 @@ export async function executeEntityQuery(
             );
         case 'listIssues':
             return z.array(trackedIssueSummarySchema).parse(
-                await gateway.getRepositoryIssues({
+                await gateway.listRepositoryIssues({
                     repositoryId: invocation.reference.repositoryId,
                     ...(invocation.reference.repositoryRootPath
                         ? { repositoryRootPath: invocation.reference.repositoryRootPath }
@@ -133,7 +130,7 @@ export async function executeEntityQuery(
             );
         case 'getIssue':
             return githubIssueDetailSchema.parse(
-                await gateway.getRepositoryIssueDetail({
+                await gateway.readRepositoryIssue({
                     repositoryId: invocation.reference.repositoryId,
                     ...(invocation.reference.repositoryRootPath
                         ? { repositoryRootPath: invocation.reference.repositoryRootPath }
@@ -151,11 +148,11 @@ export async function executeEntityCommand(
     const invocation = entityCommandInvocationSchema.parse(input);
 
     const status = invocation.method === 'startMissionFromIssue'
-        ? await gateway.createMissionFromIssue({
+        ? await gateway.startMissionFromIssue({
             repositoryId: invocation.reference.repositoryId,
             issueNumber: invocation.args.issueNumber
         })
-        : await gateway.createMissionFromBrief({
+        : await gateway.startMissionFromBrief({
             repositoryId: invocation.reference.repositoryId,
             brief: invocation.args
         });
@@ -171,7 +168,7 @@ export async function executeEntityForm(
     input: EntityFormInvocation
 ): Promise<MissionMutationResult> {
     const invocation = entityFormInvocationSchema.parse(input);
-    const status = await gateway.createMissionFromBrief({
+    const status = await gateway.startMissionFromBrief({
         repositoryId: invocation.reference.repositoryId,
         brief: invocation.args
     });
@@ -220,8 +217,8 @@ export async function getRepositoryThroughEntityBoundary(
         repositoryId: string;
         repositoryRootPath?: string;
     }
-): Promise<RepositorySurfaceSnapshot> {
-    return repositorySurfaceSnapshotSchema.parse(
+): Promise<RepositorySnapshot> {
+    return repositorySnapshotSchema.parse(
         await executeEntityQuery(gateway, {
             reference: {
                 entity: 'Repository',
@@ -295,12 +292,12 @@ export async function startMissionFromBriefThroughEntityBoundary(
     });
 }
 
-const repositoryListResultSchema = z.array(repositorySchema);
-const repositorySurfaceResultSchema = repositorySurfaceSnapshotSchema;
+const repositoryListResultSchema = z.array(repositorySnapshotSchema.shape.repository);
+const repositorySnapshotResultSchema = repositorySnapshotSchema;
 const repositoryIssuesResultSchema = z.array(trackedIssueSummarySchema);
 const entityQueryResultSchema = z.union([
     repositoryListResultSchema,
-    repositorySurfaceResultSchema,
+    repositorySnapshotResultSchema,
     repositoryIssuesResultSchema,
     githubIssueDetailSchema
 ]);

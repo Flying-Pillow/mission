@@ -1,15 +1,17 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import type { Mission } from "$lib/client/entities/Mission.svelte.js";
-    import type { Stage } from "$lib/client/entities/Stage.svelte.js";
+    import { maybeGetScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
+    import { maybeGetScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
+    import type { Stage } from "$lib/components/entities/Stage/Stage.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    const appContext = getAppContext();
+    const missionScope = maybeGetScopedMissionContext();
+    const repositoryScope = maybeGetScopedRepositoryContext();
     const mission = $derived.by(() => {
-        const resolvedMission = appContext.airport.activeMission;
+        const resolvedMission = missionScope?.mission ?? repositoryScope?.repository?.selectedMission;
         if (!resolvedMission) {
-            throw new Error("Mission summary requires an active mission in the app context.");
+            throw new Error("Mission summary requires a scoped mission or repository context.");
         }
 
         return resolvedMission;

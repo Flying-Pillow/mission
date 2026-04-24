@@ -5,7 +5,7 @@ import type {
     MissionRuntimeSnapshot,
     MissionReference,
     Repository,
-    RepositorySurfaceSnapshot,
+    RepositorySnapshot,
     TrackedIssueSummary,
 } from "@flying-pillow/mission-core/airport/runtime";
 
@@ -19,4 +19,4 @@ export type IssueSummary = TrackedIssueSummary;
 export type MissionSessionSummary = AgentSession;
 export type SelectedMissionSummary = MissionRuntimeSnapshot;
 export type SelectedIssueSummary = GitHubIssueDetail;
-export type RepositorySurfaceData = RepositorySurfaceSnapshot;
+export type RepositorySnapshotData = RepositorySnapshot;

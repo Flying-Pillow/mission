@@ -1,5 +1,5 @@
-import type { FrontmatterValue } from '../lib/frontmatter.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import type { FrontmatterValue } from '../../lib/frontmatter.js';
+import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGE_FOLDERS,
@@ -7,8 +7,8 @@ import {
 	type MissionStageId,
 	type MissionTaskAgent,
 	type MissionTaskStatus
-} from '../types.js';
-import { getMissionArtifactDefinition } from '../workflow/manifest.js';
+} from '../../types.js';
+import { getMissionArtifactDefinition } from '../../workflow/manifest.js';
 
 export type ArtifactKind = 'mission' | 'stage' | 'task';
 
@@ -23,9 +23,6 @@ export type Artifact = {
 	filePath?: string;
 	relativePath?: string;
 };
-
-export type ArtifactEntityKind = ArtifactKind;
-export type ArtifactEntity = Artifact;
 
 type ProductArtifactDefinition = {
 	kind: 'product';
@@ -100,14 +97,14 @@ class ArtifactRuntime {
 	}
 }
 
-export const Artifact = ArtifactRuntime;
+export const ArtifactRuntimeController = ArtifactRuntime;
 
-export function createMissionArtifactEntity(input: {
+export function createMissionArtifact(input: {
 	artifactKey: MissionArtifactKey;
 	missionRootDir?: string;
 	filePath?: string;
 	stageId?: MissionStageId;
-}): ArtifactEntity {
+}): Artifact {
 	const definition = getMissionArtifactDefinition(input.artifactKey);
 	const relativePath = definition.stageId
 		? `${MISSION_STAGE_FOLDERS[definition.stageId]}/${definition.fileName}`
@@ -126,14 +123,14 @@ export function createMissionArtifactEntity(input: {
 	};
 }
 
-export function createTaskArtifactEntity(input: {
+export function createTaskArtifact(input: {
 	taskId: string;
 	stageId: MissionStageId;
 	fileName: string;
 	label?: string;
 	filePath?: string;
 	relativePath?: string;
-}): ArtifactEntity {
+}): Artifact {
 	return {
 		artifactId: `task:${input.taskId}`,
 		kind: 'task',

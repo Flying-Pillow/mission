@@ -8,7 +8,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     const { missionId } = missionRuntimeRouteParamsSchema.parse(params);
     const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
     const gateway = new AirportWebGateway(locals);
-    const snapshot = await gateway.getMissionRuntimeSnapshot(missionId, repositoryRootPath);
+    const snapshot = await gateway.entities.readMissionRuntime(missionId, repositoryRootPath);
 
     return json(snapshot, {
         headers: {

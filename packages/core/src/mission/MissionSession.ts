@@ -4,7 +4,7 @@ import type {
 	AgentSessionSnapshot
 } from '../agent/AgentRuntimeTypes.js';
 import type { MissionTaskState } from '../types.js';
-import { toAgentSession, type AgentSession } from './AgentSession.js';
+import { toAgentSession, type AgentSession } from '../entities/AgentSession/AgentSession.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,

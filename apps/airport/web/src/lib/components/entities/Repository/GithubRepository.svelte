@@ -53,7 +53,7 @@
 </script>
 
 <article
-    class="rounded-2xl border bg-background/70 px-4 py-4 transition-colors hover:bg-background"
+    class="rounded-lg border bg-background/70 px-4 py-4 transition-colors hover:bg-background"
 >
     <div
         class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"

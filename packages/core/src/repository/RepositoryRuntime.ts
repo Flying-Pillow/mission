@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { MissionPreparationService } from '../mission/MissionPreparationService.js';
 import { MissionRuntime } from '../mission/Mission.js';
 import { Factory } from '../mission/Factory.js';
@@ -103,9 +104,9 @@ import type {
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { refreshSystemStatus } from '../system/SystemStatus.js';
-import { toMissionEntity, type MissionEntity } from '../mission/Mission.js';
-import { toAgentSession } from '../mission/AgentSession.js';
-import { toRepository } from './Repository.js';
+import { toMission, type Mission } from '../entities/Mission/Mission.js';
+import { toAgentSession } from '../entities/AgentSession/AgentSession.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import {
 	WorkflowSettingsStore,
 	type WorkflowSettingsGetResult
@@ -197,6 +198,12 @@ type SessionLogWriterState = {
 
 const SESSION_LOG_METADATA_SCHEMA_VERSION = 1;
 const SESSION_LOG_METADATA_FLUSH_THRESHOLD_BYTES = 4096;
+const MISSION_SELECTION_CACHE_TTL_MS = 2000;
+
+type MissionSelectionCacheEntry = {
+	expiresAt: number;
+	candidates: MissionSelectionCandidate[];
+};
 
 export class RepositoryRuntime {
 	private readonly store: FilesystemAdapter;
@@ -206,6 +213,7 @@ export class RepositoryRuntime {
 	private readonly terminalTransport = new TerminalAgentTransport();
 	private readonly terminalSubscription: MissionAgentDisposable;
 	private readonly sessionLogWriters = new Map<string, SessionLogWriterState>();
+	private missionSelectionCache: MissionSelectionCacheEntry | undefined;
 
 	public constructor(
 		private readonly repositoryRoot: string,
@@ -361,13 +369,26 @@ export class RepositoryRuntime {
 	}
 
 	public async listMissionSelectionCandidates(): Promise<MissionSelectionCandidate[]> {
-		return (await this.store.listMissions()).map(({ descriptor }) => ({
+		const now = Date.now();
+		const cached = this.missionSelectionCache;
+		if (cached && cached.expiresAt > now) {
+			return cached.candidates.map((candidate) => structuredClone(candidate));
+		}
+
+		const candidates = (await this.store.listMissions()).map(({ descriptor }) => ({
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			branchRef: descriptor.branchRef,
 			createdAt: descriptor.createdAt,
 			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {})
 		}));
+
+		this.missionSelectionCache = {
+			expiresAt: now + MISSION_SELECTION_CACHE_TTL_MS,
+			candidates: candidates.map((candidate) => structuredClone(candidate))
+		};
+
+		return candidates;
 	}
 
 	private async listOpenIssues(params: ControlIssuesList = {}, request?: Request): Promise<TrackedIssueSummary[]> {
@@ -475,14 +496,21 @@ export class RepositoryRuntime {
 		if (!registeredRepository) {
 			throw new Error(`Mission could not register cloned repository '${githubRepository}'.`);
 		}
-		return toRepository(registeredRepository);
+		return Repository.fromCandidate(registeredRepository);
 	}
 
 	public async buildDiscoveryStatus(
 		availableMissions: MissionSelectionCandidate[],
 		availableRepositories: ControlSource['availableRepositories'] = []
 	): Promise<OperatorStatus> {
+		const startedAt = performance.now();
+		const controlStartedAt = performance.now();
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
+		const controlDurationMs = performance.now() - controlStartedAt;
+		const totalDurationMs = performance.now() - startedAt;
+		process.stdout.write(
+			`${new Date().toISOString().slice(11, 19)} repository.buildDiscoveryStatus total=${totalDurationMs.toFixed(1)}ms buildControl=${controlDurationMs.toFixed(1)}ms missions=${String(availableMissions.length)} repositories=${String(availableRepositories.length)}\n`
+		);
 
 		return {
 			found: false,
@@ -692,7 +720,7 @@ export class RepositoryRuntime {
 		};
 	}
 
-	private async executeMissionAction(params: MissionActionExecute): Promise<MissionEntity> {
+	private async executeMissionAction(params: MissionActionExecute): Promise<Mission> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const workspaceStatus = await this.executeWorkspaceMissionAction(loadedMission, params);
 		if (workspaceStatus) {
@@ -791,6 +819,8 @@ export class RepositoryRuntime {
 		if (preparation.kind !== 'mission') {
 			throw new Error('Mission preparation returned an unexpected non-mission result.');
 		}
+
+		this.invalidateMissionSelectionCache();
 
 		const selectedStatus = await this.getMissionOperatorStatus({
 			selector: { missionId: preparation.missionId }
@@ -912,7 +942,7 @@ export class RepositoryRuntime {
 
 	private async getMissionStatus(
 		params: MissionSelect = {}
-	): Promise<MissionEntity> {
+	): Promise<Mission> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return this.toMissionStatusEntity(await loadedMission.mission.status());
 	}
@@ -1168,7 +1198,7 @@ export class RepositoryRuntime {
 	private async executeWorkspaceMissionAction(
 		loadedMission: LoadedMission,
 		params: MissionActionExecute
-	): Promise<MissionEntity | undefined> {
+	): Promise<Mission | undefined> {
 		const definition = REPOSITORY_MISSION_COMMAND_DEFINITIONS.find((candidate) => candidate.id === params.actionId);
 		if (!definition) {
 			return undefined;
@@ -1507,6 +1537,10 @@ export class RepositoryRuntime {
 		}
 	}
 
+	private invalidateMissionSelectionCache(): void {
+		this.missionSelectionCache = undefined;
+	}
+
 	private async buildControlPlaneStatus(
 		availableMissionCount?: number
 	): Promise<RepositoryControlStatus> {
@@ -1597,8 +1631,8 @@ export class RepositoryRuntime {
 		return `mission:${missionId}:status:${repositorySyncRevision ?? 'workspace'}`;
 	}
 
-	private async toMissionStatusEntity(status: OperatorStatus): Promise<MissionEntity> {
-		return toMissionEntity(await this.decorateMissionStatus(status, 'mission'));
+	private async toMissionStatusEntity(status: OperatorStatus): Promise<Mission> {
+		return toMission(await this.decorateMissionStatus(status, 'mission'));
 	}
 
 	private buildSetupCommandFlow(

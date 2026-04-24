@@ -1,5 +1,5 @@
 export * from './index.js';
-export * from './repository/initializeRepository.js';
+export * from './entities/Repository/initializeRepository.js';
 export * from './lib/daemonConfig.js';
 export * from './lib/connectAirportDaemon.js';
 export * from './lib/repositoryIdentity.js';

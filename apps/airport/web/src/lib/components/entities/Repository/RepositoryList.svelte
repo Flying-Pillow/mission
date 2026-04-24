@@ -1,15 +1,17 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { maybeGetScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
     const appContext = getAppContext();
+    const repositoryScope = maybeGetScopedRepositoryContext();
     const mode = $derived.by(() =>
         page.url.pathname.startsWith("/airport") ? "repositories" : "missions",
     );
-    const activeRepository = $derived(appContext.airport.activeRepository);
+    const activeRepository = $derived(repositoryScope?.repository);
     const repositories = $derived(appContext.airport.repositories);
     const missions = $derived(activeRepository?.missions ?? []);
     const repositoryId = $derived(activeRepository?.repositoryId ?? "");
@@ -165,7 +167,7 @@
                             <div class="flex flex-wrap gap-2">
                                 <Button
                                     href={`/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`}
-                                    variant="outline"
+                                    variant="default"
                                 >
                                     Select mission
                                 </Button>

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { OperatorStatus } from '../types.js';
-import { toMissionEntity } from './Mission.js';
+import { toMission } from '../entities/Mission/Mission.js';
 
-describe('toMissionEntity', () => {
+describe('toMission', () => {
 	it('builds first-class stage, task, artifact, and session contracts from operator status', () => {
-		const mission = toMissionEntity({
+		const mission = toMission({
 			found: true,
 			missionId: 'mission-29',
 			title: 'Authoritative entity vocabulary',

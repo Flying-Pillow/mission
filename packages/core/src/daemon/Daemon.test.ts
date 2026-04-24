@@ -9,7 +9,7 @@ import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { writeMissionConfig } from '../lib/config.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
-import { initializeRepository } from '../repository/initializeRepository.js';
+import { initializeRepository } from '../entities/Repository/initializeRepository.js';
 import { MissionRuntime } from '../mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';

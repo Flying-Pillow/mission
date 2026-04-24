@@ -15,23 +15,19 @@ import type {
 	AgentCommand,
 	AgentPrompt
 } from '../agent/AgentRuntimeTypes.js';
+import { toMission, type Mission } from '../entities/Mission/Mission.js';
 
 import type { MissionDefaultAgentMode } from '../lib/daemonConfig.js';
-import { initializeRepository } from '../repository/initializeRepository.js';
+import { initializeRepository } from '../entities/Repository/initializeRepository.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
-import { createMissionArtifactEntity, createTaskArtifactEntity, type Artifact } from './Artifact.js';
-import { createStage, type Stage } from './Stage.js';
-import { toTask, type Task } from './Task.js';
-import { toAgentSession, type AgentSession } from './AgentSession.js';
 import { buildMissionTaskLaunchPrompt } from './taskLaunchPrompt.js';
-import { MISSION_ARTIFACT_KEYS } from '../workflow/manifest.js';
+import { getMissionStageDefinition } from '../workflow/manifest.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
-	getMissionStageDefinition,
 	type OperatorActionDescriptor,
 	type OperatorActionListSnapshot,
 	type MissionTowerProjection,
@@ -43,11 +39,9 @@ import {
 	type MissionDescriptor,
 	type MissionGateResult,
 	type MissionArtifactKey,
-	type MissionLifecycleState,
-	type MissionRecord,
 	type MissionStageId,
+	type MissionRecord,
 	type MissionStageStatus,
-	type MissionType,
 	type OperatorStatus,
 	type MissionTaskState
 } from '../types.js';
@@ -75,104 +69,6 @@ export type MissionWorkflowBindings = {
 	defaultModel?: string;
 	defaultMode?: MissionDefaultAgentMode;
 };
-
-export type Mission = {
-	missionId: string;
-	title?: string;
-	issueId?: number;
-	type?: MissionType;
-	operationalMode?: string;
-	branchRef?: string;
-	missionDir?: string;
-	missionRootDir?: string;
-	lifecycle?: MissionLifecycleState;
-	updatedAt?: string;
-	currentStageId?: MissionStageId;
-	artifacts: Artifact[];
-	stages: Stage[];
-	agentSessions: AgentSession[];
-	recommendedAction?: string;
-};
-
-export type MissionEntity = Mission;
-
-export function toMission(status: OperatorStatus): Mission {
-	const missionId = status.missionId?.trim();
-	if (!missionId) {
-		throw new Error('Mission entity conversion requires an OperatorStatus with missionId.');
-	}
-
-	const missionRootDir = status.missionRootDir ?? status.missionDir;
-	const productFiles = status.productFiles ?? {};
-	const currentStageId = status.workflow?.currentStageId ?? status.stage;
-	const artifacts: Artifact[] = [];
-
-	for (const artifactKey of MISSION_ARTIFACT_KEYS) {
-		const filePath = productFiles[artifactKey];
-		if (!filePath) {
-			continue;
-		}
-
-		artifacts.push(createMissionArtifactEntity({
-			artifactKey,
-			filePath,
-			...(missionRootDir ? { missionRootDir } : {})
-		}));
-	}
-
-	const stages: Stage[] = (status.stages ?? []).map((stage) => {
-		const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
-			.map((artifactKey) => productFiles[artifactKey]
-				? createMissionArtifactEntity({
-					artifactKey,
-					filePath: productFiles[artifactKey],
-					stageId: stage.stage,
-					...(missionRootDir ? { missionRootDir } : {})
-				})
-				: undefined)
-			.filter((artifact): artifact is Artifact => artifact !== undefined);
-		const tasks: Task[] = stage.tasks.map((task) => {
-			const entity = toTask(task);
-			if (task.filePath) {
-				artifacts.push(createTaskArtifactEntity({
-					taskId: task.taskId,
-					stageId: task.stage,
-					fileName: task.fileName,
-					filePath: task.filePath,
-					relativePath: task.relativePath
-				}));
-			}
-			return entity;
-		});
-		return createStage({
-			stageId: stage.stage,
-			lifecycle: stage.status,
-			isCurrentStage: currentStageId === stage.stage,
-			artifacts: stageArtifacts,
-			tasks
-		});
-	});
-
-	return {
-		missionId,
-		...(status.title ? { title: status.title } : {}),
-		...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
-		...(status.type ? { type: status.type } : {}),
-		...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
-		...(status.branchRef ? { branchRef: status.branchRef } : {}),
-		...(status.missionDir ? { missionDir: status.missionDir } : {}),
-		...(status.missionRootDir ? { missionRootDir: status.missionRootDir } : {}),
-		...(status.workflow?.lifecycle ? { lifecycle: status.workflow.lifecycle } : {}),
-		...(status.workflow?.updatedAt ? { updatedAt: status.workflow.updatedAt } : {}),
-		...(currentStageId ? { currentStageId } : {}),
-		artifacts,
-		stages,
-		agentSessions: (status.agentSessions ?? []).map((session) => toAgentSession(session)),
-		...(status.recommendedAction ? { recommendedAction: status.recommendedAction } : {})
-	};
-}
-
-export const toMissionEntity = toMission;
 
 export class MissionRuntime {
 	private static readonly SESSION_RECONCILE_TIMEOUT_MS = 1_000;
@@ -325,6 +221,7 @@ export class MissionRuntime {
 			reconcileSessions: this.hasActiveAgentSessions()
 		});
 		this.syncAgentSessions(document);
+		this.lastKnownStatus = await this.buildStatus(document);
 		const snapshot = {
 			actions: await this.buildActionList(document),
 			revision: this.buildActionRevision(document)
@@ -487,7 +384,7 @@ export class MissionRuntime {
 		const warnings: string[] = [];
 		const currentBranch = this.adapter.getCurrentBranch(this.adapter.getMissionWorkspacePath(this.missionDir));
 		const gateIntent = intent === 'commit' ? 'implement' : intent;
-		const gate = status.workflow?.gates.find((candidate) => candidate.intent === gateIntent);
+		const gate = status.workflow?.gates.find((candidate: { intent: GateIntent }) => candidate.intent === gateIntent);
 
 		if (this.isDelivered(status.stages ?? [])) {
 			errors.push('This mission has already been delivered.');
@@ -1356,7 +1253,7 @@ export class MissionRuntime {
 		taskId: string
 	): Promise<NonNullable<OperatorStatus['workflow']>['tasks'][number]> {
 		const status = this.lastKnownStatus ?? (await this.status());
-		const task = status.workflow?.tasks.find((candidate) => candidate.taskId === taskId);
+		const task = status.workflow?.tasks.find((candidate: { taskId: string }) => candidate.taskId === taskId);
 		if (!task) {
 			throw new Error(`Mission workflow task '${taskId}' does not exist.`);
 		}

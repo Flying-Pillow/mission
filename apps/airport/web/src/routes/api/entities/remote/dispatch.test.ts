@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
     AirportHomeSnapshot,
     GitHubIssueDetail,
-    RepositorySurfaceSnapshot,
+    RepositorySnapshot,
     TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
@@ -23,11 +23,11 @@ import {
 
 function createGateway(): EntityRemoteGateway & {
     getAirportHomeSnapshot: ReturnType<typeof vi.fn>;
-    getRepositorySurfaceSnapshot: ReturnType<typeof vi.fn>;
-    getRepositoryIssues: ReturnType<typeof vi.fn>;
-    getRepositoryIssueDetail: ReturnType<typeof vi.fn>;
-    createMissionFromIssue: ReturnType<typeof vi.fn>;
-    createMissionFromBrief: ReturnType<typeof vi.fn>;
+    readRepository: ReturnType<typeof vi.fn>;
+    listRepositoryIssues: ReturnType<typeof vi.fn>;
+    readRepositoryIssue: ReturnType<typeof vi.fn>;
+    startMissionFromIssue: ReturnType<typeof vi.fn>;
+    startMissionFromBrief: ReturnType<typeof vi.fn>;
 } {
     const airportHome: AirportHomeSnapshot = {
         repositories: [
@@ -56,19 +56,19 @@ function createGateway(): EntityRemoteGateway & {
         labels: ['bug'],
         assignees: ['octocat']
     };
-    const repositorySurface: RepositorySurfaceSnapshot = {
+    const repositorySnapshot: RepositorySnapshot = {
         repository: airportHome.repositories[0],
         operationalMode: 'repository',
         missions: []
-    } as RepositorySurfaceSnapshot;
+    } as RepositorySnapshot;
 
     return {
         getAirportHomeSnapshot: vi.fn(async () => airportHome),
-        getRepositorySurfaceSnapshot: vi.fn(async () => repositorySurface),
-        getRepositoryIssues: vi.fn(async () => issueList),
-        getRepositoryIssueDetail: vi.fn(async () => issueDetail),
-        createMissionFromIssue: vi.fn(async () => ({ missionId: 'mission-42' })),
-        createMissionFromBrief: vi.fn(async () => ({ missionId: 'mission-brief' }))
+        readRepository: vi.fn(async () => repositorySnapshot),
+        listRepositoryIssues: vi.fn(async () => issueList),
+        readRepositoryIssue: vi.fn(async () => issueDetail),
+        startMissionFromIssue: vi.fn(async () => ({ missionId: 'mission-42' })),
+        startMissionFromBrief: vi.fn(async () => ({ missionId: 'mission-brief' }))
     };
 }
 
@@ -162,15 +162,15 @@ describe('entity remote dispatch', () => {
         ).resolves.toEqual(expect.objectContaining({ number: 42 }));
 
         expect(gateway.getAirportHomeSnapshot).toHaveBeenCalledTimes(1);
-        expect(gateway.getRepositorySurfaceSnapshot).toHaveBeenCalledWith({
+        expect(gateway.readRepository).toHaveBeenCalledWith({
             repositoryId: 'repo-1',
             repositoryRootPath: '/workspace/repo-1'
         });
-        expect(gateway.getRepositoryIssues).toHaveBeenCalledWith({
+        expect(gateway.listRepositoryIssues).toHaveBeenCalledWith({
             repositoryId: 'repo-1',
             repositoryRootPath: '/workspace/repo-1'
         });
-        expect(gateway.getRepositoryIssueDetail).toHaveBeenCalledWith({
+        expect(gateway.readRepositoryIssue).toHaveBeenCalledWith({
             repositoryId: 'repo-1',
             repositoryRootPath: '/workspace/repo-1',
             issueNumber: 42
@@ -214,7 +214,7 @@ describe('entity remote dispatch', () => {
 
     it('fails explicitly when a mission mutation does not return a missionId', async () => {
         const gateway = createGateway();
-        gateway.createMissionFromIssue.mockResolvedValueOnce({});
+        gateway.startMissionFromIssue.mockResolvedValueOnce({});
 
         await expect(
             executeEntityCommand(gateway, {

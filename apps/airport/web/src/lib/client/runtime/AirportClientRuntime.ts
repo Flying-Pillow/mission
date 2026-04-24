@@ -3,7 +3,7 @@ import type {
     AirportRuntimeEventEnvelope,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
-import { Mission } from '$lib/client/entities/Mission.svelte.js';
+import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 import { MissionCommandTransport } from '$lib/client/runtime/transport/MissionCommandTransport';
 import { MissionRuntimeTransport } from '$lib/client/runtime/transport/MissionRuntimeTransport';
@@ -51,7 +51,7 @@ export class AirportClientRuntime {
         return this.missionTransport.observeMissionRuntime({
             missionId: input.missionId,
             onEvent: async (event) => {
-                const mission = await this.refreshMission(input.missionId);
+                const mission = await this.getMission(input.missionId);
                 input.onUpdate?.(mission, event);
             },
             onError: input.onError

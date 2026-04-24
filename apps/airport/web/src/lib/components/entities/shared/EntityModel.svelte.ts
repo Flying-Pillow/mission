@@ -1,4 +1,4 @@
-// /apps/airport/web/src/lib/client/entities/EntityModel.svelte.ts: Shared contracts and reconciliation registry for OO client entities.
+// /apps/airport/web/src/lib/components/entities/shared/EntityModel.svelte.ts: Shared contracts and reconciliation registry for OO client entities.
 export interface EntityModel<TSnapshot, TId extends string = string> {
     readonly id: TId;
     updateFromSnapshot(snapshot: TSnapshot): this;

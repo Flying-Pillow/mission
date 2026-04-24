@@ -40,47 +40,8 @@ export * from './agent/events.js';
 export * from './settings/index.js';
 export * from './system/SystemStatus.js';
 export {
-    toMissionReference,
-    toRepository
-} from './repository/Repository.js';
-export type {
-    MissionReference as RepositoryMissionReference,
-    Repository as RepositoryEntity
-} from './repository/Repository.js';
-export {
-    Artifact,
-    createMissionArtifactEntity,
-    createTaskArtifactEntity
-} from './mission/Artifact.js';
-export type {
-    ArtifactEntity,
-    ArtifactEntityKind
-} from './mission/Artifact.js';
-export {
-    toAgentSession
-} from './mission/AgentSession.js';
-export type {
-    AgentSession as MissionAgentSession
-} from './mission/AgentSession.js';
-export {
-    MissionRuntime,
-    toMission,
-    toMissionEntity
+    MissionRuntime
 } from './mission/Mission.js';
 export type {
-    MissionEntity,
     MissionWorkflowBindings
 } from './mission/Mission.js';
-export {
-    toTask
-} from './mission/Task.js';
-export type {
-    Task as TaskEntity
-} from './mission/Task.js';
-export {
-    createStage
-} from './mission/Stage.js';
-export type {
-    Stage as StageEntity
-} from './mission/Stage.js';
-export type * from './types.js';

@@ -3,6 +3,7 @@ import type {
     AgentCommand as AgentCommand,
     AgentPrompt as AgentPrompt,
     AgentSession as AgentSessionSnapshot,
+    Artifact as ArtifactRecord,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import type {
@@ -11,24 +12,23 @@ import type {
     OperatorActionQueryContext,
     OperatorStatus
 } from '@flying-pillow/mission-core/types.js';
-import { AgentSession } from '$lib/client/entities/AgentSession.svelte.js';
-import { EntityRegistry, type EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
-import { Stage, type StageSnapshot } from '$lib/client/entities/Stage.svelte.js';
+import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
+import {
+    Artifact,
+    type ArtifactDocumentPayload as MissionDocumentPayload,
+    type ArtifactSnapshot
+} from '$lib/components/entities/Artifact/Artifact.svelte.js';
+import { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Stage, type StageSnapshot } from '$lib/components/entities/Stage/Stage.svelte.js';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 import type { MissionFileTreeResponse } from '$lib/types/mission-file-tree';
 import {
     Task,
     type TaskSnapshot,
     type TaskStartOptions
-} from '$lib/client/entities/Task.svelte.js';
+} from '$lib/components/entities/Task/Task.svelte.js';
 
 export type MissionSnapshotLoader = (missionId: string) => Promise<MissionRuntimeSnapshot>;
-
-export type MissionDocumentPayload = {
-    filePath: string;
-    content: string;
-    updatedAt?: string;
-};
 
 export type MissionCommandGateway = {
     pauseMission(input: {
@@ -185,6 +185,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
     private readonly sessions = new EntityRegistry<string, AgentSessionSnapshot, AgentSession>();
     private readonly stages = new EntityRegistry<string, StageSnapshot, Stage>();
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
+    private readonly artifacts = new EntityRegistry<string, ArtifactSnapshot, Artifact>();
 
     public constructor(
         snapshot: MissionRuntimeSnapshot,
@@ -197,6 +198,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
         this.applySessionSnapshots(snapshot.sessions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
+        this.applyArtifactSnapshots(snapshot);
     }
 
     private get snapshot(): MissionRuntimeSnapshot {
@@ -358,6 +360,10 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
         return this.sessions.values();
     }
 
+    public listArtifacts(): Artifact[] {
+        return this.artifacts.values();
+    }
+
     public listTasks(): Task[] {
         return this.tasks.values();
     }
@@ -372,6 +378,43 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
 
     public getSession(sessionId: string): AgentSession | undefined {
         return this.sessions.get(sessionId);
+    }
+
+    public getArtifact(filePath: string): Artifact | undefined {
+        return this.artifacts.get(filePath);
+    }
+
+    public resolveArtifact(input: {
+        filePath: string;
+        label?: string;
+        stageId?: string;
+        taskId?: string;
+    }): Artifact {
+        const snapshot: ArtifactSnapshot = {
+            filePath: input.filePath,
+            ...(input.label?.trim() ? { label: input.label.trim() } : {}),
+            ...(input.stageId?.trim() ? { stageId: input.stageId.trim() } : {}),
+            ...(input.taskId?.trim() ? { taskId: input.taskId.trim() } : {})
+        };
+        const knownArtifacts = this.artifacts.values().map((artifact) => artifact.toSnapshot());
+        const nextArtifacts = knownArtifacts.some((artifact) => artifact.filePath === snapshot.filePath)
+            ? knownArtifacts.map((artifact) =>
+                artifact.filePath === snapshot.filePath
+                    ? {
+                        ...artifact,
+                        ...snapshot
+                    }
+                    : artifact
+            )
+            : [...knownArtifacts, snapshot];
+
+        this.artifacts.reconcile(
+            nextArtifacts,
+            (artifactSnapshot) => artifactSnapshot.filePath,
+            (artifactSnapshot) => this.createArtifactEntity(artifactSnapshot)
+        );
+
+        return this.getArtifact(snapshot.filePath) as Artifact;
     }
 
     public async refresh(): Promise<this> {
@@ -391,6 +434,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
         this.applySessionSnapshots(snapshot.sessions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
+        this.applyArtifactSnapshots(snapshot);
         return this;
     }
 
@@ -508,5 +552,49 @@ export class Mission implements EntityModel<MissionRuntimeSnapshot> {
             (stage) => stage.stageId,
             (stage) => new Stage(stage, (taskId) => this.tasks.get(taskId))
         );
+    }
+
+    private applyArtifactSnapshots(snapshot: MissionRuntimeSnapshot): void {
+        const artifactSnapshots: ArtifactSnapshot[] = (snapshot.status.workflow?.stages ?? []).flatMap((stage) => {
+            const stageArtifacts = stage.artifacts.map((artifact) => ({
+                filePath: artifact.path,
+                label: artifact.label,
+                stageId: stage.stageId
+            }));
+            const taskArtifacts = stage.tasks.flatMap((task) =>
+                task.artifacts.map((artifact: ArtifactRecord) => ({
+                    filePath: artifact.path,
+                    label: artifact.label,
+                    stageId: stage.stageId,
+                    taskId: task.taskId
+                }))
+            );
+
+            return [...stageArtifacts, ...taskArtifacts];
+        });
+
+        this.artifacts.reconcile(
+            artifactSnapshots,
+            (artifactSnapshot) => artifactSnapshot.filePath,
+            (artifactSnapshot) => this.createArtifactEntity(artifactSnapshot)
+        );
+    }
+
+    private createArtifactEntity(snapshot: ArtifactSnapshot): Artifact {
+        return new Artifact(snapshot, {
+            readArtifact: async (filePath) => {
+                return this.commands.readMissionDocument({
+                    missionId: this.missionId,
+                    path: filePath
+                });
+            },
+            writeArtifact: async (filePath, content) => {
+                return this.commands.writeMissionDocument({
+                    missionId: this.missionId,
+                    path: filePath,
+                    content
+                });
+            }
+        });
     }
 }

@@ -1,16 +1,16 @@
 import type {
     AirportRuntimeEventEnvelope,
     MissionRuntimeSnapshot,
-    RepositorySurfaceSnapshot
+    RepositorySnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
-    repositorySchema,
-    repositorySurfaceSnapshotSchema
+    repositorySnapshotSchema,
+    type GitHubVisibleRepository
 } from '@flying-pillow/mission-core/airport/runtime';
 import { z } from 'zod/v4';
 import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
-import { Repository } from '$lib/client/entities/Repository.svelte.js';
-import type { Mission } from '$lib/client/entities/Mission.svelte.js';
+import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
+import type { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { setApp } from '$lib/client/globals';
 import { AirportClientRuntime } from '$lib/client/runtime/AirportClientRuntime';
 import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
@@ -18,13 +18,12 @@ import { qry } from '../../routes/api/entities/remote/query.remote';
 import {
     addAirportRepository,
     getAirportRouteData,
-    getMissionSnapshotBundle,
-    getRepositorySnapshotBundle,
     logoutAirportSession,
+    readVisibleGitHubRepositories,
+    readMissionSnapshotBundle,
     type AddAirportRepositoryResult,
     type AirportRouteData,
-    type MissionSnapshotBundle,
-    type RepositorySnapshotBundle
+    type MissionSnapshotBundle
 } from '../../routes/api/airport/airport.remote';
 import type { SidebarRepositorySummary } from '$lib/components/entities/types';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
@@ -39,21 +38,25 @@ type AddRepositoryState = {
     githubRepository?: string;
 };
 
+const repositorySummarySchema = repositorySnapshotSchema.shape.repository;
+
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
     private readonly runtimes = new Map<string, AirportClientRuntime>();
     #isInitialized = false;
     #repositoryLoadPromise: Promise<SidebarRepositorySummary[]> | null = null;
+    #githubRepositoryLoadPromise: Promise<GitHubVisibleRepository[]> | null = null;
     public airportHomeState = $state<AirportRouteData | undefined>();
     public airportHomeLoading = $state(false);
     public airportHomeError = $state<string | undefined>();
+    public githubRepositoriesState = $state<GitHubVisibleRepository[]>([]);
+    public githubRepositoriesLoading = $state(false);
+    public githubRepositoriesError = $state<string | undefined>();
     public repositoriesLoading = $state(false);
     public repositoriesError = $state<string | undefined>();
     public addRepositoryState = $state<AddRepositoryState | undefined>();
     public addRepositoryPending = $state(false);
     public repositoriesState = $state<SidebarRepositorySummary[]>([]);
-    public activeRepository = $state<Repository | undefined>();
-    public activeMission = $state<Mission | undefined>();
     public activeRepositoryId = $state<string | undefined>();
     public activeRepositoryRootPath = $state<string | undefined>();
     public activeMissionId = $state<string | undefined>();
@@ -72,19 +75,16 @@ export class AirportApplication {
             return;
         }
 
-        await this.loadRepositories();
         this.#isInitialized = true;
     }
 
     public hydrateRepositoryData(
-        snapshot: RepositorySurfaceSnapshot
+        snapshot: RepositorySnapshot
     ): Repository {
         const repositoryId = snapshot.repository.repositoryId;
         const existing = this.repositories.get(repositoryId);
         if (existing) {
             existing.applyData(snapshot);
-            this.setActiveRepository(existing);
-            this.setActiveMission(existing.selectedMission);
             return existing;
         }
 
@@ -93,8 +93,6 @@ export class AirportApplication {
             resolveMission: (snapshot) => this.getRuntime().hydrateMissionSnapshot(snapshot)
         });
         this.repositories.set(repositoryId, created);
-        this.setActiveRepository(created);
-        this.setActiveMission(created.selectedMission);
         return created;
     }
 
@@ -104,18 +102,25 @@ export class AirportApplication {
             repositoryRootPath?: string;
         } = {}
     ) {
-        const mission = this.getRuntime(input.repositoryRootPath).hydrateMissionSnapshot(snapshot);
-        this.setActiveMission(mission);
-        return mission;
+        return this.getRuntime(input.repositoryRootPath).hydrateMissionSnapshot(snapshot);
+    }
+
+    public resolveRepository(repositoryId: string): Repository | undefined {
+        return this.repositories.get(repositoryId);
+    }
+
+    public seedRepositoryFromSummary(summary: SidebarRepositorySummary): Repository {
+        return this.hydrateRepositoryData({
+            repository: repositorySummarySchema.parse(summary),
+            missions: summary.missions ? structuredClone(summary.missions) : []
+        });
     }
 
     public async refreshMission(input: {
         missionId: string;
         repositoryRootPath?: string;
     }) {
-        const mission = await this.getRuntime(input.repositoryRootPath).refreshMission(input.missionId);
-        this.setActiveMission(mission);
-        return mission;
+        return await this.getRuntime(input.repositoryRootPath).refreshMission(input.missionId);
     }
 
     public observeMission(input: {
@@ -127,15 +132,16 @@ export class AirportApplication {
         return this.getRuntime(input.repositoryRootPath).observeMission(input);
     }
 
-    public setActiveRepository(repository?: Repository): void {
-        this.activeRepository = repository;
-        this.activeRepositoryId = repository?.repositoryId;
-        this.activeRepositoryRootPath = repository?.repositoryRootPath;
+    public setActiveRepositorySelection(input?: {
+        repositoryId?: string;
+        repositoryRootPath?: string;
+    }): void {
+        this.activeRepositoryId = input?.repositoryId?.trim() || undefined;
+        this.activeRepositoryRootPath = input?.repositoryRootPath?.trim() || undefined;
     }
 
-    public setActiveMission(mission?: Mission): void {
-        this.activeMission = mission;
-        this.activeMissionId = mission?.missionId;
+    public setActiveMissionSelection(missionId?: string): void {
+        this.activeMissionId = missionId?.trim() || undefined;
     }
 
     public setActiveMissionOutline(outline?: ActiveMissionOutline): void {
@@ -187,6 +193,45 @@ export class AirportApplication {
         return data;
     }
 
+    public async loadGitHubRepositories(input: {
+        force?: boolean;
+    } = {}): Promise<GitHubVisibleRepository[]> {
+        if (!input.force) {
+            if (this.#githubRepositoryLoadPromise) {
+                return await this.#githubRepositoryLoadPromise;
+            }
+
+            if (this.githubRepositoriesState.length > 0 || this.githubRepositoriesError) {
+                return this.githubRepositoriesState;
+            }
+        }
+
+        this.githubRepositoriesLoading = true;
+        this.githubRepositoriesError = undefined;
+
+        const loadPromise = readVisibleGitHubRepositories({})
+            .then((result) => {
+                this.githubRepositoriesState = structuredClone(result.githubRepositories);
+                this.githubRepositoriesError = result.githubRepositoriesError;
+                return this.githubRepositoriesState;
+            })
+            .catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.githubRepositoriesState = [];
+                this.githubRepositoriesError = message;
+                throw error;
+            })
+            .finally(() => {
+                this.githubRepositoriesLoading = false;
+                if (this.#githubRepositoryLoadPromise === loadPromise) {
+                    this.#githubRepositoryLoadPromise = null;
+                }
+            });
+
+        this.#githubRepositoryLoadPromise = loadPromise;
+        return await loadPromise;
+    }
+
     public async addRepository(input: {
         repositoryPath: string;
         githubRepository?: string;
@@ -226,27 +271,31 @@ export class AirportApplication {
     }
 
     public async openRepositoryRoute(repositoryId: string): Promise<Repository> {
-        const repository = this.syncRepositorySnapshotBundle(
-            await getRepositorySnapshotBundle({ repositoryId }).run()
-        );
-        this.setActiveRepository(repository);
-        this.setActiveMission(repository.selectedMission);
-        this.setActiveMissionOutline(undefined);
-        this.setActiveMissionSelectedNodeId(undefined);
-        return repository;
+        const [airportRepositories, repositorySnapshot] = await Promise.all([
+            this.loadRepositories(),
+            this.loadRepositorySnapshot({ repositoryId })
+        ]);
+
+        return this.syncRepositoryRouteState({
+            airportRepositories,
+            repositorySnapshot
+        });
     }
 
-    public syncRepositorySnapshotBundle(
-        input: RemoteQueryValue<RepositorySnapshotBundle> | undefined
-    ): Repository {
-        const bundle = this.requireRepositorySnapshotBundle(this.unwrapRemoteQueryValue(input));
-        const repository = this.hydrateRepositoryData(bundle.repositorySnapshot);
+    public syncRepositoryRouteState(input: {
+        airportRepositories: SidebarRepositorySummary[];
+        repositorySnapshot: RepositorySnapshot;
+    }): Repository {
+        const repository = this.hydrateRepositoryData(input.repositorySnapshot);
         this.setRepositories(this.mergeRepositories(
-            bundle.airportRepositories,
-            bundle.repositorySnapshot
+            input.airportRepositories,
+            input.repositorySnapshot
         ));
-        this.setActiveRepository(repository);
-        this.setActiveMission(repository.selectedMission);
+        this.setActiveRepositorySelection({
+            repositoryId: repository.repositoryId,
+            repositoryRootPath: repository.repositoryRootPath
+        });
+        this.setActiveMissionSelection(repository.selectedMission?.missionId);
         this.setActiveMissionOutline(undefined);
         this.setActiveMissionSelectedNodeId(undefined);
         return repository;
@@ -257,7 +306,7 @@ export class AirportApplication {
         missionId: string;
     }): Promise<Mission> {
         return this.syncMissionSnapshotBundle(
-            await getMissionSnapshotBundle(input).run()
+            await readMissionSnapshotBundle(input)
         );
     }
 
@@ -279,8 +328,11 @@ export class AirportApplication {
             worktreePath: bundle.missionWorktreePath
         });
 
-        this.setActiveRepository(repository);
-        this.setActiveMission(mission);
+        this.setActiveRepositorySelection({
+            repositoryId: repository.repositoryId,
+            repositoryRootPath: repository.repositoryRootPath
+        });
+        this.setActiveMissionSelection(mission.missionId);
         this.setActiveMissionOutline(toMissionOutline(bundle.missionControl));
         return mission;
     }
@@ -297,7 +349,7 @@ export class AirportApplication {
             controlSnapshot: input.controlSnapshot,
             worktreePath: input.repositoryRootPath
         });
-        this.setActiveMission(mission);
+        this.setActiveMissionSelection(mission.missionId);
         this.setActiveMissionOutline(toMissionOutline(input.controlSnapshot));
         return mission;
     }
@@ -307,16 +359,18 @@ export class AirportApplication {
         this.runtimes.clear();
         this.#isInitialized = false;
         this.#repositoryLoadPromise = null;
+        this.#githubRepositoryLoadPromise = null;
         this.airportHomeState = undefined;
         this.airportHomeLoading = false;
         this.airportHomeError = undefined;
+        this.githubRepositoriesState = [];
+        this.githubRepositoriesLoading = false;
+        this.githubRepositoriesError = undefined;
         this.repositoriesLoading = false;
         this.repositoriesError = undefined;
         this.addRepositoryState = undefined;
         this.addRepositoryPending = false;
         this.repositoriesState = [];
-        this.activeRepository = undefined;
-        this.activeMission = undefined;
         this.activeRepositoryId = undefined;
         this.activeRepositoryRootPath = undefined;
         this.activeMissionId = undefined;
@@ -397,16 +451,8 @@ export class AirportApplication {
         throw new Error('Mission snapshot bundle is missing repository snapshot or mission runtime state.');
     }
 
-    private requireRepositorySnapshotBundle(input: RepositorySnapshotBundle | undefined): RepositorySnapshotBundle {
-        if (input?.repositorySnapshot?.repository && Array.isArray(input.airportRepositories)) {
-            return input;
-        }
-
-        throw new Error('Repository snapshot bundle is missing repository snapshot or airport repositories.');
-    }
-
     private requireAirportRouteData(input: AirportRouteData | undefined): AirportRouteData {
-        if (input?.airportHome?.repositories && Array.isArray(input.githubRepositories)) {
+        if (input?.airportHome?.repositories) {
             return input;
         }
 
@@ -414,12 +460,12 @@ export class AirportApplication {
     }
 
     private async listRepositories(): Promise<SidebarRepositorySummary[]> {
-        return z.array(repositorySchema).parse(
+        return z.array(repositorySummarySchema).parse(
             await qry({
                 reference: { entity: 'Airport' },
                 method: 'listRepositories',
                 args: {}
-            }).run()
+            })
         );
     }
 
@@ -438,8 +484,8 @@ export class AirportApplication {
     private async loadRepositorySnapshot(input: {
         repositoryId: string;
         repositoryRootPath?: string;
-    }): Promise<RepositorySurfaceSnapshot> {
-        return repositorySurfaceSnapshotSchema.parse(
+    }): Promise<RepositorySnapshot> {
+        return repositorySnapshotSchema.parse(
             await qry({
                 reference: {
                     entity: 'Repository',
@@ -450,13 +496,13 @@ export class AirportApplication {
                 },
                 method: 'read',
                 args: {}
-            }).run()
+            })
         );
     }
 
     private mergeRepositories(
         repositories: SidebarRepositorySummary[],
-        repositorySnapshot: RepositorySurfaceSnapshot
+        repositorySnapshot: RepositorySnapshot
     ): SidebarRepositorySummary[] {
         return repositories.some(
             (candidate) => candidate.repositoryId === repositorySnapshot.repository.repositoryId
@@ -484,7 +530,7 @@ export class AirportApplication {
             ? snapshot.repositories.find(
                 (repository) => repository.repositoryRootPath === snapshot.selectedRepositoryRoot
             )
-            : undefined;
+            : snapshot.repositories[0];
         const activeRepository = selectedRepository
             ? this.repositories.get(selectedRepository.repositoryId)
             : undefined;
@@ -493,14 +539,18 @@ export class AirportApplication {
             activeRepository
             && activeRepository.repositoryRootPath === selectedRepository?.repositoryRootPath
         ) {
-            this.setActiveRepository(activeRepository);
+            this.setActiveRepositorySelection({
+                repositoryId: activeRepository.repositoryId,
+                repositoryRootPath: activeRepository.repositoryRootPath
+            });
         } else {
-            this.activeRepository = undefined;
-            this.activeRepositoryId = selectedRepository?.repositoryId;
-            this.activeRepositoryRootPath = selectedRepository?.repositoryRootPath;
+            this.setActiveRepositorySelection({
+                repositoryId: selectedRepository?.repositoryId,
+                repositoryRootPath: selectedRepository?.repositoryRootPath
+            });
         }
 
-        this.setActiveMission(undefined);
+        this.setActiveMissionSelection(undefined);
         this.setActiveMissionOutline(undefined);
         this.setActiveMissionSelectedNodeId(undefined);
     }

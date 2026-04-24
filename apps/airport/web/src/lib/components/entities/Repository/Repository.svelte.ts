@@ -1,8 +1,8 @@
-// /apps/airport/web/src/lib/client/entities/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
+// /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type {
     GitHubIssueDetail,
     MissionRuntimeSnapshot,
-    RepositorySurfaceSnapshot,
+    RepositorySnapshot,
     TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
@@ -10,25 +10,25 @@ import {
     trackedIssueSummarySchema
 } from '@flying-pillow/mission-core/airport/runtime';
 import { z } from 'zod/v4';
-import { cmd } from '../../../routes/api/entities/remote/command.remote';
-import { qry } from '../../../routes/api/entities/remote/query.remote';
-import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
-import { Mission } from '$lib/client/entities/Mission.svelte.js';
+import { cmd } from '../../../../routes/api/entities/remote/command.remote';
+import { qry } from '../../../../routes/api/entities/remote/query.remote';
+import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 
 export type RepositoryMissionResolver = (snapshot: MissionRuntimeSnapshot) => Mission;
 export type RepositorySnapshotLoader = (input: {
     repositoryId: string;
     repositoryRootPath?: string;
-}) => Promise<RepositorySurfaceSnapshot>;
+}) => Promise<RepositorySnapshot>;
 
-export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
-    private dataState = $state<RepositorySurfaceSnapshot | undefined>();
+export class Repository implements EntityModel<RepositorySnapshot> {
+    private dataState = $state<RepositorySnapshot | undefined>();
     private readonly loadSnapshot: RepositorySnapshotLoader;
     private readonly resolveMission: RepositoryMissionResolver;
     private selectedMissionState = $state<Mission | undefined>();
 
     public constructor(
-        snapshot: RepositorySurfaceSnapshot,
+        snapshot: RepositorySnapshot,
         input: {
             loadSnapshot: RepositorySnapshotLoader;
             resolveMission: RepositoryMissionResolver;
@@ -40,7 +40,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         this.selectedMissionModel = this.createSelectedMission(snapshot.selectedMission);
     }
 
-    private get data(): RepositorySurfaceSnapshot {
+    private get data(): RepositorySnapshot {
         const data = this.dataState;
         if (!data) {
             throw new Error('Repository data is not initialized.');
@@ -49,7 +49,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         return data;
     }
 
-    private set data(snapshot: RepositorySurfaceSnapshot) {
+    private set data(snapshot: RepositorySnapshot) {
         this.dataState = structuredClone(snapshot);
     }
 
@@ -77,7 +77,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         return this.data.repository.label;
     }
 
-    public get summary(): RepositorySurfaceSnapshot['repository'] {
+    public get summary(): RepositorySnapshot['repository'] {
         return structuredClone($state.snapshot(this.data.repository));
     }
 
@@ -89,7 +89,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         return this.selectedMissionModel;
     }
 
-    public get missions(): RepositorySurfaceSnapshot['missions'] {
+    public get missions(): RepositorySnapshot['missions'] {
         return structuredClone($state.snapshot(this.data.missions));
     }
 
@@ -119,7 +119,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
             : `${this.data.missions.length} missions`;
     }
 
-    public updateFromSnapshot(snapshot: RepositorySurfaceSnapshot): this {
+    public updateFromSnapshot(snapshot: RepositorySnapshot): this {
         this.data = snapshot;
 
         if (!snapshot.selectedMission) {
@@ -136,7 +136,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         return this;
     }
 
-    public applyData(snapshot: RepositorySurfaceSnapshot): this {
+    public applyData(snapshot: RepositorySnapshot): this {
         return this.updateFromSnapshot(snapshot);
     }
 
@@ -149,39 +149,34 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
         );
     }
 
-    public applySummary(input: RepositorySurfaceSnapshot['repository']): this {
-        const dataSnapshot = $state.snapshot(this.dataState);
-        if (!dataSnapshot) {
-            throw new Error('Repository data is not initialized.');
-        }
-
+    public applySummary(input: RepositorySnapshot['repository']): this {
         this.data = {
-            ...dataSnapshot,
+            ...this.toSnapshot(),
             repository: structuredClone(input)
         };
         return this;
     }
 
-    public toSnapshot(): RepositorySurfaceSnapshot {
+    public toSnapshot(): RepositorySnapshot {
         return structuredClone($state.snapshot(this.data));
-    }
-
-    public toJSON(): RepositorySurfaceSnapshot {
-        return this.toSnapshot();
     }
 
     public async listIssues(): Promise<TrackedIssueSummary[]> {
         return z.array(trackedIssueSummarySchema).parse(
-            await qry({
-                reference: {
-                    entity: 'Repository',
-                    repositoryId: this.repositoryId,
-                    repositoryRootPath: this.repositoryRootPath
-                },
-                method: 'listIssues',
-                args: {}
-            }).run()
+            await this.listIssuesQuery().run()
         );
+    }
+
+    public listIssuesQuery() {
+        return qry({
+            reference: {
+                entity: 'Repository',
+                repositoryId: this.repositoryId,
+                repositoryRootPath: this.repositoryRootPath
+            },
+            method: 'listIssues',
+            args: {}
+        });
     }
 
     public async getIssue(issueNumber: number): Promise<GitHubIssueDetail> {

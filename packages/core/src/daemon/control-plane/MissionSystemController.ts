@@ -20,7 +20,7 @@ import { peekCachedSystemStatus } from '../../system/SystemStatus.js';
 import { ContextGraphController } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryLayoutRegistry } from './RepositoryLayoutRegistry.js';
-import { RepositoryManager } from '../../repository/RepositoryManager.js';
+import { RepositoryManager } from '../../entities/Repository/RepositoryManager.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
 import { findRegisteredRepositoryById } from '../../lib/config.js';
 

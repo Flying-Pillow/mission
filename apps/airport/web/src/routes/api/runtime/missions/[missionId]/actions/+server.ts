@@ -25,7 +25,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
         : query.repositoryId
             ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
             : undefined;
-    const snapshot = await gateway.getMissionActionSnapshot({
+    const snapshot = await gateway.entities.listMissionActions({
         missionId,
         context: query,
         ...(repository ? { surfacePath: repository.repositoryRootPath } : {})

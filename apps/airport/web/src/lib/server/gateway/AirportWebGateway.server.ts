@@ -29,7 +29,7 @@ import type {
     MissionSessionTerminalSnapshot,
     MissionTerminalSnapshot,
     MissionRuntimeSnapshot,
-    RepositorySurfaceSnapshot,
+    RepositorySnapshot,
 } from '@flying-pillow/mission-core';
 import {
     agentSessionSchema,
@@ -42,9 +42,10 @@ import {
     missionRuntimeSnapshotSchema,
     missionReferenceSchema,
     repositorySchema,
-    repositorySurfaceSnapshotSchema,
+    repositorySnapshotSchema,
     trackedIssueSummarySchema
 } from '@flying-pillow/mission-core';
+import { operatorStatusSchema } from '../../types/mission-control.js';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
@@ -59,6 +60,62 @@ const GITHUB_ISSUE_LIST_TIMEOUT_MS = 12_000;
 
 export class AirportWebGateway {
     public constructor(private readonly locals?: App.Locals) { }
+
+    public readonly airport = {
+        getHomeSnapshot: () => this.getAirportHomeSnapshot(),
+        listVisibleGitHubRepositories: (surfacePath?: string) => this.listVisibleGitHubRepositories(surfacePath),
+        inspectRepositoryPath: (repositoryPath: string) => this.inspectRepositoryPath(repositoryPath),
+        addRepository: (repositoryPath: string) => this.addRepository(repositoryPath),
+        cloneGitHubRepository: (githubRepository: string, destinationPath: string) => this.cloneGitHubRepository(githubRepository, destinationPath)
+    };
+
+    public readonly entities = {
+        readRepository: (input: {
+            repositoryId: string;
+            repository?: Repository;
+            repositoryRootPath?: string;
+            selectedMissionId?: string;
+        }) => this.readRepository(input),
+        listRepositoryIssues: (input: {
+            repositoryId: string;
+            repositoryRootPath?: string;
+        }) => this.listRepositoryIssues(input),
+        readRepositoryIssue: (input: {
+            repositoryId: string;
+            repositoryRootPath?: string;
+            issueNumber: number;
+        }) => this.readRepositoryIssue(input),
+        readMissionRuntime: (missionId: string, surfacePath?: string) => this.readMissionRuntime(missionId, surfacePath),
+        readMissionControl: (input: {
+            missionId: string;
+            surfacePath?: string;
+        }) => this.readMissionControl(input),
+        readMissionStatus: (missionId: string, surfacePath?: string) => this.readMissionStatus(missionId, surfacePath),
+        listMissionActions: (input: {
+            missionId: string;
+            context?: OperatorActionQueryContext;
+            surfacePath?: string;
+        }) => this.listMissionActions(input),
+        startMissionFromIssue: (input: {
+            repositoryId: string;
+            issueNumber: number;
+        }) => this.startMissionFromIssue(input),
+        startMissionFromBrief: (input: {
+            repositoryId: string;
+            brief: {
+                title: string;
+                body: string;
+                type: 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
+            };
+        }) => this.startMissionFromBrief(input),
+        executeMissionAction: (input: {
+            missionId: string;
+            actionId: string;
+            steps?: OperatorActionExecutionStep[];
+            terminalSessionName?: string;
+            surfacePath?: string;
+        }) => this.executeMissionAction(input)
+    };
 
     private async buildMissionRuntimeSnapshot(input: {
         api: DaemonApi;
@@ -85,7 +142,7 @@ export class AirportWebGateway {
         });
     }
 
-    public async getRepositoryIssues(input: {
+    public async listRepositoryIssues(input: {
         repositoryId: string;
         repositoryRootPath?: string;
     }): Promise<TrackedIssueSummary[]> {
@@ -119,7 +176,7 @@ export class AirportWebGateway {
         }
     }
 
-    public async getMissionRuntimeSnapshot(missionId: string, surfacePath?: string): Promise<MissionRuntimeSnapshot> {
+    public async readMissionRuntime(missionId: string, surfacePath?: string): Promise<MissionRuntimeSnapshot> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission runtime snapshot requires a missionId.');
@@ -137,7 +194,7 @@ export class AirportWebGateway {
         }
     }
 
-    public async getMissionControlSnapshot(input: {
+    public async readMissionControl(input: {
         missionId: string;
         surfacePath?: string;
     }): Promise<{
@@ -162,16 +219,16 @@ export class AirportWebGateway {
                 missionRuntime: await this.buildMissionRuntimeSnapshot({
                     api,
                     missionId,
-                    mission: toMissionEntity(operatorStatus)
+                    mission: toMissionEntity(operatorStatusSchema.parse(operatorStatus))
                 }),
-                operatorStatus
+                operatorStatus: operatorStatusSchema.parse(operatorStatus)
             };
         } finally {
             daemon.dispose();
         }
     }
 
-    public async getMissionOperatorStatus(missionId: string, surfacePath?: string): Promise<OperatorStatus> {
+    public async readMissionStatus(missionId: string, surfacePath?: string): Promise<OperatorStatus> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission operator status requires a missionId.');
@@ -180,17 +237,19 @@ export class AirportWebGateway {
         const daemon = await this.connectSharedDaemonClient(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            return await withTimeout(
-                api.mission.getStatus({ missionId: normalizedMissionId }),
-                MISSION_STATUS_TIMEOUT_MS,
-                'Mission operator status request timed out.'
+            return operatorStatusSchema.parse(
+                await withTimeout(
+                    api.mission.getStatus({ missionId: normalizedMissionId }),
+                    MISSION_STATUS_TIMEOUT_MS,
+                    'Mission operator status request timed out.'
+                )
             );
         } finally {
             daemon.dispose();
         }
     }
 
-    public async getMissionActionSnapshot(input: {
+    public async listMissionActions(input: {
         missionId: string;
         context?: OperatorActionQueryContext;
         surfacePath?: string;
@@ -451,7 +510,7 @@ export class AirportWebGateway {
             daemon = await this.connectSharedDaemonClient();
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
-                api.control.getStatus(),
+                api.control.getStatus({ includeMissions: false }),
                 AIRPORT_HOME_STATUS_TIMEOUT_MS,
                 'Airport home status request timed out.'
             );
@@ -465,10 +524,7 @@ export class AirportWebGateway {
                     : {}),
                 repositories: (status.availableRepositories ?? []).map((repository) =>
                     this.toRepositorySnapshot(repository)
-                ),
-                ...(status.system?.state.airport.repositoryRootPath
-                    ? { selectedRepositoryRoot: status.system.state.airport.repositoryRootPath }
-                    : {})
+                )
             });
         } catch {
             return this.createEmptyAirportHomeSnapshot();
@@ -568,12 +624,12 @@ export class AirportWebGateway {
         });
     }
 
-    public async getRepositorySurfaceSnapshot(input: {
+    public async readRepository(input: {
         repositoryId: string;
         repository?: Repository;
         repositoryRootPath?: string;
         selectedMissionId?: string;
-    }): Promise<RepositorySurfaceSnapshot> {
+    }): Promise<RepositorySnapshot> {
         const repository = input.repository
             ?? await this.resolveRepositoryCandidate({
                 repositoryId: input.repositoryId,
@@ -591,10 +647,10 @@ export class AirportWebGateway {
             const selectedMissionId = input.selectedMissionId?.trim();
             const selectedMission = selectedMissionId
                 && (status.availableMissions ?? []).some((candidate) => candidate.missionId === selectedMissionId)
-                ? await this.getMissionRuntimeSnapshot(selectedMissionId, repository.repositoryRootPath).catch(() => undefined)
+                ? await this.readMissionRuntime(selectedMissionId, repository.repositoryRootPath).catch(() => undefined)
                 : undefined;
 
-            return repositorySurfaceSnapshotSchema.parse({
+            return repositorySnapshotSchema.parse({
                 repository,
                 ...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
                 ...(status.control?.controlRoot ? { controlRoot: status.control.controlRoot } : {}),
@@ -612,7 +668,7 @@ export class AirportWebGateway {
         }
     }
 
-    public async getRepositoryIssueDetail(input: {
+    public async readRepositoryIssue(input: {
         repositoryId: string;
         repositoryRootPath?: string;
         issueNumber: number;
@@ -637,7 +693,7 @@ export class AirportWebGateway {
         }
     }
 
-    public async createMissionFromIssue(input: {
+    public async startMissionFromIssue(input: {
         repositoryId: string;
         issueNumber: number;
     }): Promise<OperatorStatus> {
@@ -661,7 +717,7 @@ export class AirportWebGateway {
         }
     }
 
-    public async createMissionFromBrief(input: {
+    public async startMissionFromBrief(input: {
         repositoryId: string;
         brief: {
             title: string;

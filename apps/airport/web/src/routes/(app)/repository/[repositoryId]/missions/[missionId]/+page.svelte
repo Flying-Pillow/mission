@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { page } from "$app/state";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
     import Mission from "$lib/components/entities/Mission/Mission.svelte";
@@ -23,6 +24,8 @@
         class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0"
     >
         <AirportHeader />
-        <Mission />
+        {#key `${page.params.repositoryId}:${page.params.missionId}`}
+            <Mission />
+        {/key}
     </SidebarInset>
 </SidebarProvider>

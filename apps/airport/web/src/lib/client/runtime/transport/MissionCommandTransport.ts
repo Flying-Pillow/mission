@@ -19,9 +19,13 @@ import type {
 import type {
     MissionCommandGateway,
     MissionDocumentPayload
-} from '$lib/client/entities/Mission.svelte.js';
+} from '$lib/components/entities/Mission/Mission.svelte.js';
 import type { MissionFileTreeResponse } from '$lib/types/mission-file-tree';
-import type { MissionControlSnapshot } from '$lib/types/mission-control';
+import {
+    operatorStatusSchema,
+    missionControlSnapshotSchema,
+    type MissionControlSnapshot
+} from '$lib/types/mission-control';
 
 export class MissionCommandTransport implements MissionCommandGateway {
     private readonly fetcher: typeof fetch;
@@ -161,7 +165,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission control refresh failed for '${normalizedMissionId}' (${response.status}).`);
         }
 
-        return (await response.json()) as MissionControlSnapshot;
+        return missionControlSnapshotSchema.parse(await response.json());
     }
 
     public async getMissionActions(input: {
@@ -223,7 +227,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission action '${normalizedActionId}' failed for '${normalizedMissionId}' (${response.status}).`);
         }
 
-        return (await response.json()) as OperatorStatus;
+        return operatorStatusSchema.parse(await response.json());
     }
 
     public async readMissionDocument(input: {

@@ -4,7 +4,7 @@
         missionTerminalSocketServerMessageSchema,
         type MissionTerminalSnapshot,
     } from "@flying-pillow/mission-core/airport/runtime";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import {
@@ -42,9 +42,9 @@
     }
 
     type TerminalResizeEvent = { cols: number; rows: number };
-    const appContext = getAppContext();
-    const mission = $derived(appContext.airport.activeMission);
-    const activeRepository = $derived(appContext.airport.activeRepository);
+    const missionScope = getScopedMissionContext();
+    const mission = $derived(missionScope.mission);
+    const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryId = $derived(activeRepository?.repositoryId ?? "");
     const repositoryRootPath = $derived(

@@ -1,5 +1,9 @@
 // /packages/core/src/airport/runtime.ts: Shared runtime API contracts and validators for Airport web surfaces.
 import { z } from 'zod';
+import {
+    missionReferenceSchema,
+    repositorySchema
+} from '../entities/Repository/RepositorySchema.js';
 
 const missionTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
 
@@ -236,22 +240,6 @@ export const missionStatusSummarySchema = z.object({
     recommendedAction: z.string().trim().min(1).optional()
 });
 
-export const repositorySchema = z.object({
-    repositoryId: z.string().trim().min(1),
-    repositoryRootPath: z.string().trim().min(1),
-    label: z.string().trim().min(1),
-    description: z.string(),
-    githubRepository: z.string().trim().min(1).optional()
-});
-
-export const missionReferenceSchema = z.object({
-    missionId: z.string().trim().min(1),
-    title: z.string().trim().min(1),
-    branchRef: z.string().trim().min(1),
-    createdAt: z.string().trim().min(1),
-    issueId: z.number().int().positive().optional()
-});
-
 export const trackedIssueSummarySchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
@@ -280,7 +268,7 @@ export const airportHomeSnapshotSchema = z.object({
     selectedRepositoryRoot: z.string().trim().min(1).optional()
 });
 
-export const repositorySurfaceSnapshotSchema = z.object({
+export const repositorySnapshotSchema = z.object({
     repository: repositorySchema,
     operationalMode: z.string().trim().min(1).optional(),
     controlRoot: z.string().trim().min(1).optional(),
@@ -467,7 +455,7 @@ export type Stage = z.infer<typeof stageSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type Repository = z.infer<typeof repositorySchema>;
 export type GitHubVisibleRepository = z.infer<typeof githubVisibleRepositorySchema>;
-export type RepositorySurfaceSnapshot = z.infer<typeof repositorySurfaceSnapshotSchema>;
+export type RepositorySnapshot = z.infer<typeof repositorySnapshotSchema>;
 export type GitHubIssueDetail = z.infer<typeof githubIssueDetailSchema>;
 export type MissionReference = z.infer<typeof missionReferenceSchema>;
 export type TrackedIssueSummary = z.infer<typeof trackedIssueSummarySchema>;

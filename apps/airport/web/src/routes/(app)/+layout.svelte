@@ -2,15 +2,16 @@
 	import type { Snippet } from "svelte";
 	import { browser } from "$app/environment";
 	import { page } from "$app/state";
-	import { onMount } from "svelte";
 	import {
 		createAppContext,
 		setAppContext,
 	} from "$lib/client/context/app-context.svelte";
+	import type { AirportRouteData } from "../../routes/api/airport/airport.remote";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 	const appContext = createAppContext(() => data.appContext);
+	const airportRouteData = $derived(data.airportRouteData as AirportRouteData | undefined);
 	let retryReloadTimer: ReturnType<typeof setTimeout> | undefined;
 	const showsRouteContent = $derived(true);
 
@@ -20,12 +21,12 @@
 		appContext.syncServerContext(data.appContext);
 	});
 
-	onMount(() => {
-		if (!browser) {
+	$effect(() => {
+		if (!airportRouteData) {
 			return;
 		}
 
-		void appContext.application.initialize();
+		appContext.application.syncAirportRouteData(airportRouteData);
 	});
 
 	$effect(() => {

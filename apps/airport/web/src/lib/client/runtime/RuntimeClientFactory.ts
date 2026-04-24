@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/client/runtime/RuntimeClientFactory.ts: Entity-agnostic runtime client base and factory wiring transport, cache, and entity materialization.
-import type { EntityModel } from '$lib/client/entities/EntityModel.svelte.js';
+import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
 

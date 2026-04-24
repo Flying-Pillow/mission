@@ -1,17 +1,17 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	getMissionCatalogPath,
 	getMissionDirectoryPath,
 	getMissionWorktreesPath
-} from '../lib/repoConfig.js';
-import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+} from '../../lib/repoConfig.js';
+import { getMissionDaemonSettingsPath } from '../../lib/daemonConfig.js';
 import { initializeRepository } from './initializeRepository.js';
-import { GitHubPlatformAdapter } from '../platforms/GitHubPlatformAdapter.js';
-import { refreshSystemStatus } from '../system/SystemStatus.js';
-import type { MissionPreparationStatus } from '../types.js';
+import { refreshSystemStatus } from '../../system/SystemStatus.js';
+import type { MissionPreparationStatus } from '../../types.js';
+import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
 
 export class RepositoryPreparationService {
 	public constructor(

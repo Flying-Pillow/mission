@@ -2,16 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 import type {
     MissionRuntimeSnapshot,
-    RepositorySurfaceSnapshot
+    RepositorySnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 
 const remoteMocks = vi.hoisted(() => ({
     qry: vi.fn(),
     getAirportRouteData: vi.fn(),
-    getRepositorySnapshotBundle: vi.fn(),
+    readVisibleGitHubRepositories: vi.fn(),
     addAirportRepository: vi.fn(),
     logoutAirportSession: vi.fn(),
-    getMissionSnapshotBundle: vi.fn(),
+    readMissionSnapshotBundle: vi.fn(),
     hydrateMissionSnapshot: vi.fn((snapshot: MissionRuntimeSnapshot) => ({
         missionId: snapshot.missionId,
         setRouteState: vi.fn()
@@ -21,23 +21,17 @@ const remoteMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../routes/api/entities/remote/query.remote', () => ({
-    qry: (input: unknown) => ({
-        run: () => remoteMocks.qry(input)
-    })
+    qry: (input: unknown) => remoteMocks.qry(input)
 }));
 
 vi.mock('../../routes/api/airport/airport.remote', () => ({
     getAirportRouteData: (input: unknown) => ({
         run: () => remoteMocks.getAirportRouteData(input)
     }),
-    getRepositorySnapshotBundle: (input: unknown) => ({
-        run: () => remoteMocks.getRepositorySnapshotBundle(input)
-    }),
+    readVisibleGitHubRepositories: (input: unknown) => remoteMocks.readVisibleGitHubRepositories(input),
     addAirportRepository: remoteMocks.addAirportRepository,
     logoutAirportSession: remoteMocks.logoutAirportSession,
-    getMissionSnapshotBundle: (input: unknown) => ({
-        run: () => remoteMocks.getMissionSnapshotBundle(input)
-    })
+    readMissionSnapshotBundle: (input: unknown) => remoteMocks.readMissionSnapshotBundle(input)
 }));
 
 vi.mock('$lib/client/runtime/AirportClientRuntime', () => ({
@@ -58,7 +52,7 @@ vi.mock('$lib/client/runtime/AirportClientRuntime', () => ({
 
 import { AirportApplication } from '$lib/client/Application.svelte';
 
-function createRepositorySurface(): RepositorySurfaceSnapshot {
+function createRepositorySnapshot(): RepositorySnapshot {
     return {
         repository: {
             repositoryId: 'repo-1',
@@ -67,7 +61,7 @@ function createRepositorySurface(): RepositorySurfaceSnapshot {
             description: 'mission'
         },
         missions: []
-    } as unknown as RepositorySurfaceSnapshot;
+    } as unknown as RepositorySnapshot;
 }
 
 function createMissionRuntimeSnapshot(): MissionRuntimeSnapshot {
@@ -114,10 +108,10 @@ describe('AirportApplication route hydration', () => {
         vi.clearAllMocks();
         remoteMocks.qry.mockReset();
         remoteMocks.getAirportRouteData.mockReset();
-        remoteMocks.getRepositorySnapshotBundle.mockReset();
+        remoteMocks.readVisibleGitHubRepositories.mockReset();
         remoteMocks.addAirportRepository.mockReset();
         remoteMocks.logoutAirportSession.mockReset();
-        remoteMocks.getMissionSnapshotBundle.mockReset();
+        remoteMocks.readMissionSnapshotBundle.mockReset();
         remoteMocks.refreshMission.mockResolvedValue(undefined);
         remoteMocks.observeMission.mockReturnValue({ dispose: vi.fn() });
     });
@@ -132,11 +126,9 @@ describe('AirportApplication route hydration', () => {
                         label: 'mission',
                         description: 'mission'
                     }
-                ],
-                selectedRepositoryRoot: '/repositories/Flying-Pillow/mission'
+                ]
             },
-            loginHref: '/login?redirectTo=/airport',
-            githubRepositories: []
+            loginHref: '/login?redirectTo=/airport'
         });
 
         const application = new AirportApplication();
@@ -148,29 +140,62 @@ describe('AirportApplication route hydration', () => {
         expect(remoteMocks.getAirportRouteData).toHaveBeenCalledWith({});
     });
 
-    it('loads repository summaries during singleton initialization', async () => {
-        remoteMocks.qry.mockResolvedValueOnce([
-            {
-                repositoryId: 'repo-1',
-                repositoryRootPath: '/repositories/Flying-Pillow/mission',
-                label: 'mission',
-                description: 'mission'
-            }
-        ]);
-
+    it('does not eagerly load repository summaries during singleton initialization', async () => {
         const application = new AirportApplication();
         await application.initialize();
 
-        expect(application.repositoriesState).toHaveLength(1);
+        expect(application.repositoriesState).toHaveLength(0);
+        expect(remoteMocks.qry).not.toHaveBeenCalled();
+    });
+
+    it('hydrates the repository route through the generic entity query boundary', async () => {
+        remoteMocks.qry.mockImplementation(async (input: unknown) => {
+            const invocation = input as {
+                reference?: { entity?: string; repositoryId?: string };
+                method?: string;
+            };
+
+            if (invocation.reference?.entity === 'Airport' && invocation.method === 'listRepositories') {
+                return [{
+                    repositoryId: 'repo-1',
+                    repositoryRootPath: '/repositories/Flying-Pillow/mission',
+                    label: 'mission',
+                    description: 'mission'
+                }];
+            }
+
+            if (invocation.reference?.entity === 'Repository' && invocation.method === 'read') {
+                return createRepositorySnapshot();
+            }
+
+            throw new Error(`Unexpected query invocation: ${JSON.stringify(invocation)}`);
+        });
+
+        const application = new AirportApplication();
+        const repository = await application.openRepositoryRoute('repo-1');
+
+        expect(repository.repositoryId).toBe('repo-1');
+        expect(application.activeRepositoryId).toBe('repo-1');
+        expect(application.activeRepositoryRootPath).toBe('/repositories/Flying-Pillow/mission');
         expect(remoteMocks.qry).toHaveBeenCalledWith({
             reference: { entity: 'Airport' },
             method: 'listRepositories',
             args: {}
         });
+        expect(remoteMocks.qry).toHaveBeenCalledWith({
+            reference: {
+                entity: 'Repository',
+                repositoryId: 'repo-1'
+            },
+            method: 'read',
+            args: {}
+        });
     });
 
-    it('hydrates the repository route through the generic entity query boundary', async () => {
-        remoteMocks.getRepositorySnapshotBundle.mockResolvedValue({
+    it('hydrates repository route state from explicit airport and entity inputs', async () => {
+        const application = new AirportApplication();
+
+        const repository = application.syncRepositoryRouteState({
             airportRepositories: [
                 {
                     repositoryId: 'repo-1',
@@ -179,47 +204,34 @@ describe('AirportApplication route hydration', () => {
                     description: 'mission'
                 }
             ],
-            repositorySnapshot: createRepositorySurface(),
-            repositoryId: 'repo-1'
+            repositorySnapshot: createRepositorySnapshot()
         });
-
-        const application = new AirportApplication();
-        const repository = await application.openRepositoryRoute('repo-1');
 
         expect(repository.repositoryId).toBe('repo-1');
-        expect(application.activeRepository).toBe(repository);
-        expect(remoteMocks.getRepositorySnapshotBundle).toHaveBeenCalledWith({
-            repositoryId: 'repo-1'
-        });
+        expect(application.activeRepositoryId).toBe('repo-1');
     });
 
-    it('hydrates wrapped repository route data from a reactive query instance', async () => {
+    it('seeds a repository entity from sidebar summary data without route hydration', () => {
         const application = new AirportApplication();
 
-        const repository = application.syncRepositorySnapshotBundle({
-            current: {
-                airportRepositories: [
-                    {
-                        repositoryId: 'repo-1',
-                        repositoryRootPath: '/repositories/Flying-Pillow/mission',
-                        label: 'mission',
-                        description: 'mission'
-                    }
-                ],
-                repositorySnapshot: createRepositorySurface(),
-                repositoryId: 'repo-1'
-            }
+        const repository = application.seedRepositoryFromSummary({
+            repositoryId: 'repo-1',
+            repositoryRootPath: '/repositories/Flying-Pillow/mission',
+            label: 'mission',
+            description: 'mission',
+            missions: []
         });
 
         expect(repository.repositoryId).toBe('repo-1');
-        expect(application.activeRepository).toBe(repository);
+        expect(repository.summary.repositoryRootPath).toBe('/repositories/Flying-Pillow/mission');
+        expect(repository.missionCountLabel).toBe('0 missions');
     });
 
     it('hydrates the mission route from a wrapped remote query result', async () => {
-        remoteMocks.getMissionSnapshotBundle.mockResolvedValue({
+        remoteMocks.readMissionSnapshotBundle.mockResolvedValue({
             current: {
                 airportRepositories: [],
-                repositorySnapshot: createRepositorySurface(),
+                repositorySnapshot: createRepositorySnapshot(),
                 missionControl: createMissionControlSnapshot(),
                 missionWorktreePath: '/repositories/Flying-Pillow/mission/.flying-pillow/worktrees/mission-29',
                 repositoryId: 'repo-1',
@@ -234,7 +246,7 @@ describe('AirportApplication route hydration', () => {
         });
 
         expect(mission.missionId).toBe('mission-29');
-        expect(application.activeMission).toBe(mission);
+        expect(application.activeMissionId).toBe('mission-29');
     });
 
     it('hydrates wrapped mission snapshot bundles from a reactive query instance', async () => {
@@ -243,7 +255,7 @@ describe('AirportApplication route hydration', () => {
         const mission = application.syncMissionSnapshotBundle({
             current: {
                 airportRepositories: [],
-                repositorySnapshot: createRepositorySurface(),
+                repositorySnapshot: createRepositorySnapshot(),
                 missionControl: createMissionControlSnapshot(),
                 missionWorktreePath: '/repositories/Flying-Pillow/mission/.flying-pillow/worktrees/mission-29',
                 repositoryId: 'repo-1',
@@ -252,11 +264,26 @@ describe('AirportApplication route hydration', () => {
         });
 
         expect(mission.missionId).toBe('mission-29');
-        expect(application.activeMission).toBe(mission);
+        expect(application.activeMissionId).toBe('mission-29');
     });
 
     it('propagates entity query failures for invalid repository loads', async () => {
-        remoteMocks.getRepositorySnapshotBundle.mockRejectedValueOnce(new Error('Repository read failed.'));
+        remoteMocks.qry.mockImplementation(async (input: unknown) => {
+            const invocation = input as {
+                reference?: { entity?: string };
+                method?: string;
+            };
+
+            if (invocation.reference?.entity === 'Airport' && invocation.method === 'listRepositories') {
+                return [];
+            }
+
+            if (invocation.reference?.entity === 'Repository' && invocation.method === 'read') {
+                throw new Error('Repository read failed.');
+            }
+
+            throw new Error(`Unexpected query invocation: ${JSON.stringify(invocation)}`);
+        });
 
         const application = new AirportApplication();
 

@@ -7,6 +7,8 @@ import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { FakeAgentRunner } from '../agent/testing/FakeAgentRunner.js';
+import type { MissionAgentSessionRecord } from '../daemon/protocol/contracts.js';
+import type { MissionStageStatus, MissionTowerTreeNode } from '../types.js';
 import { Factory } from './Factory.js';
 import type { MissionWorkflowBindings } from './Mission.js';
 
@@ -357,7 +359,7 @@ describe('Mission', () => {
                     { kind: 'text', stepId: 'task.rework.instruction', value: 'The previous output missed the requested review criteria.' }
                 ]);
 
-                const workflowTask = nextStatus.workflow?.tasks.find((task) => task.taskId === taskId);
+                const workflowTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === taskId);
                 expect(workflowTask).toMatchObject({
                     taskId,
                     lifecycle: 'ready',
@@ -501,8 +503,8 @@ describe('Mission', () => {
                 });
 
                 const nextStatus = await reloaded.executeAction('task.rework.from-verification.implementation/02-boundary-verify');
-                const implementationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary');
-                const verificationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary-verify');
+                const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
+                const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
                 expect(implementationTask).toMatchObject({
                     taskId: 'implementation/02-boundary',
@@ -641,8 +643,8 @@ describe('Mission', () => {
                 });
 
                 const nextStatus = await reloaded.executeAction('task.rework.from-verification.implementation/02-boundary-verify');
-                const implementationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary');
-                const verificationTask = nextStatus.workflow?.tasks.find((task) => task.taskId === 'implementation/02-boundary-verify');
+                const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
+                const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
                 expect(implementationTask).toMatchObject({
                     taskId: 'implementation/02-boundary',
@@ -684,8 +686,8 @@ describe('Mission', () => {
                     label: 'BRIEF.md'
                 });
 
-                const prdTaskIndex = treeNodes.findIndex((node) => node.kind === 'task' && node.stageId === 'prd');
-                const prdArtifactIndex = treeNodes.findIndex((node) => node.kind === 'stage-artifact' && node.stageId === 'prd');
+                const prdTaskIndex = treeNodes.findIndex((node: MissionTowerTreeNode) => node.kind === 'task' && node.stageId === 'prd');
+                const prdArtifactIndex = treeNodes.findIndex((node: MissionTowerTreeNode) => node.kind === 'stage-artifact' && node.stageId === 'prd');
 
                 expect(prdTaskIndex).toBeGreaterThan(-1);
                 expect(prdArtifactIndex).toBeGreaterThan(prdTaskIndex);
@@ -755,7 +757,7 @@ describe('Mission', () => {
                 }
 
                 const runningStatus = await mission.executeAction(`task.start.${taskId}`);
-                expect(runningStatus.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('running');
+                expect(runningStatus.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('running');
                 expect(await runner.listSessions()).toHaveLength(1);
                 expect(runningStatus.agentSessions?.length ?? 0).toBe(1);
                 expect(runningStatus.agentSessions?.[0]).toMatchObject({
@@ -795,12 +797,12 @@ describe('Mission', () => {
                 await mission.completeTask(prdTaskId);
                 let specStatus = await mission.status();
                 const specStages = specStatus.stages ?? [];
-                const specStage = specStages.find((stage) => stage.stage === 'spec');
+                const specStage = specStages.find((stage: MissionStageStatus) => stage.stage === 'spec');
                 if (!specStage) {
                     throw new Error('Expected spec stage after completing PRD task.');
                 }
 
-                let planTask = specStage.tasks.find((task) => task.taskId === 'spec/02-plan');
+                let planTask = specStage.tasks.find((task: { taskId: string; status: string }) => task.taskId === 'spec/02-plan');
                 if (!planTask) {
                     throw new Error('Expected spec/02-plan task in spec stage.');
                 }
@@ -809,8 +811,8 @@ describe('Mission', () => {
                     await mission.completeTask('spec/01-spec-from-prd');
                     specStatus = await mission.status();
                     const refreshedSpecStages = specStatus.stages ?? [];
-                    const refreshedSpecStage = refreshedSpecStages.find((stage) => stage.stage === 'spec');
-                    planTask = refreshedSpecStage?.tasks.find((task) => task.taskId === 'spec/02-plan');
+                    const refreshedSpecStage = refreshedSpecStages.find((stage: MissionStageStatus) => stage.stage === 'spec');
+                    planTask = refreshedSpecStage?.tasks.find((task: { taskId: string; status: string }) => task.taskId === 'spec/02-plan');
                     if (!planTask || planTask.status !== 'ready') {
                         throw new Error('Expected spec/02-plan to be ready after completing spec/01 task.');
                     }
@@ -837,13 +839,13 @@ describe('Mission', () => {
                 const statusDuringPlanning = await mission.status();
                 const planningStages = statusDuringPlanning.stages ?? [];
                 const runningPlanTask = planningStages
-                    .flatMap((stage) => stage.tasks)
-                    .find((task) => task.taskId === 'spec/02-plan');
+                    .flatMap((stage: MissionStageStatus) => stage.tasks)
+                    .find((task: { taskId: string; status?: string }) => task.taskId === 'spec/02-plan');
                 expect(runningPlanTask?.status).toBe('running');
 
-                const implementationStage = planningStages.find((stage) => stage.stage === 'implementation');
-                expect(implementationStage?.tasks.map((task) => task.taskId)).toContain('implementation/01-visible-while-planning');
-                expect(implementationStage?.tasks.find((task) => task.taskId === 'implementation/01-visible-while-planning')?.status).toBe('pending');
+                const implementationStage = planningStages.find((stage: MissionStageStatus) => stage.stage === 'implementation');
+                expect(implementationStage?.tasks.map((task: { taskId: string }) => task.taskId)).toContain('implementation/01-visible-while-planning');
+                expect(implementationStage?.tasks.find((task: { taskId: string; status?: string }) => task.taskId === 'implementation/01-visible-while-planning')?.status).toBe('pending');
             } finally {
                 mission.dispose();
             }
@@ -946,7 +948,7 @@ describe('Mission', () => {
 
                 try {
                     const status = await reloaded.status();
-                    const migratedSession = status.agentSessions?.find((session) => session.sessionId === launched.sessionId);
+                    const migratedSession = status.agentSessions?.find((session: MissionAgentSessionRecord) => session.sessionId === launched.sessionId);
                     expect(migratedSession).toMatchObject({
                         runnerId: 'copilot-cli',
                         transportId: 'terminal'
@@ -1002,7 +1004,7 @@ describe('Mission', () => {
                 };
 
                 const status = await mission.status();
-                expect(status.agentSessions?.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
+                expect(status.agentSessions?.find((session: MissionAgentSessionRecord) => session.sessionId === launched.sessionId)).toMatchObject({
                     sessionId: launched.sessionId,
                     runnerId: runner.id,
                     lifecycleState: 'running'
@@ -1051,8 +1053,8 @@ describe('Mission', () => {
                 await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
 
                 const status = await mission.status();
-                expect(status.readyTasks?.some((task) => task.taskId === taskId)).toBe(true);
-                expect(status.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('ready');
+                expect(status.readyTasks?.some((task: { taskId: string }) => task.taskId === taskId)).toBe(true);
+                expect(status.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('ready');
             } finally {
                 mission.dispose();
             }

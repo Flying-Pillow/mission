@@ -1,4 +1,4 @@
-import type { MissionAgentSessionRecord } from '../daemon/protocol/contracts.js';
+import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
 
 export type AgentSession = {
 	sessionId: string;

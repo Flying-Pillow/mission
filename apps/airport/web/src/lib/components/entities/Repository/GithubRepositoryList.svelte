@@ -6,11 +6,14 @@
 
     const appContext = getAppContext();
     const repositories = $derived(
-        appContext.application.airportHomeState?.githubRepositories ?? [],
+        appContext.application.githubRepositoriesState,
     );
     const githubStatusTone = $derived(appContext.githubStatus);
+    const githubRepositoriesLoading = $derived(
+        appContext.application.githubRepositoriesLoading,
+    );
     const githubRepositoriesError = $derived(
-        appContext.application.airportHomeState?.githubRepositoriesError,
+        appContext.application.githubRepositoriesError,
     );
 
     const repositoryCountLabel = $derived(
@@ -48,7 +51,13 @@
 
     <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
         <div class="grid gap-3">
-            {#if repositories.length === 0}
+            {#if githubRepositoriesLoading && repositories.length === 0}
+                <div
+                    class="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
+                >
+                    Loading GitHub repositories...
+                </div>
+            {:else if repositories.length === 0}
                 <div
                     class="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
                 >

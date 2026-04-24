@@ -1,7 +1,7 @@
 import type {
 	MissionStageId,
 	MissionTaskState
-} from '../types.js';
+} from '../../types.js';
 
 export type Task = {
 	taskId: string;

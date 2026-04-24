@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import MissionFileTreeNodes from "$lib/components/entities/Mission/MissionFileTreeNodes.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -21,7 +21,7 @@
         class?: string;
         onSelectPath?: (node: MissionFileTreeNode) => void;
     } = $props();
-    const appContext = getAppContext();
+    const missionScope = getScopedMissionContext();
 
     let branchOverrides = $state<Record<string, boolean>>({});
     let tree = $state<MissionFileTreeNode[]>([]);
@@ -29,7 +29,7 @@
     let error = $state<string | null>(null);
     let loading = $state(true);
     let requestVersion = 0;
-    const mission = $derived(appContext.airport.activeMission);
+    const mission = $derived(missionScope.mission);
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryRootPath = $derived(mission?.missionWorktreePath ?? "");
 

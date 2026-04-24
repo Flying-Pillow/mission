@@ -6,7 +6,7 @@ import {
     githubVisibleRepositorySchema,
     missionRuntimeSnapshotSchema,
     repositorySchema,
-    repositorySurfaceSnapshotSchema
+    repositorySnapshotSchema
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
     missionRuntimeRouteParamsSchema,
@@ -15,7 +15,7 @@ import {
 import { getMissionWorktreesPath } from '@flying-pillow/mission-core/node';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import { clearGithubAuthSession } from '$lib/server/github-auth.server';
-import type { MissionControlSnapshot } from '$lib/types/mission-control';
+import { missionControlSnapshotSchema } from '$lib/types/mission-control';
 
 const airportRouteQuerySchema = z.object({});
 const addAirportRepositoryInputSchema = z.object({
@@ -29,21 +29,12 @@ const missionRouteQuerySchema = z.object({
     repositoryId: z.string().trim().min(1),
     missionId: z.string().trim().min(1)
 });
-const repositoryRouteQuerySchema = z.object({
-    repositoryId: z.string().trim().min(1)
-});
-
-const missionControlSnapshotSchema = z.object({
-    missionRuntime: missionRuntimeSnapshotSchema,
-    operatorStatus: z.custom<MissionControlSnapshot['operatorStatus']>(
-        (value) => Boolean(value && typeof value === 'object'),
-        'Mission control operator status is required.'
-    )
-});
 
 const airportRouteDataSchema = z.object({
     loginHref: z.string().trim().min(1),
-    airportHome: airportHomeSnapshotSchema,
+    airportHome: airportHomeSnapshotSchema
+});
+const githubRepositoriesResultSchema = z.object({
     githubRepositories: z.array(githubVisibleRepositorySchema),
     githubRepositoriesError: z.string().trim().min(1).optional()
 });
@@ -55,16 +46,11 @@ const addAirportRepositoryResultSchema = z.object({
 
 const missionSnapshotBundleSchema = z.object({
     airportRepositories: z.array(repositorySchema),
-    repositorySnapshot: repositorySurfaceSnapshotSchema,
+    repositorySnapshot: repositorySnapshotSchema,
     missionControl: missionControlSnapshotSchema,
     missionWorktreePath: z.string().trim().min(1),
     repositoryId: z.string().trim().min(1),
     missionId: z.string().trim().min(1)
-});
-const repositorySnapshotBundleSchema = z.object({
-    airportRepositories: z.array(repositorySchema),
-    repositorySnapshot: repositorySurfaceSnapshotSchema,
-    repositoryId: z.string().trim().min(1)
 });
 
 const airportLogoutResultSchema = z.object({
@@ -74,23 +60,67 @@ const airportLogoutResultSchema = z.object({
 export type AirportRouteData = z.infer<typeof airportRouteDataSchema>;
 export type AddAirportRepositoryResult = z.infer<typeof addAirportRepositoryResultSchema>;
 export type MissionSnapshotBundle = z.infer<typeof missionSnapshotBundleSchema>;
-export type RepositorySnapshotBundle = z.infer<typeof repositorySnapshotBundleSchema>;
+
+async function buildMissionSnapshotBundle(input: {
+    repositoryId: string;
+    missionId: string;
+}): Promise<MissionSnapshotBundle> {
+    const event = getRequestEvent();
+    const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
+        repositoryId: input.repositoryId
+    });
+    const { missionId } = missionRuntimeRouteParamsSchema.parse({
+        missionId: input.missionId
+    });
+    const gateway = new AirportWebGateway(event.locals);
+    const { airport, entities } = gateway;
+    const airportHome = await airport.getHomeSnapshot();
+    const repositorySnapshot = await entities.readRepository({
+        repositoryId,
+        selectedMissionId: missionId
+    });
+    const missionWorktreePath = path.join(
+        getMissionWorktreesPath(repositorySnapshot.repository.repositoryRootPath),
+        missionId
+    );
+    const missionControl = await entities.readMissionControl({
+        missionId,
+        surfacePath: missionWorktreePath
+    });
+
+    return missionSnapshotBundleSchema.parse({
+        airportRepositories: airportHome.repositories,
+        repositorySnapshot,
+        missionControl,
+        missionWorktreePath,
+        repositoryId,
+        missionId
+    });
+}
 
 export const getAirportRouteData = query(airportRouteQuerySchema, async () => {
     const event = getRequestEvent();
     const gateway = new AirportWebGateway(event.locals);
-    let githubRepositories: AirportRouteData['githubRepositories'] = [];
+
+    return airportRouteDataSchema.parse({
+        loginHref: '/login?redirectTo=/airport',
+        airportHome: await gateway.airport.getHomeSnapshot()
+    });
+});
+
+export const readVisibleGitHubRepositories = command(z.object({}), async () => {
+    const event = getRequestEvent();
+    const gateway = new AirportWebGateway(event.locals);
+    let githubRepositories = [];
     let githubRepositoriesError: string | undefined;
 
     try {
-        githubRepositories = await gateway.listVisibleGitHubRepositories();
+        githubRepositories = await gateway.airport.listVisibleGitHubRepositories();
     } catch (error) {
         githubRepositoriesError = error instanceof Error ? error.message : String(error);
     }
 
-    return airportRouteDataSchema.parse({
-        loginHref: '/login?redirectTo=/airport',
-        airportHome: await gateway.getAirportHomeSnapshot(),
+    return githubRepositoriesResultSchema.parse({
         githubRepositories,
         ...(githubRepositoriesError ? { githubRepositoriesError } : {})
     });
@@ -101,9 +131,9 @@ export const addAirportRepository = command(addAirportRepositoryInputSchema, asy
     const gateway = new AirportWebGateway(event.locals);
     const selectedGitHubRepository = input.githubRepository?.trim();
     const repository = selectedGitHubRepository
-        ? await gateway.cloneGitHubRepository(selectedGitHubRepository, input.repositoryPath)
-        : await gateway.inspectRepositoryPath(input.repositoryPath).then(
-            (inspectedRepository) => gateway.addRepository(inspectedRepository.repositoryRootPath)
+        ? await gateway.airport.cloneGitHubRepository(selectedGitHubRepository, input.repositoryPath)
+        : await gateway.airport.inspectRepositoryPath(input.repositoryPath).then(
+            (inspectedRepository) => gateway.airport.addRepository(inspectedRepository.repositoryRootPath)
         );
 
     return addAirportRepositoryResultSchema.parse({
@@ -122,53 +152,6 @@ export const logoutAirportSession = command(z.object({}), async () => {
     });
 });
 
-export const getMissionSnapshotBundle = query(missionRouteQuerySchema, async (input) => {
-    const event = getRequestEvent();
-    const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
-        repositoryId: input.repositoryId
-    });
-    const { missionId } = missionRuntimeRouteParamsSchema.parse({
-        missionId: input.missionId
-    });
-    const gateway = new AirportWebGateway(event.locals);
-    const airportHome = await gateway.getAirportHomeSnapshot();
-    const repositorySnapshot = await gateway.getRepositorySurfaceSnapshot({
-        repositoryId,
-        selectedMissionId: missionId
-    });
-    const missionWorktreePath = path.join(
-        getMissionWorktreesPath(repositorySnapshot.repository.repositoryRootPath),
-        missionId
-    );
-    const missionControl = await gateway.getMissionControlSnapshot({
-        missionId,
-        surfacePath: missionWorktreePath
-    });
-
-    return missionSnapshotBundleSchema.parse({
-        airportRepositories: airportHome.repositories,
-        repositorySnapshot,
-        missionControl,
-        missionWorktreePath,
-        repositoryId,
-        missionId
-    });
-});
-
-export const getRepositorySnapshotBundle = query(repositoryRouteQuerySchema, async (input) => {
-    const event = getRequestEvent();
-    const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
-        repositoryId: input.repositoryId
-    });
-    const gateway = new AirportWebGateway(event.locals);
-    const airportHome = await gateway.getAirportHomeSnapshot();
-    const repositorySnapshot = await gateway.getRepositorySurfaceSnapshot({
-        repositoryId
-    });
-
-    return repositorySnapshotBundleSchema.parse({
-        airportRepositories: airportHome.repositories,
-        repositorySnapshot,
-        repositoryId
-    });
+export const readMissionSnapshotBundle = command(missionRouteQuerySchema, async (input) => {
+    return await buildMissionSnapshotBundle(input);
 });

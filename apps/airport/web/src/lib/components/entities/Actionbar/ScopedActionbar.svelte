@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -34,6 +34,7 @@
         scope,
         stageId,
         taskId,
+        artifactPath,
         sessionId,
         label,
         onActionExecuted,
@@ -43,9 +44,10 @@
         showEmptyState = true,
     }: {
         refreshNonce: number;
-        scope: "mission" | "task" | "session";
+        scope: "mission" | "task" | "artifact" | "session";
         stageId?: MissionStageId;
         taskId?: string;
+        artifactPath?: string;
         sessionId?: string;
         label?: string;
         onActionExecuted: () => Promise<void>;
@@ -69,19 +71,19 @@
     let loadedContextKey = $state<string | null>(null);
     let lastRefreshNonce = $state<number | null>(null);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
-    const appContext = getAppContext();
+    const missionScope = getScopedMissionContext();
     const mission = $derived.by(() => {
-        const activeMission = appContext.airport.activeMission;
+        const activeMission = missionScope.mission;
         if (!activeMission) {
-            throw new Error("Mission actions require an active mission in the app context.");
+            throw new Error("Mission actions require a scoped mission context.");
         }
 
         return activeMission;
     });
     const activeRepository = $derived.by(() => {
-        const repository = appContext.airport.activeRepository;
+        const repository = missionScope.repository;
         if (!repository) {
-            throw new Error("Mission actions require an active repository in the app context.");
+            throw new Error("Mission actions require a scoped repository context.");
         }
 
         return repository;
@@ -99,6 +101,7 @@
                 repositoryRootPath,
                 ...(stageId ? { stageId } : {}),
                 ...(taskId ? { taskId } : {}),
+                ...(artifactPath ? { artifactPath } : {}),
                 ...(sessionId ? { sessionId } : {}),
             }) satisfies ActionTransportContext,
     );
@@ -108,6 +111,7 @@
                 repositoryId,
                 ...(stageId ? { stageId } : {}),
                 ...(taskId ? { taskId } : {}),
+                ...(artifactPath ? { artifactPath } : {}),
                 ...(sessionId ? { sessionId } : {}),
             }) satisfies OperatorActionTargetContext,
     );
@@ -140,6 +144,14 @@
         }
 
         if (scope === "task" && !taskId) {
+            actionSnapshot = null;
+            actionLoading = false;
+            actionError = null;
+            loadedContextKey = null;
+            return;
+        }
+
+        if (scope === "artifact" && !artifactPath) {
             actionSnapshot = null;
             actionLoading = false;
             actionError = null;
@@ -226,6 +238,7 @@
                 repositoryId: context.repositoryId,
                 ...(context.stageId ? { stageId: context.stageId } : {}),
                 ...(context.taskId ? { taskId: context.taskId } : {}),
+                ...(context.artifactPath ? { artifactPath: context.artifactPath } : {}),
                 ...(context.sessionId ? { sessionId: context.sessionId } : {}),
             });
             loadedContextKey = contextKey;

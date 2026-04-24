@@ -1,8 +1,9 @@
 <script lang="ts">
     import { browser } from "$app/environment";
     import DeviceFloppyIcon from "@tabler/icons-svelte/icons/device-floppy";
+    import type { Artifact } from "./Artifact.svelte.js";
     import XIcon from "@tabler/icons-svelte/icons/x";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
     const MONACO_VERSION = "0.52.2";
@@ -51,16 +52,14 @@
     let monacoLoaderPromise: Promise<MonacoNamespace> | null = null;
 
     let {
-        artifactPath,
-        artifactLabel,
+        artifact,
         onCloseRequested,
     }: {
-        artifactPath?: string;
-        artifactLabel?: string;
+        artifact?: Artifact;
         onCloseRequested: () => void;
     } = $props();
-    const appContext = getAppContext();
-    const mission = $derived(appContext.airport.activeMission);
+    const missionScope = getScopedMissionContext();
+    const mission = $derived(missionScope.mission);
 
     let content = $state("");
     let originalContent = $state("");
@@ -78,9 +77,8 @@
     let editorLanguage = $state<string | null>(null);
     let monacoReady = $state(false);
     let monacoLoadError = $state<string | null>(null);
-    const panelLabel = $derived(
-        artifactLabel ?? basename(artifactPath) ?? "Resolved artifact",
-    );
+    const artifactPath = $derived(artifact?.filePath);
+    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
     const hasUnsavedChanges = $derived(
         artifactPath === loadedPath && content !== originalContent,
     );
@@ -222,11 +220,11 @@
         error = null;
 
         try {
-            if (!mission) {
+            if (!artifact || !mission) {
                 throw new Error("Artifact loading is unavailable until the app context is synchronized.");
             }
 
-            const payload = await mission.readDocument(path);
+            const payload = await artifact.read();
             content = payload.content;
             originalContent = payload.content;
             saveStatus = "idle";
@@ -252,11 +250,11 @@
         saveError = null;
 
         try {
-            if (!mission) {
+            if (!artifact || !mission) {
                 throw new Error("Artifact saving is unavailable until the app context is synchronized.");
             }
 
-            const payload = await mission.writeDocument(path, nextContent);
+            const payload = await artifact.write(nextContent);
 
             originalContent = payload.content;
             loadedPath = path;
@@ -510,13 +508,6 @@
         }).format(date);
     }
 
-    function basename(filePath: string | undefined): string | undefined {
-        if (!filePath) {
-            return undefined;
-        }
-        const normalized = filePath.replace(/\\/g, "/");
-        return normalized.split("/").pop() ?? normalized;
-    }
 </script>
 
 <section

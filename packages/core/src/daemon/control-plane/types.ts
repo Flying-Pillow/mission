@@ -10,7 +10,7 @@ import type {
 	MissionTowerProjection,
 	OperatorStatus
 } from '../../types.js';
-import type { Repository } from '../../repository/Repository.js';
+import type { Repository } from '../../entities/Repository/Repository.js';
 
 export type ControlSource = {
 	repositoryId: string;

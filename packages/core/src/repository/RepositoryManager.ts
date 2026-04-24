@@ -1,6 +1,7 @@
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { MissionSelectionCandidate, OperatorStatus } from '../types.js';
-import { toRepository, type Repository } from './Repository.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import {
     METHOD_METADATA,
     type ControlRepositoriesAdd,
@@ -95,14 +96,40 @@ export class RepositoryManager {
         if (!surfacePath) {
             throw new Error(`Control method '${request.method}' requires a surfacePath.`);
         }
+        const controlStatusParams = request.method === 'control.status' && request.params && typeof request.params === 'object'
+            ? request.params as { includeMissions?: boolean }
+            : undefined;
+        const includeMissions = controlStatusParams?.includeMissions !== false;
+
+        const totalStartedAt = request.method === 'control.status' ? performance.now() : 0;
+        const discoverStartedAt = request.method === 'control.status' ? performance.now() : 0;
 
         const discovery = await this.discoverSurface(surfacePath);
+        const discoverDurationMs = request.method === 'control.status'
+            ? performance.now() - discoverStartedAt
+            : 0;
         const primaryRepository = this.getRepository(discovery.primaryControlRoot);
-        const availableMissions = await this.collectAvailableMissions(discovery.controlRoots);
+        const missionsStartedAt = request.method === 'control.status' ? performance.now() : 0;
+        const availableMissions = includeMissions
+            ? await this.collectAvailableMissions(discovery.controlRoots)
+            : [];
+        const missionsDurationMs = request.method === 'control.status'
+            ? performance.now() - missionsStartedAt
+            : 0;
+        const repositoriesStartedAt = request.method === 'control.status' ? performance.now() : 0;
         const availableRepositories = await this.listRegisteredRepositories(discovery.primaryControlRoot);
+        const repositoriesDurationMs = request.method === 'control.status'
+            ? performance.now() - repositoriesStartedAt
+            : 0;
 
         if (request.method === 'control.status') {
+            const statusStartedAt = performance.now();
             const status = await primaryRepository.buildDiscoveryStatus(availableMissions);
+            const statusDurationMs = performance.now() - statusStartedAt;
+            const totalDurationMs = performance.now() - totalStartedAt;
+            process.stdout.write(
+                `${new Date().toISOString().slice(11, 19)} control.status repositoryManager total=${totalDurationMs.toFixed(1)}ms discover=${discoverDurationMs.toFixed(1)}ms missions=${missionsDurationMs.toFixed(1)}ms repositories=${repositoriesDurationMs.toFixed(1)}ms buildStatus=${statusDurationMs.toFixed(1)}ms includeMissions=${String(includeMissions)}\n`
+            );
             return {
                 ...status,
                 availableRepositories
@@ -137,7 +164,13 @@ export class RepositoryManager {
 
     private async listRegisteredRepositories(repositoryRoot: string): Promise<Repository[]> {
         void repositoryRoot;
-        return (await listRegisteredRepositories()).map((candidate) => toRepository(candidate));
+        const startedAt = performance.now();
+        const repositories = (await listRegisteredRepositories()).map((candidate) => Repository.fromCandidate(candidate));
+        const durationMs = performance.now() - startedAt;
+        process.stdout.write(
+            `${new Date().toISOString().slice(11, 19)} repositories.listRegistered count=${String(repositories.length)} duration=${durationMs.toFixed(1)}ms\n`
+        );
+        return repositories;
     }
 
     private async addKnownRepository(repositoryPath: string): Promise<Repository> {

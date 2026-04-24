@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const logsDir = path.join(workspaceRoot, '.logs');
 const userArgs = process.argv.slice(2);
 
 function runChecked(command, args, options = {}) {
@@ -22,10 +24,32 @@ function runChecked(command, args, options = {}) {
 	}
 }
 
-function spawnManaged(command, args, extraEnv = {}) {
+function prepareLogFile(fileName) {
+	fs.mkdirSync(logsDir, { recursive: true });
+	const filePath = path.join(logsDir, fileName);
+	fs.writeFileSync(filePath, '');
+	return {
+		filePath,
+		stream: fs.createWriteStream(filePath, { flags: 'a' })
+	};
+}
+
+function pipeChildOutput(child, output, target) {
+	if (!output) {
+		return;
+	}
+
+	output.on('data', (chunk) => {
+		target.stream.write(chunk);
+		process[target.output].write(chunk);
+	});
+}
+
+function spawnManaged(command, args, extraEnv = {}, logFileName) {
+	const logTarget = logFileName ? prepareLogFile(logFileName) : undefined;
 	const child = spawn(command, args, {
 		cwd: workspaceRoot,
-		stdio: 'inherit',
+		stdio: ['inherit', 'pipe', 'pipe'],
 		env: {
 			...process.env,
 			...extraEnv
@@ -33,8 +57,17 @@ function spawnManaged(command, args, extraEnv = {}) {
 	});
 
 	child.on('error', (error) => {
+		logTarget?.stream.end();
 		throw error;
 	});
+
+	if (logTarget) {
+		pipeChildOutput(child.stdout, child.stdout, { stream: logTarget.stream, output: 'stdout' });
+		pipeChildOutput(child.stderr, child.stderr, { stream: logTarget.stream, output: 'stderr' });
+		child.on('exit', () => {
+			logTarget.stream.end();
+		});
+	}
 
 	return child;
 }
@@ -80,11 +113,21 @@ const supervisedEnv = {
 	MISSION_DAEMON_SUPERVISED: '1'
 };
 
-const daemon = spawnManaged('pnpm', ['--dir', './packages/core', 'run', 'daemon:dev'], supervisedEnv);
+const daemon = spawnManaged(
+	'pnpm',
+	['--dir', './packages/core', 'run', 'daemon:dev'],
+	supervisedEnv,
+	'daemon.log'
+);
 const web = spawnManaged(
 	'pnpm',
 	['--dir', './apps/airport/web', 'run', 'dev', '--', ...userArgs],
-	supervisedEnv
+	supervisedEnv,
+	'web.log'
+);
+
+process.stdout.write(
+	`Development logs: ${path.join(logsDir, 'daemon.log')} and ${path.join(logsDir, 'web.log')}\n`
 );
 
 children.add(daemon);

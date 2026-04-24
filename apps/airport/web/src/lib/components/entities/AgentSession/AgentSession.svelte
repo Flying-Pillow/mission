@@ -1,7 +1,7 @@
 <script lang="ts">
-    import type { AgentSession } from "$lib/client/entities/AgentSession.svelte.js";
+    import type { AgentSession } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import Anser from "anser/lib/index.js";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
     import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
     import { FitAddon } from "@xterm/addon-fit";
@@ -55,7 +55,7 @@
         session?: AgentSession;
         onActionExecuted: () => Promise<void>;
     } = $props();
-    const appContext = getAppContext();
+    const missionScope = getScopedMissionContext();
 
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<MissionSessionTerminalSnapshot | null>(null);
@@ -79,8 +79,8 @@
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
     const terminalSessionId = $derived(session?.sessionId ?? null);
-    const mission = $derived(appContext.airport.activeMission);
-    const activeRepository = $derived(appContext.airport.activeRepository);
+    const mission = $derived(missionScope.mission);
+    const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryId = $derived(activeRepository?.repositoryId ?? "");
     const repositoryRootPath = $derived(

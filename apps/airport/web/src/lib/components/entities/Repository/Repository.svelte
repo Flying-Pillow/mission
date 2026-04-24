@@ -2,77 +2,37 @@
     import { page } from "$app/state";
     import { onMount, type Component } from "svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import MissionSummary from "$lib/components/entities/Mission/MissionSummary.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
-    import { getRepositorySnapshotBundle } from "../../../../routes/api/airport/airport.remote";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import type { SelectedIssueSummary } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
-    const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
+    const repositoryId = page.params.repositoryId?.trim() ?? "";
+    const repositoryScopeState = $state<{
+        repositoryId?: string;
+        repository?: RepositoryEntity;
+        loading: boolean;
+        error?: string | null;
+    }>({
+        repositoryId: repositoryId || undefined,
+        loading: true,
+    });
+    const repositoryScope = setScopedRepositoryContext(repositoryScopeState);
 
     let selectedIssue = $state<SelectedIssueSummary | null>(null);
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
     let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
-    let repositorySyncError = $state<string | null>(null);
-    let lastSyncedRepositorySnapshotBundle:
-        | NonNullable<typeof repositorySnapshotBundle>
-        | null = null;
-    const repositorySnapshotBundleQuery = $derived(
-        repositoryId ? getRepositorySnapshotBundle({ repositoryId }) : null
-    );
-    const repositorySnapshotBundle = $derived(repositorySnapshotBundleQuery?.current);
-    $effect(() => {
-        if (!repositorySnapshotBundle) {
-            lastSyncedRepositorySnapshotBundle = null;
-            repositorySyncError = null;
-            return;
-        }
 
-        if (repositorySnapshotBundle === lastSyncedRepositorySnapshotBundle) {
-            return;
-        }
-
-        try {
-            appContext.application.syncRepositorySnapshotBundle(
-                repositorySnapshotBundle,
-            );
-            lastSyncedRepositorySnapshotBundle = repositorySnapshotBundle;
-            repositorySyncError = null;
-        } catch (error) {
-            lastSyncedRepositorySnapshotBundle = null;
-            repositorySyncError = error instanceof Error ? error.message : String(error);
-        }
-    });
-    const activeRepository = $derived.by(() => {
-        const currentRepository = appContext.airport.activeRepository;
-        if (!currentRepository || currentRepository.repositoryId !== repositoryId) {
-            return undefined;
-        }
-
-        return currentRepository;
-    });
-    const repositoryQueryError = $derived.by(() => {
-        const error = repositorySnapshotBundleQuery?.error;
-        if (!error) {
-            return null;
-        }
-
-        return error instanceof Error ? error.message : String(error);
-    });
-    const repositoryLoading = $derived(
-        (repositorySnapshotBundleQuery?.loading ?? false)
-            || Boolean(
-                repositorySnapshotBundle
-                && activeRepository?.repositoryId !== repositoryId
-                && !repositorySyncError,
-            ),
-    );
-    const repositoryError = $derived(repositorySyncError ?? repositoryQueryError);
+    const activeRepository = $derived(repositoryScope.repository);
+    const repositoryLoading = $derived(repositoryScope.loading);
+    const repositoryError = $derived(repositoryScope.error);
     const selectedMission = $derived(activeRepository?.selectedMission);
     const repositorySummary = $derived(activeRepository?.summary);
     const repositoryOperationalMode = $derived(activeRepository?.operationalMode);
@@ -90,11 +50,41 @@
         activeRepository?.missionCountLabel ?? "0 missions",
     );
 
-    onMount(async () => {
+    onMount(() => {
+        const initialSummary = appContext.airport.repositories.find(
+            (repository) => repository.repositoryId === repositoryId,
+        );
+
+        if (initialSummary) {
+            repositoryScope.repository =
+                appContext.application.seedRepositoryFromSummary(initialSummary);
+            repositoryScope.error = null;
+        }
+
+        void loadRepositorySurface();
+        void loadMarkdownViewer();
+    });
+
+    async function loadRepositorySurface(): Promise<void> {
+        try {
+            const repository = await appContext.application.openRepositoryRoute(repositoryId);
+            repositoryScope.repository = repository;
+            repositoryScope.error = null;
+        } catch (error) {
+            if (!repositoryScope.repository) {
+                repositoryScope.repository = undefined;
+            }
+            repositoryScope.error = error instanceof Error ? error.message : String(error);
+        } finally {
+            repositoryScope.loading = false;
+        }
+    }
+
+    async function loadMarkdownViewer(): Promise<void> {
         MarkdownViewer = (
             await import("$lib/components/viewers/markdown.svelte")
         ).default;
-    });
+    }
 
     function closeIssuePreview(): void {
         selectedIssue = null;

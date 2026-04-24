@@ -1,46 +1,27 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import AirportHomeAddRepository from "$lib/components/airport/home/airport-home-add-repository.svelte";
     import AirportHomeStatus from "$lib/components/airport/home/airport-home-status.svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
-    import { getAirportRouteData } from "../../../routes/api/airport/airport.remote";
 
     const appContext = getAppContext();
-    const airportRouteDataQuery = getAirportRouteData({});
-    const airportRouteData = $derived(airportRouteDataQuery.current);
-    let airportRouteSyncError = $state<string | null>(null);
 
-    $effect(() => {
-        if (!airportRouteData) {
-            airportRouteSyncError = null;
+    onMount(() => {
+        if (appContext.githubStatus !== "connected") {
             return;
         }
 
-        try {
-            appContext.application.syncAirportRouteData(airportRouteData);
-            airportRouteSyncError = null;
-        } catch (error) {
-            airportRouteSyncError = error instanceof Error ? error.message : String(error);
-        }
+        void appContext.application.loadGitHubRepositories();
     });
 
     const repositories = $derived(appContext.airport.repositories);
-    const airportRouteQueryError = $derived.by(() => {
-        const error = airportRouteDataQuery.error;
-        if (!error) {
-            return null;
-        }
-
-        return error instanceof Error ? error.message : String(error);
-    });
     const repositoriesLoading = $derived(
-        (airportRouteDataQuery.loading ?? false)
+        appContext.application.airportHomeLoading
             || appContext.application.repositoriesLoading,
     );
     const repositoriesError = $derived(
-        airportRouteSyncError
-            ?? airportRouteQueryError
-            ?? appContext.application.airportHomeError
+        appContext.application.airportHomeError
             ?? appContext.application.repositoriesError,
     );
 </script>

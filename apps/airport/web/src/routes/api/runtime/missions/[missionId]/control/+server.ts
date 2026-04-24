@@ -9,7 +9,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
     const gateway = new AirportWebGateway(locals);
 
-    const snapshot: MissionControlSnapshot = await gateway.getMissionControlSnapshot({
+    const snapshot: MissionControlSnapshot = await gateway.entities.readMissionControl({
         missionId,
         ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
     });

@@ -23,8 +23,8 @@ import type {
 	MissionSelector,
 	OperatorStatus
 } from '../types.js';
-import type { Mission } from '../mission/Mission.js';
-import type { AgentSession } from '../mission/AgentSession.js';
+import type { Mission } from '../entities/Mission/Mission.js';
+import type { AgentSession } from '../entities/AgentSession/AgentSession.js';
 import { DaemonClient } from './DaemonClient.js';
 
 export class DaemonMissionApi {

@@ -21,6 +21,9 @@
     const loginHref = $derived(
         airportHomeState?.loginHref ?? "/login?redirectTo=/airport",
     );
+    const githubRepositories = $derived(
+        appContext.application.githubRepositoriesState,
+    );
     const repositories = $derived(
         airportHomeState?.airportHome.repositories ?? [],
     );
@@ -30,9 +33,9 @@
             : `${repositories.length} repositories registered`,
     );
     const githubRepositoryCountLabel = $derived(
-        airportHomeState?.githubRepositories.length === 1
+        githubRepositories.length === 1
             ? "1 visible GitHub repository"
-            : `${airportHomeState?.githubRepositories.length ?? 0} visible GitHub repositories`,
+            : `${githubRepositories.length} visible GitHub repositories`,
     );
     const selectedRepository = $derived.by(() =>
         repositories.find(

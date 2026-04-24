@@ -1,6 +1,6 @@
-import type { MissionStageId, MissionStageStatus } from '../types.js';
-import type { Artifact } from './Artifact.js';
-import type { Task } from './Task.js';
+import type { MissionStageId, MissionStageStatus } from '../../types.js';
+import type { Artifact } from '../Artifact/Artifact.js';
+import type { Task } from '../Task/Task.js';
 
 export type Stage = {
 	stageId: MissionStageId;

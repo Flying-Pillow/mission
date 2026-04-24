@@ -1,82 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createAppContext } from '$lib/client/context/app-context.svelte';
 import { app } from '$lib/client/Application.svelte';
-import type {
-    MissionRuntimeSnapshot,
-    RepositorySurfaceSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
-
-const runtimeMocks = vi.hoisted(() => ({
-    missions: new Map<string, { missionId: string; workflowLifecycle?: string; updateFromSnapshot: (next: MissionRuntimeSnapshot) => unknown }>(),
-    hydrateMissionSnapshot: vi.fn((snapshot: MissionRuntimeSnapshot) => {
-        const existing = runtimeMocks.missions.get(snapshot.missionId);
-        if (existing) {
-            existing.updateFromSnapshot(snapshot);
-            return existing;
-        }
-
-        const created = {
-            missionId: snapshot.missionId,
-            workflowLifecycle: snapshot.status.workflow?.lifecycle,
-            updateFromSnapshot(next: MissionRuntimeSnapshot) {
-                this.workflowLifecycle = next.status.workflow?.lifecycle;
-                return this;
-            }
-        };
-        runtimeMocks.missions.set(snapshot.missionId, created);
-        return created;
-    })
-}));
-
-vi.mock('$lib/client/runtime/AirportClientRuntime', () => ({
-    AirportClientRuntime: class AirportClientRuntime {
-        public hydrateMissionSnapshot(snapshot: MissionRuntimeSnapshot) {
-            return runtimeMocks.hydrateMissionSnapshot(snapshot);
-        }
-    }
-}));
 
 beforeEach(() => {
-    runtimeMocks.missions.clear();
-    runtimeMocks.hydrateMissionSnapshot.mockClear();
+    app.reset();
 });
-
-function createMissionSnapshot(input: {
-    missionId?: string;
-    lifecycle?: string;
-} = {}): MissionRuntimeSnapshot {
-    return {
-        missionId: input.missionId ?? 'mission-29',
-        status: {
-            missionId: input.missionId ?? 'mission-29',
-            title: 'Mission 29',
-            lifecycle: input.lifecycle ?? 'running',
-            workflow: {
-                lifecycle: input.lifecycle ?? 'running',
-                updatedAt: '2026-04-23T19:00:00.000Z',
-                currentStageId: 'implementation',
-                stages: [],
-            },
-        },
-        sessions: [],
-    } as MissionRuntimeSnapshot;
-}
-
-function createRepositorySnapshot(
-    missionSnapshot?: MissionRuntimeSnapshot,
-): RepositorySurfaceSnapshot {
-    return {
-        repository: {
-            repositoryId: 'repo-1',
-            repositoryRootPath: '/repositories/Flying-Pillow/mission',
-            label: 'mission',
-            description: 'mission',
-        },
-        missions: [],
-        selectedMissionId: missionSnapshot?.missionId,
-        selectedMission: missionSnapshot,
-    } as unknown as RepositorySurfaceSnapshot;
-}
 
 describe('createAppContext', () => {
     it('uses the shared application singleton', () => {
@@ -94,8 +22,7 @@ describe('createAppContext', () => {
         expect(context.application).toBe(app);
     });
 
-    it('reuses repository and mission instances when snapshots are synchronized', () => {
-        app.reset();
+    it('writes active selection ids through the shared application shell state', () => {
         const context = createAppContext(() => ({
             daemon: {
                 running: true,
@@ -105,35 +32,18 @@ describe('createAppContext', () => {
             },
             githubStatus: 'connected',
         }));
-        const initialMission = createMissionSnapshot({ lifecycle: 'running' });
-        const repository = context.syncRepositoryData({
-            airportRepositories: [],
-            repositorySnapshot: createRepositorySnapshot(initialMission),
-        });
-        const mission = context.syncMissionRuntime({
-            snapshot: initialMission,
+        context.setActiveRepository({
+            repositoryId: 'repo-1',
             repositoryRootPath: '/repositories/Flying-Pillow/mission',
         });
+        context.setActiveMission('mission-29');
 
-        const updatedMission = createMissionSnapshot({ lifecycle: 'paused' });
-        const updatedRepository = context.syncRepositoryData({
-            airportRepositories: [],
-            repositorySnapshot: createRepositorySnapshot(updatedMission),
-        });
-        const reconciledMission = context.syncMissionRuntime({
-            snapshot: updatedMission,
-            repositoryRootPath: '/repositories/Flying-Pillow/mission',
-        });
-
-        expect(updatedRepository).toBe(repository);
-        expect(reconciledMission).toBe(mission);
-        expect(context.airport.activeRepository).toBe(repository);
-        expect(context.airport.activeMission).toBe(mission);
-        expect(mission.workflowLifecycle).toBe('paused');
+        expect(context.airport.activeRepositoryId).toBe('repo-1');
+        expect(context.airport.activeRepositoryRootPath).toBe('/repositories/Flying-Pillow/mission');
+        expect(context.airport.activeMissionId).toBe('mission-29');
     });
 
-    it('clears the active mission entity when the selected mission is removed', () => {
-        app.reset();
+    it('clears the selected mission id when requested', () => {
         const context = createAppContext(() => ({
             daemon: {
                 running: true,
@@ -144,17 +54,9 @@ describe('createAppContext', () => {
             githubStatus: 'connected',
         }));
 
-        context.syncRepositoryData({
-            airportRepositories: [],
-            repositorySnapshot: createRepositorySnapshot(createMissionSnapshot()),
-        });
-
-        context.syncRepositoryData({
-            airportRepositories: [],
-            repositorySnapshot: createRepositorySnapshot(),
-        });
+        context.setActiveMission('mission-29');
+        context.setActiveMission(undefined);
 
         expect(context.airport.activeMissionId).toBeUndefined();
-        expect(context.airport.activeMission).toBeUndefined();
     });
 });

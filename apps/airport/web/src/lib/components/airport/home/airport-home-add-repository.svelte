@@ -1,11 +1,5 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepositoryList from "$lib/components/entities/Repository/GithubRepositoryList.svelte";
-
-    const appContext = getAppContext();
-    const githubRepositories = $derived(
-        appContext.application.airportHomeState?.githubRepositories ?? [],
-    );
 </script>
 
 <section

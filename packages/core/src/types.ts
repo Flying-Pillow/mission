@@ -1,5 +1,6 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
+import type { Repository } from './entities/Repository/Repository.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
 import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
 import {
@@ -96,7 +97,7 @@ export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
 export type MissionTaskStatus = MissionTaskLifecycleState;
 export type MissionTaskAgent = string;
 
-export type OperatorActionScope = 'mission' | 'task' | 'session' | 'generation';
+export type OperatorActionScope = 'mission' | 'task' | 'artifact' | 'session' | 'generation';
 export type OperatorActionFlowSelectionMode = 'single' | 'multiple';
 export type OperatorActionFlowTextMode = 'compact' | 'expanded';
 export type OperatorActionFlowTextFormat = 'plain' | 'markdown';
@@ -144,7 +145,7 @@ export type OperatorActionUiMetadata = {
 	confirmationPrompt?: string;
 };
 
-export type OperatorActionPresentationScope = 'repository' | 'mission' | 'stage' | 'task' | 'session';
+export type OperatorActionPresentationScope = 'repository' | 'mission' | 'stage' | 'task' | 'artifact' | 'session';
 
 export type OperatorActionPresentationTarget = {
 	scope: OperatorActionPresentationScope;
@@ -155,6 +156,7 @@ export type OperatorActionTargetContext = {
 	repositoryId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
+	artifactPath?: string;
 	sessionId?: string;
 };
 
@@ -598,7 +600,7 @@ export type OperatorStatus = {
 	};
 	recommendedAction?: string;
 	availableMissions?: MissionSelectionCandidate[];
-	availableRepositories?: RepositoryCandidate[];
+	availableRepositories?: Repository[];
 	preparation?: MissionPreparationStatus;
 };
 

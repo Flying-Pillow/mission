@@ -2,12 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
 	getMissionDaemonSettingsPath,
-} from '../lib/daemonConfig.js';
+} from '../../lib/daemonConfig.js';
 import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath
-} from '../lib/repoConfig.js';
-import { WorkflowSettingsStore } from '../settings/index.js';
+} from '../../lib/repoConfig.js';
+import { WorkflowSettingsStore } from '../../settings/index.js';
 
 export type RepositoryInitialization = {
 	controlDirectoryPath: string;

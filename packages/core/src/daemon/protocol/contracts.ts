@@ -12,9 +12,9 @@ import type {
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../../types.js';
-import type { Mission } from '../../mission/Mission.js';
-import type { AgentSession } from '../../mission/AgentSession.js';
-import type { Repository } from '../../repository/Repository.js';
+import type { Mission } from '../../entities/Mission/Mission.js';
+import type { AgentSession } from '../../entities/AgentSession/AgentSession.js';
+import type { Repository } from '../../entities/Repository/Repository.js';
 import type {
 	AgentCommand,
 	AgentPrompt
@@ -455,6 +455,10 @@ export type ControlDocumentResponse = {
 };
 
 export type ControlWorkflowSettingsGet = Record<string, never>;
+
+export type ControlStatus = {
+	includeMissions?: boolean;
+};
 
 export type ControlWorkflowSettingsInitialize = WorkflowSettingsInitializeRequest;
 

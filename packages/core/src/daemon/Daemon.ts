@@ -24,8 +24,10 @@ import {
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
 import { SystemController } from './control-plane/SystemController.js';
-import { RepositoryManager } from '../repository/RepositoryManager.js';
+import type { ControlSource } from './control-plane/types.js';
+import { RepositoryManager } from '../entities/Repository/RepositoryManager.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
+import { deriveRepositoryIdentity } from '../lib/repositoryIdentity.js';
 import { readSystemStatus } from '../system/SystemStatus.js';
 
 export type DaemonOptions = {
@@ -246,8 +248,20 @@ export class Daemon {
 			return this.executeAirportPaneBind(request);
 		}
 
+		const repositoryMethodStartedAt = request.method === 'control.status' ? performance.now() : 0;
 		const result = await this.repositoryManager.executeMethod(request);
-		return this.decorateRequestResultWithSystemState(request, result);
+		const repositoryMethodDurationMs = request.method === 'control.status'
+			? performance.now() - repositoryMethodStartedAt
+			: 0;
+		const decorationStartedAt = request.method === 'control.status' ? performance.now() : 0;
+		const decoratedResult = await this.decorateRequestResultWithSystemState(request, result);
+		if (request.method === 'control.status') {
+			const decorationDurationMs = performance.now() - decorationStartedAt;
+			process.stdout.write(
+				`${new Date().toISOString().slice(11, 19)} control.status daemon repositoryMethod=${repositoryMethodDurationMs.toFixed(1)}ms decorateSystem=${decorationDurationMs.toFixed(1)}ms\n`
+			);
+		}
+		return decoratedResult;
 	}
 
 	private broadcastEvent(event: Notification): void {
@@ -439,8 +453,12 @@ export class Daemon {
 			: hasEmbeddedOperatorStatus(result)
 				? result.status
 				: undefined;
+		const sourceHint = isOperatorStatus(result)
+			? this.toControlSourceHint(repositoryRoot, result)
+			: undefined;
 		const snapshot = await this.systemController.synchronizeWorkspace({
 			workspaceRoot: repositoryRoot,
+			...(sourceHint ? { sourceHint } : {}),
 			...(selectionHint ? { selectionHint } : {}),
 			...(missionStatusHint ? { missionStatusHint } : {})
 		});
@@ -467,6 +485,24 @@ export class Daemon {
 			default:
 				return false;
 		}
+	}
+
+	private toControlSourceHint(
+		repositoryRoot: string,
+		status: import('../types.js').OperatorStatus
+	): ControlSource | undefined {
+		if (!status.control) {
+			return undefined;
+		}
+
+		return {
+			repositoryId: deriveRepositoryIdentity(repositoryRoot).repositoryId,
+			repositoryRootPath: repositoryRoot,
+			control: structuredClone(status.control),
+			availableRepositories: structuredClone(status.availableRepositories ?? []),
+			availableMissions: structuredClone(status.availableMissions ?? []),
+			...(status.missionId ? { missionStatus: structuredClone(status) } : {})
+		};
 	}
 
 	private async decorateEvent(event: Notification): Promise<Notification> {
