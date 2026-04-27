@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/gateway/AirportWebGateway.server.ts: Thin gateway that only exposes primary daemon and user system state to the web shell.
-import type { SystemState } from '@flying-pillow/mission-core/schemas';
+import type { SystemState } from '@flying-pillow/mission-core';
 import type { AppContextServerValue } from '$lib/client/context/app-context.svelte';
 import { readCachedDaemonSystemStatus } from '../daemon/health.server';
 

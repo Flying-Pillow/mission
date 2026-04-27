@@ -1,6 +1,6 @@
 import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../../agent/runtimes/AgentRuntimeIds.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
@@ -24,8 +24,8 @@ import {
 	normalizeGeneratedTaskDependencies,
 	type MissionWorkflowTaskGenerationResult
 } from './generator.js';
-import type { AgentRunner } from '../../agent/AgentRunner.js';
-import type { AgentSession } from '../../agent/AgentSession.js';
+import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
+import type { AgentSession } from '../../daemon/runtime/agent/AgentSession.js';
 import type {
 	AgentCommand,
 	AgentLaunchConfig,
@@ -34,7 +34,7 @@ import type {
 	AgentSessionId,
 	AgentSessionReference,
 	AgentSessionSnapshot
-} from '../../agent/AgentRuntimeTypes.js';
+} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 
 type RuntimeSessionHandle = {
 	session: AgentSession;
@@ -395,6 +395,13 @@ export class MissionWorkflowRequestExecutor {
 		fallbackTaskId?: string
 	): Promise<MissionWorkflowEvent[]> {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
+		const runtimeSession = this.runtimeSessions.get(sessionId);
+		if (!runtimeSession) {
+			const taskId = normalizeTaskId(fallbackTaskId) ?? this.sessionTaskIds.get(sessionId);
+			return taskId
+				? [this.createDetachedSessionTerminatedEvent(sessionId, taskId)]
+				: [];
+		}
 		const snapshot = await this.requireRuntimeSession(sessionId).terminate(reason);
 		const events = this.drainRuntimeEvents();
 		if (events.length > 0) {
@@ -561,6 +568,21 @@ export class MissionWorkflowRequestExecutor {
 			runnerId: snapshot.runnerId,
 			...(sessionLogPath ? { sessionLogPath } : {}),
 			...toTransportEventFields(snapshot)
+		};
+	}
+
+	private createDetachedSessionTerminatedEvent(
+		sessionId: AgentSessionId,
+		taskId: string
+	): MissionWorkflowEvent {
+		const occurredAt = new Date().toISOString();
+		return {
+			eventId: `runtime:${sessionId}:session.terminated:${occurredAt}`,
+			type: 'session.terminated',
+			occurredAt,
+			source: 'daemon',
+			sessionId,
+			taskId
 		};
 	}
 

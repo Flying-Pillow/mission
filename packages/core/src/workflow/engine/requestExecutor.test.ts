@@ -7,10 +7,10 @@ import {
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { MissionWorkflowRequestExecutor } from './requestExecutor.js';
-import { FakeAgentRunner } from '../../agent/testing/FakeAgentRunner.js';
+import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
 import type { MissionTaskRuntimeState, MissionWorkflowRequest } from './types.js';
-import type { AgentSessionReference } from '../../agent/AgentRuntimeTypes.js';
-import type { AgentSession } from '../../agent/AgentSession.js';
+import type { AgentSessionReference } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type { AgentSession } from '../../daemon/runtime/agent/AgentSession.js';
 
 function createDescriptor(): MissionDescriptor {
 	return {
@@ -703,6 +703,26 @@ describe('MissionWorkflowRequestExecutor', () => {
 			runtime,
 			eventLog: []
 		})).resolves.toEqual([]);
+	});
+
+	it('treats workflow termination of an unattached session as a terminal lifecycle event', async () => {
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as FilesystemAdapter,
+			runners: new Map()
+		});
+
+		const events = await executor.terminateRuntimeSession(
+			'detached-session',
+			'terminated by panic',
+			'spec/01'
+		);
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: 'session.terminated',
+			sessionId: 'detached-session',
+			taskId: 'spec/01'
+		});
 	});
 
 	it('reconciles detached terminal snapshots even when runtime snapshot taskId is unknown', async () => {

@@ -33,7 +33,7 @@ import {
 	type MissionRuntimeRecord,
 	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
 } from '../workflow/engine/index.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -492,7 +492,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionSessionLogRelativePath(sessionId: string): string {
-		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.ansi`);
+		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.log`);
 	}
 
 	public getMissionSessionMetadataRelativePath(sessionId: string): string {
@@ -500,7 +500,11 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionSessionLogPath(missionDir: string, sessionId: string): string {
-		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.ansi`);
+		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.log`);
+	}
+
+	public getMissionSessionLogPathFromRelativePath(missionDir: string, sessionLogPath: string): string | undefined {
+		return this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
 	}
 
 	public getMissionSessionMetadataPath(missionDir: string, sessionId: string): string {
@@ -554,6 +558,9 @@ export class FilesystemAdapter {
 					sessionId: session.sessionId,
 					taskId: session.taskId,
 					runnerId: session.runnerId,
+					...(session.transportId ? { transportId: session.transportId } : {}),
+					...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
+					...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
 					...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
 					lifecycle: session.lifecycle,
 					launchedAt: session.launchedAt,
@@ -610,15 +617,30 @@ export class FilesystemAdapter {
 
 	public async appendMissionSessionLogChunk(
 		missionDir: string,
-		sessionId: string,
+		sessionLogPath: string,
 		chunk: string
 	): Promise<void> {
 		if (chunk.length === 0) {
 			return;
 		}
-		const filePath = this.getMissionSessionLogPath(missionDir, sessionId);
+		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return;
+		}
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		await fs.appendFile(filePath, chunk, 'utf8');
+	}
+
+	public async ensureMissionSessionLogFile(
+		missionDir: string,
+		sessionLogPath: string
+	): Promise<void> {
+		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return;
+		}
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		await fs.appendFile(filePath, '', 'utf8');
 	}
 
 	public async readMissionSessionLog(

@@ -23,19 +23,26 @@
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
-    "./schemas": {
-      "development": "./src/schemas/index.ts",
-      "typescript": "./src/schemas/index.ts",
-      "types": "./build/schemas/index.d.ts",
-      "import": "./build/schemas/index.js",
-      "default": "./build/schemas/index.js"
-    },
     "./browser": {
       "development": "./src/browser.ts",
       "typescript": "./src/browser.ts",
       "types": "./build/browser.d.ts",
       "import": "./build/browser.js",
       "default": "./build/browser.js"
+    },
+    "./entities": {
+      "development": "./src/entities/index.ts",
+      "typescript": "./src/entities/index.ts",
+      "types": "./build/entities/index.d.ts",
+      "import": "./build/entities/index.js",
+      "default": "./build/entities/index.js"
+    },
+    "./protocol/entity-remote": {
+      "development": "./src/daemon/protocol/entityRemote.ts",
+      "typescript": "./src/daemon/protocol/entityRemote.ts",
+      "types": "./build/daemon/protocol/entityRemote.d.ts",
+      "import": "./build/daemon/protocol/entityRemote.js",
+      "default": "./build/daemon/protocol/entityRemote.js"
     },
     "./node": {
       "development": "./src/node.ts",

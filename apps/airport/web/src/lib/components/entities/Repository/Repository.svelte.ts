@@ -4,13 +4,13 @@ import type {
     MissionSnapshot,
     RepositorySnapshot,
     TrackedIssueSummary
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import {
     githubIssueDetailSchema,
     repositoryMissionStartAcknowledgementSchema,
     repositorySnapshotSchema,
     trackedIssueSummarySchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';

@@ -1,12 +1,10 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionRuntimeTransport.ts: Mission transport adapter for runtime snapshot and daemon event contracts.
-import type {
-    AirportRuntimeEventEnvelope,
-    MissionSnapshot
-} from '@flying-pillow/mission-core/schemas';
+import type { MissionSnapshot } from '@flying-pillow/mission-core/entities';
+import type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
 import type {
     EntityQueryInvocation,
     EntityRemoteResult
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 import {
     EntityRuntimeTransport,
     type RuntimeSubscription
@@ -14,7 +12,7 @@ import {
 import {
     parseAirportRuntimeEventEnvelope
 } from '$lib/client/runtime/parsers';
-import { missionSnapshotSchema } from '@flying-pillow/mission-core/schemas';
+import { missionSnapshotSchema } from '@flying-pillow/mission-core/entities';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 
 type EntityQueryExecutor = (input: EntityQueryInvocation) => Promise<EntityRemoteResult>;

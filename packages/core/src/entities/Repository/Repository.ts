@@ -6,7 +6,7 @@ import {
 } from '../../lib/config.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import { readRepositorySettingsDocument } from '../../lib/daemonConfig.js';
-import { MissionPreparationService } from '../../mission/MissionPreparationService.js';
+import { MissionPreparationService } from '../../daemon/runtime/mission/MissionPreparationService.js';
 import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
 import type { MissionBrief, RepositoryCandidate } from '../../types.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
@@ -41,13 +41,13 @@ import {
 	repositoryRegistrationInputSchema,
 	repositoryStartMissionFromBriefPayloadSchema,
 	repositoryStartMissionFromIssuePayloadSchema
-} from '../../schemas/Repository.js';
+} from './RepositoryContract.js';
 import {
 	RepositorySettingsSchema,
 	type RepositorySettings
-} from '../../schemas/RepositorySettings.js';
+} from './RepositorySettings.js';
 import type { WorkflowGlobalSettings } from '../../workflow/WorkflowSchema.js';
-import { createDefaultRepositorySettings } from '../../schemas/RepositorySettings.js';
+import { createDefaultRepositorySettings } from './RepositorySettings.js';
 import { readMissionWorkflowDefinition } from '../../workflow/mission/preset.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { normalizeWorkflowSettings } from '../../settings/validation.js';

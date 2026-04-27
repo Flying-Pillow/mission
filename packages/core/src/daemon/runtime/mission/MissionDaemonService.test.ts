@@ -1,0 +1,77 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../../../types.js';
+import { MissionDaemonService } from './MissionDaemonService.js';
+
+const temporaryWorkspaceRoots = new Set<string>();
+
+afterEach(async () => {
+	await Promise.all(
+		[...temporaryWorkspaceRoots].map(async (workspaceRoot) => {
+			temporaryWorkspaceRoots.delete(workspaceRoot);
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		})
+	);
+});
+
+describe('MissionDaemonService', () => {
+	it('continues startup hydration when a persisted mission fails strict loading', async () => {
+		const workspaceRoot = await createTempWorkspace();
+		const adapter = new FilesystemAdapter(workspaceRoot);
+		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-good'), createDescriptor('mission-good'));
+		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-bad'), createDescriptor('mission-bad'));
+		const loadRuntime = vi.fn(async (input: { missionId: string }) => {
+			if (input.missionId === 'mission-bad') {
+				throw new Error('strict persisted mission failure');
+			}
+			return undefined;
+		});
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+		try {
+			await expect(new MissionDaemonService({ loadRuntime }).hydrateRepositoryMissions({
+				surfacePath: workspaceRoot
+			})).resolves.toBeUndefined();
+
+			expect(loadRuntime).toHaveBeenCalledTimes(2);
+			expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Mission daemon could not hydrate mission 'mission-bad'"));
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+});
+
+async function createTempWorkspace(): Promise<string> {
+	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-service-'));
+	temporaryWorkspaceRoots.add(workspaceRoot);
+	await fs.mkdir(path.join(workspaceRoot, '.mission'), { recursive: true });
+	await fs.writeFile(
+		path.join(workspaceRoot, '.mission', 'settings.json'),
+		`${JSON.stringify({
+			missionWorkspaceRoot: path.join(workspaceRoot, 'mission-worktrees'),
+			trackingProvider: 'github',
+			instructionsPath: '.agents',
+			skillsPath: '.agents/skills',
+			agentRunner: 'copilot-cli'
+		}, null, 2)}\n`,
+		'utf8'
+	);
+	return workspaceRoot;
+}
+
+function createDescriptor(missionId: string): MissionDescriptor {
+	return {
+		missionId,
+		missionDir: '',
+		brief: {
+			title: missionId,
+			body: `${missionId} body`,
+			type: 'task'
+		},
+		branchRef: 'HEAD',
+		createdAt: '2026-04-27T13:00:00.000Z'
+	};
+}

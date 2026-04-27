@@ -3,6 +3,7 @@
     import { onMount } from "svelte";
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
+    import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
@@ -13,7 +14,7 @@
         missionStageSnapshotSchema,
         missionStatusSnapshotSchema,
         missionTaskSnapshotSchema,
-    } from "@flying-pillow/mission-core/schemas";
+    } from "@flying-pillow/mission-core/entities";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -21,10 +22,11 @@
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
+    import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/schemas";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/browser";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -35,6 +37,7 @@
     import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import { Badge } from "$lib/components/ui/badge";
 
     type MissionSelectionState = {
         treeNodes: MissionTowerTreeNode[];
@@ -87,9 +90,9 @@
     let artifactPanelMode = $state<"view" | "edit">("view");
     let leftPanelMode = $state<"mission" | "files">("mission");
     let rightPanelMode = $state<"terminal" | "agent">("terminal");
-    let lastSelectedAgentSessionId = $state<string | null>(null);
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
+    let displayArtifact = $state<ArtifactEntity | undefined>(undefined);
     let projectionRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
@@ -110,6 +113,21 @@
         missionStatus?.title ??
             activeMission?.missionId ??
             missionScope.missionId,
+    );
+    const repositoryName = $derived(
+        repositorySummary?.repoName ?? repositorySummary?.label ?? "Repository",
+    );
+    const missionIssueLabel = $derived.by(() => {
+        const issueId = missionStatus?.issueId;
+        if (issueId) {
+            return `#${issueId}`;
+        }
+
+        const missionNumber = missionId.match(/^(\d+)(?:-|$)/)?.[1];
+        return missionNumber ? `#${missionNumber}` : undefined;
+    });
+    const missionHeading = $derived(
+        `${repositoryName} - ${missionIssueLabel ? `${missionIssueLabel} ` : ""}${missionTitle}`,
     );
     const missionTreeNodes = $derived(
         activeMission ? buildMissionTreeNodes(activeMission) : [],
@@ -143,20 +161,32 @@
         const selectedNode = missionTreeNodes.find(
             (node) => node.id === selectedNodeId,
         );
+        const companionStageTask =
+            activeMission && isStageSelectionNode(selectedNode)
+                ? resolvePreferredStageTask(activeMission, selectedNode.stageId)
+                : undefined;
+        const companionStageSession =
+            activeMission && isStageSelectionNode(selectedNode)
+                ? resolvePreferredStageSession(
+                      activeMission,
+                      selectedNode.stageId,
+                  )
+                : undefined;
+        const resolvedStageId = selectedNode?.stageId;
+        const resolvedTaskId =
+            selectedNode?.taskId ?? companionStageTask?.taskId;
 
         return {
             treeNodes: missionTreeNodes,
             visibleTreeNodes: missionTreeNodes,
             selectedNodeId,
-            ...(selectedNode?.stageId || selectedNode?.taskId
+            ...(resolvedStageId || resolvedTaskId
                 ? {
                       resolvedSelection: {
-                          ...(selectedNode.stageId
-                              ? { stageId: selectedNode.stageId }
+                          ...(resolvedStageId
+                              ? { stageId: resolvedStageId }
                               : {}),
-                          ...(selectedNode.taskId
-                              ? { taskId: selectedNode.taskId }
-                              : {}),
+                          ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
                       },
                   }
                 : {}),
@@ -168,7 +198,9 @@
                 : {}),
             ...(selectedNode?.sessionId
                 ? { activeSessionId: selectedNode.sessionId }
-                : {}),
+                : companionStageSession?.sessionId
+                  ? { activeSessionId: companionStageSession.sessionId }
+                  : {}),
         };
     });
     const activeArtifactPath = $derived(selectionState.activeArtifactPath);
@@ -182,18 +214,6 @@
         selectedWorktreeFile?.name ??
             selectionState.activeArtifact?.displayLabel,
     );
-    const displayArtifact = $derived.by((): ArtifactEntity | undefined => {
-        if (!activeMission || !displayArtifactPath) {
-            return undefined;
-        }
-
-        return activeMission.resolveArtifact({
-            filePath: displayArtifactPath,
-            ...(displayArtifactLabel ? { label: displayArtifactLabel } : {}),
-            ...(displayStageId ? { stageId: displayStageId } : {}),
-            ...(displayTaskId ? { taskId: displayTaskId } : {}),
-        });
-    });
     const displayStageId = $derived(
         selectedWorktreeFile
             ? undefined
@@ -203,6 +223,11 @@
         selectedWorktreeFile
             ? undefined
             : selectionState.resolvedSelection?.taskId,
+    );
+    const displayTask = $derived(
+        activeMission && displayTaskId
+            ? activeMission.getTask(displayTaskId)
+            : undefined,
     );
     const showArtifactEditor = $derived.by(() => {
         if (!displayArtifactPath) {
@@ -260,12 +285,28 @@
             return;
         }
 
-        const activeSessionId = selectionState.activeSessionId ?? null;
-        if (activeSessionId && activeSessionId !== lastSelectedAgentSessionId) {
+        const activeSessionId = resolvedSession?.sessionId ?? null;
+        if (
+            activeSessionId &&
+            (selectionState.activeSessionId ||
+                selectionState.resolvedSelection?.taskId)
+        ) {
             rightPanelMode = "agent";
         }
+    });
 
-        lastSelectedAgentSessionId = activeSessionId;
+    $effect(() => {
+        if (!activeMission || !displayArtifactPath) {
+            displayArtifact = undefined;
+            return;
+        }
+
+        displayArtifact = activeMission.resolveArtifact({
+            filePath: displayArtifactPath,
+            ...(displayArtifactLabel ? { label: displayArtifactLabel } : {}),
+            ...(displayStageId ? { stageId: displayStageId } : {}),
+            ...(displayTaskId ? { taskId: displayTaskId } : {}),
+        });
     });
 
     $effect(() => {
@@ -324,6 +365,26 @@
 
     function currentStageLabel(stageId: string | undefined): string {
         return stageId ? `Current stage ${stageId}` : "No active stage";
+    }
+
+    function statusBadgeClass(statusLabel: string | undefined): string {
+        switch (statusLabel?.trim().toLowerCase()) {
+            case "running":
+            case "active":
+                return "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+            case "completed":
+            case "delivered":
+                return "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+            case "failed":
+            case "panicked":
+                return "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300";
+            case "paused":
+            case "cancelled":
+            case "terminated":
+                return "border-slate-400/40 bg-slate-500/10 text-slate-600 dark:text-slate-300";
+            default:
+                return "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+        }
     }
 
     async function refreshProjectionSnapshot(): Promise<void> {
@@ -511,6 +572,79 @@
             sessions.find((session) => session.isTerminalBacked()) ??
             sessions[0]
         );
+    }
+
+    function isStageSelectionNode(
+        node: MissionTowerTreeNode | undefined,
+    ): node is MissionTowerTreeNode & { stageId: string } {
+        return Boolean(
+            node?.stageId &&
+                (node.kind === "stage" || node.kind === "stage-artifact"),
+        );
+    }
+
+    function resolvePreferredStageTask(
+        currentMission: MissionEntity,
+        stageId: string | undefined,
+    ): TaskEntity | undefined {
+        if (!stageId) {
+            return undefined;
+        }
+
+        const tasks = currentMission.listTasksForStage(stageId);
+        return (
+            tasks.find((task) => task.lifecycle === "running") ??
+            tasks.find(
+                (task) =>
+                    task.lifecycle === "ready" || task.lifecycle === "queued",
+            ) ??
+            tasks.at(-1)
+        );
+    }
+
+    function resolvePreferredStageSession(
+        currentMission: MissionEntity,
+        stageId: string | undefined,
+    ): AgentSessionModel | undefined {
+        if (!stageId) {
+            return undefined;
+        }
+
+        const taskIds = new Set(
+            currentMission
+                .listTasksForStage(stageId)
+                .map((task) => task.taskId),
+        );
+        return currentMission
+            .listSessions()
+            .filter(
+                (session) =>
+                    session.taskId !== undefined && taskIds.has(session.taskId),
+            )
+            .sort(comparePreferredAgentSessions)[0];
+    }
+
+    function comparePreferredAgentSessions(
+        left: AgentSessionModel,
+        right: AgentSessionModel,
+    ): number {
+        const leftActiveRank = getAgentSessionActiveRank(left);
+        const rightActiveRank = getAgentSessionActiveRank(right);
+        if (leftActiveRank !== rightActiveRank) {
+            return rightActiveRank - leftActiveRank;
+        }
+
+        return getAgentSessionUpdatedAt(right) - getAgentSessionUpdatedAt(left);
+    }
+
+    function getAgentSessionActiveRank(session: AgentSessionModel): number {
+        return session.isRunning() ? 1 : 0;
+    }
+
+    function getAgentSessionUpdatedAt(session: AgentSessionModel): number {
+        const snapshot = session.toSnapshot();
+        const timestamp = snapshot.lastUpdatedAt ?? snapshot.createdAt;
+        return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
 
     function buildMissionTreeNodes(
@@ -705,14 +839,17 @@
                         </p>
                         <div>
                             <h1 class="text-2xl font-semibold text-foreground">
-                                {missionTitle}
+                                {missionHeading}
                             </h1>
                             <div
-                                class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
+                                class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
                             >
-                                <span>{repositorySummary.label}</span>
-                                <span>{activeMission.missionId}</span>
-                                <span>{workflowLifecycle ?? "unknown"}</span>
+                                <Badge
+                                    variant="outline"
+                                    class={statusBadgeClass(workflowLifecycle)}
+                                >
+                                    {workflowLifecycle ?? "unknown"}
+                                </Badge>
                                 <span>{currentStageLabel(currentStageId)}</span>
                                 <span
                                     >Updated {workflowUpdatedAt ??
@@ -728,6 +865,11 @@
                     <div
                         class="flex items-start gap-2 self-start xl:justify-end"
                     >
+                        <MissionActionbar
+                            refreshNonce={actionRefreshNonce}
+                            mission={activeMission}
+                            onActionExecuted={handleMissionMutated}
+                        />
                         <Button
                             type="button"
                             variant="outline"
@@ -797,7 +939,6 @@
                                     outline={missionOutline}
                                     {missionId}
                                     activeNodeId={selectedNodeId}
-                                    title="Mission tree"
                                     class="h-full rounded-none border-0 bg-transparent"
                                     onSelectNode={handleSelectNode}
                                 />
@@ -834,6 +975,7 @@
                     <ArtifactViewer
                         refreshNonce={actionRefreshNonce}
                         artifact={displayArtifact}
+                        task={displayTask}
                         onEditRequested={handleEditArtifact}
                         onActionExecuted={handleMissionMutated}
                     />

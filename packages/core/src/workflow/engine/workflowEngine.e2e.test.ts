@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import type { AgentCommand, AgentPrompt } from '../../agent/AgentRuntimeTypes.js';
+import type { AgentCommand, AgentPrompt } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
     createMissionRuntimeRecord,

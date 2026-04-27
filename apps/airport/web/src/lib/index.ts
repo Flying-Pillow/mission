@@ -24,15 +24,15 @@ export { Task } from '$lib/components/entities/Task/Task.svelte.js';
 export { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 export { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 export type {
-    AgentCommand,
-    AgentPrompt,
-    AgentSession,
-    AirportHomeSnapshot,
-    AirportRuntimeEventEnvelope,
+    MissionAgentCommand as AgentCommand,
+    MissionAgentPrompt as AgentPrompt,
+    AgentSessionSnapshot as AgentSessionData,
     MissionSnapshot as MissionData,
     MissionMissionCommand,
-    MissionSessionTerminalHandle,
-    MissionSessionTerminalSnapshot,
+    MissionAgentSessionTerminalHandle as MissionSessionTerminalHandle,
+    AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
     MissionSnapshot,
     Repository as RepositoryData
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+export type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
+export type { AirportHomeSnapshot } from '$lib/contracts/airport-home';

@@ -89,6 +89,7 @@ describe('resolveMissionSelection', () => {
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
 			stageId: 'prd',
+			taskId: 'task-1',
 			activeStageResultArtifactId: 'mission-1:prd',
 			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
 			activeAgentSessionId: 'session-new'
@@ -113,8 +114,71 @@ describe('resolveMissionSelection', () => {
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
 			stageId: 'prd',
+			taskId: 'task-1',
 			activeStageResultArtifactId: 'mission-1:prd',
 			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
+			activeAgentSessionId: 'session-new'
+		});
+	});
+
+	it('resolves stage artifact selection to the last task when every stage task is done', () => {
+		const domain = createDomain();
+		domain.missions['mission-1']!.taskIds = ['task-1', 'task-2'];
+		domain.tasks['task-1']!.lifecycleState = 'completed';
+		domain.tasks['task-2'] = {
+			taskId: 'task-2',
+			missionId: 'mission-1',
+			stageId: 'prd',
+			subject: 'Review PRD',
+			instructionSummary: 'Review the PRD.',
+			lifecycleState: 'completed',
+			dependencyIds: [],
+			primaryArtifactId: 'mission-1:task:task-2',
+			agentSessionIds: []
+		};
+		domain.artifacts['mission-1:task:task-2'] = {
+			artifactId: 'mission-1:task:task-2',
+			missionId: 'mission-1',
+			ownerTaskId: 'task-2',
+			filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-review-prd.md',
+			logicalKind: 'task-instruction',
+			displayLabel: '02-review-prd.md'
+		};
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'stage-artifact',
+				stageId: 'prd',
+				sourcePath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved?.taskId).toBe('task-2');
+		expect(resolved?.activeStageResultPath).toBe('/repo/.mission/missions/mission-1/01-PRD/PRD.md');
+	});
+
+	it('resolves task artifact selection to that artifact and the preferred task session', () => {
+		const domain = createDomain();
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'task-artifact',
+				stageId: 'prd',
+				taskId: 'task-1',
+				sourcePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved).toEqual({
+			missionId: 'mission-1',
+			stageId: 'prd',
+			taskId: 'task-1',
+			activeInstructionArtifactId: 'mission-1:task:task-1:alternate',
+			activeInstructionPath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md',
 			activeAgentSessionId: 'session-new'
 		});
 	});

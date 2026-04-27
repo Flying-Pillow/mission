@@ -6,30 +6,30 @@ import {
     type ControlDocumentResponse,
     DaemonApi,
     type Notification,
-    type RepositoryCandidate,
     type MissionAgentSessionState,
-    RepositoryEntity,
+    type MissionAgentTerminalState,
     deriveRepositoryIdentity,
-    listRegisteredRepositories,
     resolveGitWorkspaceRoot,
     type MissionEntity,
 } from '@flying-pillow/mission-core/node';
 import {
-    type AgentSession,
-    type AirportHomeSnapshot,
-    type AirportRuntimeEventEnvelope,
-    type MissionReference,
-    type MissionSessionTerminalSnapshot,
+    type AgentSessionSnapshot as AgentSession,
+    type AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
     type MissionTerminalSnapshot,
-    type Repository,
-    agentSessionSchema,
-    airportHomeSnapshotSchema,
-    airportRuntimeEventEnvelopeSchema,
-    missionReferenceSchema,
-    missionSessionTerminalSnapshotSchema,
+    type RepositoryData as Repository,
+    agentSessionSnapshotSchema,
+    agentSessionTerminalSnapshotSchema,
     missionTerminalSnapshotSchema,
     repositorySchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import {
+    airportRuntimeEventEnvelopeSchema,
+    type AirportRuntimeEventEnvelope
+} from '../../contracts/runtime-events';
+import {
+    airportHomeSnapshotSchema,
+    type AirportHomeSnapshot
+} from '../../contracts/airport-home';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
@@ -37,6 +37,14 @@ import {
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const AIRPORT_HOME_STATUS_TIMEOUT_MS = 8_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
+
+type AddressedNotification = Notification & {
+    entityId: string;
+    channel: string;
+    eventName: string;
+    occurredAt: string;
+    missionEntityId?: string;
+};
 
 export class DaemonGateway {
     public constructor(private readonly locals?: App.Locals) { }
@@ -90,14 +98,8 @@ export class DaemonGateway {
     }
 
     public async getAirportHomeSnapshot(): Promise<AirportHomeSnapshot> {
-        if (this.locals?.appContext.daemon.running === false) {
-            return this.createEmptyAirportHomeSnapshot();
-        }
-
-        const registeredRepositories = await listRegisteredRepositories();
-        let daemon: Awaited<ReturnType<DaemonGateway['connectSharedDaemonClient']>> | undefined;
+        const daemon = await this.connectSharedDaemonClient();
         try {
-            daemon = await this.connectSharedDaemonClient();
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
                 api.control.getStatus({ includeMissions: false }),
@@ -119,14 +121,8 @@ export class DaemonGateway {
                     : {}),
                 repositories: repositories.map((repository) => this.toRepositorySnapshot(repository))
             });
-        } catch {
-            return airportHomeSnapshotSchema.parse({
-                repositories: registeredRepositories.map((repository) =>
-                    this.toRepositorySnapshotFromCandidate(repository)
-                )
-            });
         } finally {
-            daemon?.dispose();
+            daemon.dispose();
         }
     }
 
@@ -186,25 +182,10 @@ export class DaemonGateway {
         const missionId = input.missionId?.trim();
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
         await daemon.client.request<null>('event.subscribe', {
-            eventTypes: [
-                'mission.snapshot.changed',
-                'mission.actions.changed',
-                'mission.status',
-                'stage.snapshot.changed',
-                'task.snapshot.changed',
-                'artifact.snapshot.changed',
-                'agentSession.snapshot.changed',
-                'session.event',
-                'session.lifecycle'
-            ],
-            ...(missionId ? { missionId } : {})
+            channels: missionId ? missionRuntimeEventChannels(missionId) : allRuntimeEventChannels()
         });
         const subscription = daemon.client.onDidEvent((event) => {
-            if (!this.matchesMission(event, missionId) || !this.shouldForwardRuntimeEvent(event)) {
-                return;
-            }
-
-            input.onEvent(this.toRuntimeEventEnvelope(event));
+            input.onEvent(this.toRuntimeEventEnvelope(toAddressedNotification(event)));
         });
 
         return {
@@ -223,7 +204,7 @@ export class DaemonGateway {
         const missionId = input.missionId.trim();
         const sessionId = input.sessionId.trim();
         if (!missionId || !sessionId) {
-            return missionSessionTerminalSnapshotSchema.parse({
+            return agentSessionTerminalSnapshotSchema.parse({
                 missionId,
                 sessionId,
                 connected: false,
@@ -242,7 +223,7 @@ export class DaemonGateway {
                 'Mission terminal snapshot request timed out.'
             );
             if (!state) {
-                return missionSessionTerminalSnapshotSchema.parse({
+                return agentSessionTerminalSnapshotSchema.parse({
                     missionId,
                     sessionId,
                     connected: false,
@@ -252,18 +233,7 @@ export class DaemonGateway {
                 });
             }
 
-            const terminalScreen = clipMissionSessionTerminalScreen(state);
-
-            return missionSessionTerminalSnapshotSchema.parse({
-                missionId,
-                sessionId,
-                connected: state.connected,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                screen: terminalScreen.screen,
-                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
+            return toMissionSessionTerminalSnapshot(missionId, sessionId, state);
         } finally {
             daemon.dispose();
         }
@@ -300,17 +270,7 @@ export class DaemonGateway {
             if (!state) {
                 throw new Error(`Mission session '${sessionId}' is not available as a terminal-backed session.`);
             }
-            const terminalScreen = clipTerminalScreen(state.screen);
-            return missionSessionTerminalSnapshotSchema.parse({
-                missionId,
-                sessionId,
-                connected: state.connected,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                screen: terminalScreen.screen,
-                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
+            return toMissionSessionTerminalSnapshot(missionId, sessionId, state);
         } finally {
             daemon.dispose();
         }
@@ -349,17 +309,7 @@ export class DaemonGateway {
                 });
             }
 
-            const terminalScreen = clipTerminalScreen(state.screen);
-
-            return missionTerminalSnapshotSchema.parse({
-                missionId,
-                connected: state.connected,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                screen: terminalScreen.screen,
-                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
+            return toMissionTerminalSnapshot(missionId, state);
         } finally {
             daemon.dispose();
         }
@@ -393,57 +343,26 @@ export class DaemonGateway {
             if (!state) {
                 throw new Error(`Mission terminal for '${missionId}' is not available.`);
             }
-            const terminalScreen = clipTerminalScreen(state.screen);
-            return missionTerminalSnapshotSchema.parse({
-                missionId,
-                connected: state.connected,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                screen: terminalScreen.screen,
-                ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
+            return toMissionTerminalSnapshot(missionId, state);
         } finally {
             daemon.dispose();
         }
     }
 
-    private matchesMission(event: Notification, missionId?: string): boolean {
-        if (!missionId) {
-            return event.type !== 'control.workflow.settings.updated';
-        }
-
-        switch (event.type) {
-            case 'mission.snapshot.changed':
-            case 'mission.actions.changed':
-            case 'mission.status':
-            case 'stage.snapshot.changed':
-            case 'task.snapshot.changed':
-            case 'artifact.snapshot.changed':
-            case 'agentSession.snapshot.changed':
-            case 'session.console':
-            case 'session.terminal':
-            case 'session.event':
-            case 'session.lifecycle':
-                return event.missionId === missionId;
-            case 'airport.state':
-                return true;
-            case 'control.workflow.settings.updated':
-                return false;
-        }
-    }
-
-    private toRuntimeEventEnvelope(event: Notification): AirportRuntimeEventEnvelope {
+    private toRuntimeEventEnvelope(event: AddressedNotification): AirportRuntimeEventEnvelope {
         return airportRuntimeEventEnvelopeSchema.parse({
             eventId: randomUUID(),
+            entityId: event.entityId,
+            channel: event.channel,
+            eventName: event.eventName,
             type: event.type,
-            occurredAt: this.resolveOccurredAt(event),
-            ...(this.resolveMissionId(event) ? { missionId: this.resolveMissionId(event) } : {}),
+            occurredAt: event.occurredAt,
+            ...(notificationMissionId(event) ? { missionId: notificationMissionId(event) } : {}),
             payload: this.toRuntimeEventPayload(event)
         });
     }
 
-    private toRuntimeEventPayload(event: Notification): unknown {
+    private toRuntimeEventPayload(event: AddressedNotification): unknown {
         switch (event.type) {
             case 'airport.state':
                 return { snapshot: event.snapshot };
@@ -482,78 +401,10 @@ export class DaemonGateway {
                     lifecycleState: event.lifecycleState
                 };
             case 'session.console':
+            case 'mission.terminal':
             case 'session.terminal':
             case 'control.workflow.settings.updated':
                 return event;
-        }
-    }
-
-    private resolveOccurredAt(event: Notification): string {
-        switch (event.type) {
-            case 'airport.state':
-                return event.snapshot.state.airport.substrate.lastObservedAt
-                    ?? event.snapshot.state.airport.substrate.lastAppliedAt
-                    ?? new Date().toISOString();
-            case 'mission.snapshot.changed':
-                return event.snapshot.workflow?.updatedAt
-                    ?? event.snapshot.status?.workflow?.updatedAt
-                    ?? new Date().toISOString();
-            case 'mission.status':
-                return event.status.updatedAt ?? new Date().toISOString();
-            case 'stage.snapshot.changed':
-            case 'task.snapshot.changed':
-            case 'artifact.snapshot.changed':
-            case 'agentSession.snapshot.changed':
-                return new Date().toISOString();
-            case 'session.console':
-            case 'session.terminal':
-                return new Date().toISOString();
-            case 'session.event':
-                return event.event.state.lastUpdatedAt;
-            case 'mission.actions.changed':
-            case 'session.lifecycle':
-            case 'control.workflow.settings.updated':
-                return new Date().toISOString();
-        }
-    }
-
-    private resolveMissionId(event: Notification): string | undefined {
-        switch (event.type) {
-            case 'mission.snapshot.changed':
-            case 'mission.actions.changed':
-            case 'mission.status':
-            case 'stage.snapshot.changed':
-            case 'task.snapshot.changed':
-            case 'artifact.snapshot.changed':
-            case 'agentSession.snapshot.changed':
-            case 'session.console':
-            case 'session.terminal':
-            case 'session.event':
-            case 'session.lifecycle':
-                return event.missionId;
-            case 'airport.state':
-            case 'control.workflow.settings.updated':
-                return undefined;
-        }
-    }
-
-    private shouldForwardRuntimeEvent(event: Notification): boolean {
-        switch (event.type) {
-            case 'airport.state':
-            case 'mission.snapshot.changed':
-            case 'mission.actions.changed':
-            case 'mission.status':
-            case 'stage.snapshot.changed':
-            case 'task.snapshot.changed':
-            case 'artifact.snapshot.changed':
-            case 'agentSession.snapshot.changed':
-            case 'session.event':
-            case 'session.lifecycle':
-                return true;
-            case 'session.console':
-            case 'session.terminal':
-            case 'control.workflow.settings.updated':
-                return false;
         }
     }
 
@@ -583,7 +434,7 @@ export class DaemonGateway {
     }
 
     private toMissionSessionSnapshot(session: AgentSession | MissionAgentSessionState): AgentSession {
-        return agentSessionSchema.parse({
+        return agentSessionSnapshotSchema.parse({
             sessionId: session.sessionId,
             runnerId: session.runnerId,
             ...(session.transportId ? { transportId: session.transportId } : {}),
@@ -602,76 +453,16 @@ export class DaemonGateway {
                 : {}),
             ...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
             ...(session.currentTurnTitle ? { currentTurnTitle: session.currentTurnTitle } : {}),
-            ...(session.taskId ? { taskId: session.taskId } : {})
+            ...('taskId' in session && session.taskId ? { taskId: session.taskId } : {})
         });
-    }
-
-    private async resolveTerminalSessionContext(input: {
-        missionId: string;
-        sessionId: string;
-    }): Promise<{
-        missionId: string;
-        session: AgentSession;
-        sharedSessionName?: string;
-    } | undefined> {
-        const missionId = input.missionId.trim();
-        const sessionId = input.sessionId.trim();
-        if (!missionId || !sessionId) {
-            return undefined;
-        }
-
-        const daemon = await this.connectSharedDaemonClient();
-        try {
-            const api = new DaemonApi(daemon.client);
-            const sessions = await withTimeout(
-                api.mission.listSessions({ missionId }),
-                2500,
-                'Mission session listing timed out.'
-            );
-            const session = sessions.find((candidate) => candidate.sessionId === sessionId);
-            if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
-                return undefined;
-            }
-
-            const airportSessionName = await withTimeout(
-                api.airport.getStatus(),
-                2500,
-                'Airport status request timed out.'
-            )
-                .then((status) => status.state.airport.substrate.sessionName)
-                .catch(() => undefined);
-
-            const sharedSessionName = airportSessionName?.trim() === session.terminalSessionName.trim()
-                ? airportSessionName
-                : undefined;
-
-            return {
-                missionId,
-                session,
-                ...(sharedSessionName ? { sharedSessionName } : {})
-            };
-        } finally {
-            daemon.dispose();
-        }
     }
 
     public async resolveRepositoryCandidate(input: {
         repositoryId: string;
-        repositoryRootPath?: string;
     }): Promise<Repository> {
         const repositoryId = input.repositoryId.trim();
         if (!repositoryId) {
             throw new Error('Repository access requires a repositoryId.');
-        }
-
-        const repositoryRootPath = input.repositoryRootPath?.trim();
-        if (repositoryRootPath) {
-            return repositorySchema.parse({
-                repositoryId,
-                repositoryRootPath,
-                label: path.basename(repositoryRootPath) || repositoryRootPath,
-                description: ''
-            });
         }
 
         const airportHome = await this.getAirportHomeSnapshot();
@@ -685,24 +476,6 @@ export class DaemonGateway {
 
     private toRepositorySnapshot(repository: Repository): Repository {
         return repositorySchema.parse(repository);
-    }
-
-    private toRepositorySnapshotFromCandidate(repository: RepositoryCandidate): Repository {
-        return RepositoryEntity.open(repository.repositoryRootPath, {
-            label: repository.label,
-            description: repository.description,
-            ...(repository.githubRepository ? { githubRepository: repository.githubRepository } : {})
-        }).toSchema();
-    }
-
-    private toMissionReferenceSnapshot(candidate: MissionReference): MissionReference {
-        return missionReferenceSchema.parse({
-            missionId: candidate.missionId,
-            title: candidate.title,
-            branchRef: candidate.branchRef,
-            createdAt: candidate.createdAt,
-            ...(candidate.issueId !== undefined ? { issueId: candidate.issueId } : {})
-        });
     }
 
     private async connectSharedDaemonClient(surfacePath?: string) {
@@ -729,12 +502,6 @@ export class DaemonGateway {
         );
     }
 
-    private createEmptyAirportHomeSnapshot(): AirportHomeSnapshot {
-        return airportHomeSnapshotSchema.parse({
-            repositories: [],
-            ...(this.locals?.appContext.daemon.running ? {} : { settingsComplete: false })
-        });
-    }
 }
 
 function clipTerminalScreen(screen: string): { screen: string; truncated: boolean } {
@@ -746,6 +513,86 @@ function clipTerminalScreen(screen: string): { screen: string; truncated: boolea
         screen: screen.slice(-AIRPORT_WEB_TERMINAL_SCREEN_LIMIT),
         truncated: true
     };
+}
+
+function missionRuntimeEventChannels(missionId: string): string[] {
+    return [
+        `mission:${missionId}.snapshot.changed`,
+        `mission:${missionId}.actions.changed`,
+        `mission:${missionId}.status`,
+        `stage:${missionId}/*.*`,
+        `task:${missionId}/*.*`,
+        `artifact:${missionId}/*.*`,
+        `agent_session:${missionId}/*.snapshot.changed`,
+        `agent_session:${missionId}/*.event`,
+        `agent_session:${missionId}/*.lifecycle`
+    ];
+}
+
+function allRuntimeEventChannels(): string[] {
+    return [
+        'airport:state.changed',
+        'mission:*',
+        'stage:*',
+        'task:*',
+        'artifact:*',
+        'agent_session:*.snapshot.changed',
+        'agent_session:*.event',
+        'agent_session:*.lifecycle'
+    ];
+}
+
+function notificationMissionId(event: AddressedNotification): string | undefined {
+    return 'missionId' in event ? event.missionId : undefined;
+}
+
+function toAddressedNotification(event: Notification): AddressedNotification {
+    if (!hasAddressMetadata(event)) {
+        throw new Error(`Daemon event '${event.type}' did not include entity channel metadata.`);
+    }
+    return event;
+}
+
+function hasAddressMetadata(event: Notification): event is AddressedNotification {
+    const candidate = event as Partial<AddressedNotification>;
+    return typeof candidate.entityId === 'string' && candidate.entityId.trim().length > 0
+        && typeof candidate.channel === 'string' && candidate.channel.trim().length > 0
+        && typeof candidate.eventName === 'string' && candidate.eventName.trim().length > 0
+        && typeof candidate.occurredAt === 'string' && candidate.occurredAt.trim().length > 0;
+}
+
+function toMissionTerminalSnapshot(
+    missionId: string,
+    state: MissionAgentTerminalState
+): MissionTerminalSnapshot {
+    const terminalScreen = clipTerminalScreen(state.screen);
+    return missionTerminalSnapshotSchema.parse({
+        missionId,
+        connected: state.connected,
+        dead: state.dead,
+        exitCode: state.dead ? state.exitCode : null,
+        screen: terminalScreen.screen,
+        ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+        ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+    });
+}
+
+function toMissionSessionTerminalSnapshot(
+    missionId: string,
+    sessionId: string,
+    state: MissionAgentTerminalState
+): MissionSessionTerminalSnapshot {
+    const terminalScreen = clipMissionSessionTerminalScreen(state);
+    return agentSessionTerminalSnapshotSchema.parse({
+        missionId,
+        sessionId,
+        connected: state.connected,
+        dead: state.dead,
+        exitCode: state.dead ? state.exitCode : null,
+        screen: terminalScreen.screen,
+        ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+        ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+    });
 }
 
 function clipMissionSessionTerminalScreen(state: {

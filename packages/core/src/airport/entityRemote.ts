@@ -1,1 +1,1 @@
-export * from '../schemas/EntityRemote.js';
+export * from '../daemon/protocol/entityRemote.js';

@@ -12,7 +12,7 @@ import type {
 import type {
 	AgentCommand,
 	AgentPrompt
-} from '../agent/AgentRuntimeTypes.js';
+} from '../daemon/runtime/agent/AgentRuntimeTypes.js';
 import type {
 	GateIntent,
 	OperatorActionDescriptor,
@@ -119,6 +119,14 @@ export class DaemonMissionApi {
 		selector: MissionSelector | undefined
 	): Promise<MissionAgentTerminalState | null> {
 		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.state', {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {})
+		});
+	}
+
+	public async ensureMissionTerminalState(
+		selector: MissionSelector | undefined
+	): Promise<MissionAgentTerminalState | null> {
+		return this.client.request<MissionAgentTerminalState | null>('mission.terminal.ensure', {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {})
 		});
 	}

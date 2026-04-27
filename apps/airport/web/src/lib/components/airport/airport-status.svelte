@@ -1,47 +1,47 @@
 <script lang="ts">
     import ActivityIcon from "@tabler/icons-svelte/icons/activity";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import FolderIcon from "@tabler/icons-svelte/icons/folder";
     import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
+    import ServerIcon from "@tabler/icons-svelte/icons/server";
+    import { page } from "$app/state";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
+    type SystemState = {
+        github: {
+            cliAvailable: boolean;
+            authenticated: boolean;
+            user?: string;
+            email?: string;
+            avatarUrl?: string;
+            detail?: string;
+        };
+    };
+
     const appContext = getAppContext();
+    const systemState = $derived(page.data.systemState as SystemState | undefined);
     const daemonStatusTone = $derived(
         appContext.daemon.running ? "connected" : "disconnected",
     );
-    const githubStatusTone = $derived(appContext.githubStatus);
+    const githubStatusTone = $derived(
+        systemState?.github.authenticated
+            ? "connected"
+            : appContext.githubStatus,
+    );
     const githubAccountLabel = $derived(
-        appContext.user?.name ??
+        systemState?.github.user ??
+            appContext.user?.name ??
             (githubStatusTone === "connected"
                 ? "Authenticated GitHub account"
                 : "No authenticated GitHub account"),
     );
     const daemonMessage = $derived(appContext.daemon.message);
     const loginHref = "/login?redirectTo=/airport";
-    const githubRepositories = $derived(
-        appContext.application.githubRepositoriesState,
-    );
-    const repositories = $derived(appContext.airport.repositories);
-    const repositoryCountLabel = $derived(
-        repositories.length === 1
-            ? "1 repository registered"
-            : `${repositories.length} repositories registered`,
-    );
-    const githubRepositoryCountLabel = $derived(
-        githubRepositories.length === 1
-            ? "1 visible GitHub repository"
-            : `${githubRepositories.length} visible GitHub repositories`,
-    );
-    const selectedRepository = $derived.by(() =>
-        repositories.find(
-            (repository) =>
-                repository.repositoryRootPath ===
-                appContext.airport.activeRepositoryRootPath,
-        ),
-    );
     const isGitHubConnected = $derived(githubStatusTone === "connected");
+    const systemDetail = $derived(
+        systemState?.github.detail ?? "Daemon system status is pending.",
+    );
 </script>
 
 <section class="rounded-lg border bg-card p-5 shadow-sm">
@@ -51,44 +51,25 @@
         <div class="min-w-0 space-y-4">
             <div class="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">Airport</Badge>
-                <Badge variant="secondary">{repositoryCountLabel}</Badge>
-                <Badge variant="outline">{githubRepositoryCountLabel}</Badge>
+                <Badge variant="secondary">
+                    {appContext.daemon.running ? "Daemon connected" : "Daemon unavailable"}
+                </Badge>
+                <Badge variant="outline">
+                    {systemState ? "System schema loaded" : "System schema pending"}
+                </Badge>
             </div>
 
             <div class="max-w-3xl space-y-2">
                 <h1
                     class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
                 >
-                    Repository control, ready for mission work.
+                    Airport surface connected to daemon authority.
                 </h1>
                 <p class="text-sm leading-6 text-muted-foreground">
-                    Keep local repositories, GitHub access, and daemon health in
-                    one compact operations surface.
+                    Daemon health and system identity are loaded from the
+                    authoritative runtime boundary.
                 </p>
             </div>
-
-            {#if selectedRepository}
-                <div class="rounded-lg border bg-muted/35 p-4">
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
-                    >
-                        Current focus
-                    </p>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                        <p class="text-base font-semibold text-foreground">
-                            {selectedRepository.label}
-                        </p>
-                        {#if selectedRepository.githubRepository}
-                            <Badge variant="secondary">
-                                {selectedRepository.githubRepository}
-                            </Badge>
-                        {/if}
-                    </div>
-                    <p class="mt-2 font-mono text-xs text-muted-foreground">
-                        {selectedRepository.repositoryRootPath}
-                    </p>
-                </div>
-            {/if}
         </div>
 
         <div class="grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
@@ -136,9 +117,7 @@
                     </p>
                 </div>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    {isGitHubConnected
-                        ? "Signed in and ready to browse repositories."
-                        : "Sign in to browse repositories faster."}
+                    {systemDetail}
                 </p>
             </div>
 
@@ -147,18 +126,18 @@
                     <p
                         class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
                     >
-                        Registered
+                        System
                     </p>
-                    <FolderIcon class="size-4 text-muted-foreground" />
+                    <ServerIcon class="size-4 text-muted-foreground" />
                 </div>
                 <div class="mt-3 flex items-center gap-2">
                     <ActivityIcon class="size-4 text-primary" />
                     <p class="text-sm font-medium text-foreground">
-                        {repositoryCountLabel}
+                        {systemState ? "Schema available" : "Waiting"}
                     </p>
                 </div>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    Local workspaces available to Airport.
+                    The Airport route is reading daemon-owned system state.
                 </p>
             </div>
 

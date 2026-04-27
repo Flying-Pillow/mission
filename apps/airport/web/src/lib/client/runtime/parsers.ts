@@ -1,21 +1,25 @@
 import type {
-    AirportRuntimeEventEnvelope,
     GitHubIssueDetail,
-    MissionSessionTerminalSnapshot,
-    MissionSessionTerminalSocketServerMessage,
-    MissionTerminalSnapshot,
-    MissionTerminalSocketServerMessage,
     RepositorySnapshot,
     TrackedIssueSummary
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import type {
+    AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
+    AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage,
+    MissionTerminalSnapshot,
+    MissionTerminalSocketServerMessage
+} from '@flying-pillow/mission-core/entities';
 import {
-    airportRuntimeEventEnvelopeSchema,
     githubIssueDetailSchema,
-    missionRuntimeMissionCommandSchema,
+    missionMissionCommandSchema,
     repositorySchema,
     repositorySnapshotSchema,
     trackedIssueSummarySchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import {
+    airportRuntimeEventEnvelopeSchema,
+    type AirportRuntimeEventEnvelope
+} from '$lib/contracts/runtime-events';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -46,7 +50,7 @@ export function parseGitHubIssueDetail(value: unknown): GitHubIssueDetail {
 export function parseMissionCommandPayload(value: unknown): {
     action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
 } {
-    return missionRuntimeMissionCommandSchema.parse(value) as {
+    return missionMissionCommandSchema.parse(value) as {
         action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
     };
 }

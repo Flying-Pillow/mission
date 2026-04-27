@@ -1,60 +1,75 @@
 import type {
-	GitHubIssueDetail,
 	SystemSnapshot,
 	GateIntent,
-	GitHubVisibleRepository,
-	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
 	MissionBrief,
-	MissionGateResult,
 	MissionSelector,
-	OperatorStatus,
-	TrackedIssueSummary
+	OperatorStatus
 } from '../../types.js';
-import type { SystemState } from '../../schemas/SystemState.js';
 import type { Mission } from '../../entities/Mission/Mission.js';
-import type { AgentSession } from '../../entities/AgentSession/AgentSession.js';
-import type { Repository } from '../../entities/Repository/Repository.js';
 import type {
 	AgentCommand,
 	AgentPrompt
-} from '../../agent/AgentRuntimeTypes.js';
+} from '../runtime/agent/AgentRuntimeTypes.js';
 import type {
-	WorkflowSettingsGetResult,
 	WorkflowSettingsInitializeRequest,
 	WorkflowSettingsInitializeResult,
 	WorkflowSettingsUpdateRequest,
-	WorkflowSettingsUpdateResult,
-	WorkflowSettingsValidationError
+	WorkflowSettingsUpdateResult
 } from '../../settings/types.js';
 import type {
 	EntityCommandInvocation,
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from '../../schemas/EntityRemote.js';
+} from './entityRemote.js';
+import type {
+	EntityEventAddress,
+	EntityId
+} from '../../entities/Entity/Entity.js';
 import type {
 	AgentSessionEntityReference,
 	MissionAgentSessionSnapshot
-} from '../../schemas/AgentSession.js';
+} from '../../entities/AgentSession/AgentSessionContract.js';
 import type {
 	ArtifactEntityReference,
 	MissionArtifactSnapshot
-} from '../../schemas/Artifact.js';
+} from '../../entities/Artifact/ArtifactContract.js';
 import type {
 	MissionActionListSnapshot,
 	MissionEntityReference,
 	MissionSnapshot
-} from '../../schemas/Mission.js';
+} from '../../entities/Mission/MissionContract.js';
 import type {
 	MissionStageSnapshot,
 	StageEntityReference
-} from '../../schemas/Stage.js';
+} from '../../entities/Stage/StageContract.js';
 import type {
 	MissionTaskSnapshot,
 	TaskEntityReference
-} from '../../schemas/Task.js';
+} from '../../entities/Task/TaskContract.js';
+
+export {
+	METHOD_METADATA,
+	PROTOCOL_VERSION
+} from './operations.js';
+export type {
+	Method,
+	MethodMetadata,
+	MethodWorkspaceRoute
+} from './operations.js';
+export type {
+	Endpoint,
+	ErrorResponse,
+	EventMessage,
+	Manifest,
+	Message,
+	Ping,
+	Request,
+	Response,
+	SuccessResponse
+} from './transport.js';
 
 export type MissionAgentPrimitiveValue = string | number | boolean | null;
 
@@ -332,121 +347,6 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 27;
-
-export type Method =
-	| 'ping'
-	| 'event.subscribe'
-	| 'system.status'
-	| 'airport.status'
-	| 'airport.client.connect'
-	| 'airport.client.observe'
-	| 'airport.pane.bind'
-	| 'entity.query'
-	| 'entity.command'
-	| 'control.status'
-	| 'control.settings.update'
-	| 'control.document.read'
-	| 'control.document.write'
-	| 'control.workflow.settings.get'
-	| 'control.workflow.settings.initialize'
-	| 'control.workflow.settings.update'
-	| 'control.repositories.list'
-	| 'control.repositories.add'
-	| 'control.github.issue.detail'
-	| 'control.issues.list'
-	| 'control.action.list'
-	| 'control.action.describe'
-	| 'control.action.execute'
-	| 'mission.from-brief'
-	| 'mission.from-issue'
-	| 'mission.operator-status'
-	| 'mission.status'
-	| 'mission.action.list'
-	| 'mission.action.execute'
-	| 'mission.gate.evaluate'
-	| 'mission.terminal.state'
-	| 'mission.terminal.input'
-	| 'session.list'
-	| 'session.console.state'
-	| 'session.terminal.state'
-	| 'session.terminal.input'
-	| 'session.prompt'
-	| 'session.command'
-	| 'session.complete'
-	| 'session.cancel'
-	| 'session.terminate';
-
-export type MethodWorkspaceRoute = 'none' | 'control' | 'mission';
-
-export type MethodMetadata = {
-	includeSurfacePath: boolean;
-	workspaceRoute: MethodWorkspaceRoute;
-};
-
-export const METHOD_METADATA: Record<Method, MethodMetadata> = {
-	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
-	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
-	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'airport.status': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'airport.client.connect': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'airport.client.observe': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'airport.pane.bind': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'entity.query': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.status': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.document.read': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.document.write': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.workflow.settings.get': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.workflow.settings.initialize': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.workflow.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.repositories.add': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.github.issue.detail': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.issues.list': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.action.list': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.action.describe': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.action.execute': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'mission.from-brief': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'mission.from-issue': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'mission.operator-status': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.status': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.action.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.action.execute': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.gate.evaluate': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.terminal.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'mission.terminal.input': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.console.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.terminal.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.terminal.input': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.prompt': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.command': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.complete': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.cancel': { includeSurfacePath: true, workspaceRoute: 'mission' },
-	'session.terminate': { includeSurfacePath: true, workspaceRoute: 'mission' }
-};
-
-export type Endpoint = {
-	transport: 'ipc';
-	path: string;
-};
-
-export type Manifest = {
-	pid: number;
-	startedAt: string;
-	protocolVersion: typeof PROTOCOL_VERSION;
-	endpoint: Endpoint;
-};
-
-export type Ping = {
-	ok: true;
-	pid: number;
-	startedAt: string;
-	protocolVersion: typeof PROTOCOL_VERSION;
-};
-
 export type MissionSelect = {
 	selector?: MissionSelector;
 };
@@ -674,6 +574,12 @@ export type Notification =
 		snapshot: MissionAgentSessionSnapshot;
 	}
 	| {
+		type: 'mission.terminal';
+		workspaceRoot: string;
+		missionId: string;
+		state: MissionAgentTerminalState;
+	}
+	| {
 		type: 'session.console';
 		missionId: string;
 		sessionId: string;
@@ -705,68 +611,12 @@ export type Notification =
 		context: ControlWorkflowSettingsUpdate['context'];
 	};
 
+export type AddressedNotification = Notification & EntityEventAddress & {
+	occurredAt: string;
+	missionEntityId?: EntityId;
+};
+
 export type EventSubscription = {
-	eventTypes?: Notification['type'][];
-	missionId?: string;
-	sessionId?: string;
+	channels?: string[];
 };
 
-export type Request = {
-	type: 'request';
-	id: string;
-	method: Method;
-	surfacePath?: string;
-	authToken?: string;
-	clientId?: string;
-	params?: unknown;
-};
-
-export type SuccessResponse = {
-	type: 'response';
-	id: string;
-	ok: true;
-	result:
-	| Ping
-	| SystemState
-	| SystemSnapshot
-	| OperatorStatus
-	| ControlDocumentResponse
-	| Mission
-	| Repository
-	| Repository[]
-	| GitHubVisibleRepository[]
-	| GitHubIssueDetail
-	| EntityQueryResponse
-	| EntityCommandResponse
-	| MissionGateResult
-	| WorkflowSettingsGetResult
-	| ControlWorkflowSettingsInitializeResponse
-	| ControlWorkflowSettingsUpdateResponse
-	| MissionAgentConsoleState
-	| MissionAgentTerminalState
-	| null
-	| AgentSession
-	| AgentSession[]
-	| OperatorActionListSnapshot
-	| TrackedIssueSummary[];
-};
-
-export type ErrorResponse = {
-	type: 'response';
-	id: string;
-	ok: false;
-	error: {
-		message: string;
-		code?: string;
-		validationErrors?: WorkflowSettingsValidationError[];
-	};
-};
-
-export type EventMessage = {
-	type: 'event';
-	event: Notification;
-};
-
-export type Response = SuccessResponse | ErrorResponse;
-
-export type Message = Request | Response | EventMessage;

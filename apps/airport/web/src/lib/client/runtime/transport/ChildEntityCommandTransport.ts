@@ -1,30 +1,24 @@
 // /apps/airport/web/src/lib/client/runtime/transport/ChildEntityCommandTransport.ts: Child entity command transport for Stage, Task, Artifact, and AgentSession mirrors.
 import type {
     AgentSessionCommandAcknowledgement,
-    AgentSessionCommandListSnapshot,
     ArtifactCommandAcknowledgement,
-    ArtifactCommandListSnapshot,
-    EntityCommandInvocation,
-    EntityQueryInvocation,
-    EntityRemoteResult,
     MissionAgentCommand as AgentCommand,
     MissionAgentPrompt as AgentPrompt,
     StageCommandAcknowledgement,
-    StageCommandListSnapshot,
     TaskCommandAcknowledgement,
-    TaskCommandListSnapshot
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import type {
+    EntityCommandInvocation,
+    EntityQueryInvocation,
+    EntityRemoteResult,
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 import {
     agentSessionCommandAcknowledgementSchema,
-    agentSessionCommandListSnapshotSchema,
     artifactCommandAcknowledgementSchema,
-    artifactCommandListSnapshotSchema,
     artifactDocumentSnapshotSchema,
     stageCommandAcknowledgementSchema,
-    stageCommandListSnapshotSchema,
     taskCommandAcknowledgementSchema,
-    taskCommandListSnapshotSchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import type {
     MissionChildEntityCommandGateway,
     MissionDocumentPayload
@@ -72,27 +66,6 @@ export class ChildEntityCommandTransport implements MissionChildEntityCommandGat
         this.queryRemote = input.queryRemote ?? executeDefaultQueryRemote;
     }
 
-    public async listStageCommands(input: {
-        missionId: string;
-        stageId: string;
-        executionContext?: EntityQueryExecutionContext;
-    }): Promise<StageCommandListSnapshot> {
-        const normalizedMissionId = input.missionId.trim();
-        const normalizedStageId = input.stageId.trim();
-        if (!normalizedMissionId || !normalizedStageId) {
-            throw new Error('Stage command queries require missionId and stageId.');
-        }
-
-        return stageCommandListSnapshotSchema.parse(await this.queryRemote({
-            entity: stageEntityName,
-            method: 'listCommands',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                stageId: normalizedStageId
-            }
-        }, input.executionContext));
-    }
-
     public async executeStageCommand(input: {
         missionId: string;
         stageId: string;
@@ -116,27 +89,6 @@ export class ChildEntityCommandTransport implements MissionChildEntityCommandGat
                 ...(input.input !== undefined ? { input: input.input } : {})
             }
         }));
-    }
-
-    public async listTaskCommands(input: {
-        missionId: string;
-        taskId: string;
-        executionContext?: EntityQueryExecutionContext;
-    }): Promise<TaskCommandListSnapshot> {
-        const normalizedMissionId = input.missionId.trim();
-        const normalizedTaskId = input.taskId.trim();
-        if (!normalizedMissionId || !normalizedTaskId) {
-            throw new Error('Task command queries require missionId and taskId.');
-        }
-
-        return taskCommandListSnapshotSchema.parse(await this.queryRemote({
-            entity: taskEntityName,
-            method: 'listCommands',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                taskId: normalizedTaskId
-            }
-        }, input.executionContext));
     }
 
     public async executeTaskCommand(input: {
@@ -164,27 +116,6 @@ export class ChildEntityCommandTransport implements MissionChildEntityCommandGat
         }));
     }
 
-    public async listArtifactCommands(input: {
-        missionId: string;
-        artifactId: string;
-        executionContext?: EntityQueryExecutionContext;
-    }): Promise<ArtifactCommandListSnapshot> {
-        const normalizedMissionId = input.missionId.trim();
-        const normalizedArtifactId = input.artifactId.trim();
-        if (!normalizedMissionId || !normalizedArtifactId) {
-            throw new Error('Artifact command queries require missionId and artifactId.');
-        }
-
-        return artifactCommandListSnapshotSchema.parse(await this.queryRemote({
-            entity: artifactEntityName,
-            method: 'listCommands',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                artifactId: normalizedArtifactId
-            }
-        }, input.executionContext));
-    }
-
     public async executeArtifactCommand(input: {
         missionId: string;
         artifactId: string;
@@ -208,27 +139,6 @@ export class ChildEntityCommandTransport implements MissionChildEntityCommandGat
                 ...(input.input !== undefined ? { input: input.input } : {})
             }
         }));
-    }
-
-    public async listAgentSessionCommands(input: {
-        missionId: string;
-        sessionId: string;
-        executionContext?: EntityQueryExecutionContext;
-    }): Promise<AgentSessionCommandListSnapshot> {
-        const normalizedMissionId = input.missionId.trim();
-        const normalizedSessionId = input.sessionId.trim();
-        if (!normalizedMissionId || !normalizedSessionId) {
-            throw new Error('AgentSession command queries require missionId and sessionId.');
-        }
-
-        return agentSessionCommandListSnapshotSchema.parse(await this.queryRemote({
-            entity: agentSessionEntityName,
-            method: 'listCommands',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                sessionId: normalizedSessionId
-            }
-        }, input.executionContext));
     }
 
     public async executeAgentSessionCommand(input: {

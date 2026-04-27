@@ -1,8 +1,6 @@
 // /apps/airport/web/src/lib/client/runtime/AirportClientRuntime.ts: Root browser runtime that composes mission runtime transport, entity cache, and live mission observation.
-import type {
-    AirportRuntimeEventEnvelope,
-    MissionSnapshot
-} from '@flying-pillow/mission-core/schemas';
+import type { MissionSnapshot } from '@flying-pillow/mission-core/entities';
+import type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 import { ChildEntityCommandTransport } from '$lib/client/runtime/transport/ChildEntityCommandTransport';

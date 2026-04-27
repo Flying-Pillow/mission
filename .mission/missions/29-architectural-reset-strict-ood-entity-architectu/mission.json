@@ -615,13 +615,11 @@
       },
       {
         "stageId": "audit",
-        "lifecycle": "ready",
+        "lifecycle": "pending",
         "taskIds": [
           "audit/01-debrief"
         ],
-        "readyTaskIds": [
-          "audit/01-debrief"
-        ],
+        "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
         "completedTaskIds": []
@@ -1200,7 +1198,7 @@
         "dependsOn": [
           "implementation/16-wire-child-entity-projections-verify"
         ],
-        "lifecycle": "ready",
+        "lifecycle": "failed",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
@@ -1208,7 +1206,8 @@
         "agentRunner": "copilot",
         "retries": 0,
         "createdAt": "2026-04-26T11:37:00.000Z",
-        "updatedAt": "2026-04-26T18:00:00.000Z"
+        "updatedAt": "2026-04-26T20:16:18.438Z",
+        "failedAt": "2026-04-26T20:16:18.438Z"
       },
       {
         "taskId": "implementation/13-create-child-entity-command-contracts",
@@ -1392,6 +1391,7 @@
         "sessionId": "01-prd-from-brief-copilot-cli",
         "taskId": "prd/01-prd-from-brief",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-22T14:54:52.364Z",
         "updatedAt": "2026-04-22T20:18:06.791Z",
@@ -1401,6 +1401,7 @@
         "sessionId": "01-spec-from-prd-copilot-cli",
         "taskId": "spec/01-spec-from-prd",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-22T20:18:07.437Z",
         "updatedAt": "2026-04-22T20:29:27.058Z",
@@ -1410,6 +1411,7 @@
         "sessionId": "02-plan-copilot-cli",
         "taskId": "spec/02-plan",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-22T20:29:27.711Z",
         "updatedAt": "2026-04-22T20:34:12.850Z",
@@ -1419,6 +1421,7 @@
         "sessionId": "01-create-canonical-schema-contracts-copilot-cli-960cce78",
         "taskId": "implementation/01-create-canonical-schema-contracts",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T10:15:33.135Z",
         "updatedAt": "2026-04-26T10:15:33.135Z",
@@ -1428,6 +1431,7 @@
         "sessionId": "01-create-canonical-schema-contracts-verify-copilot-cli-960cce78",
         "taskId": "implementation/01-create-canonical-schema-contracts-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T10:24:32.950Z",
         "updatedAt": "2026-04-26T10:24:32.950Z",
@@ -1437,6 +1441,7 @@
         "sessionId": "02-make-repository-domain-authoritative-copilot-cli-960cce78",
         "taskId": "implementation/02-make-repository-domain-authoritative",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:02:00.000Z",
         "updatedAt": "2026-04-26T11:02:00.000Z",
@@ -1446,6 +1451,7 @@
         "sessionId": "02-make-repository-domain-authoritative-verify-copilot-cli-960cce78",
         "taskId": "implementation/02-make-repository-domain-authoritative-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:03:00.000Z",
         "updatedAt": "2026-04-26T11:03:00.000Z",
@@ -1455,6 +1461,7 @@
         "sessionId": "03-replace-daemon-entity-dispatch-copilot-cli-960cce78",
         "taskId": "implementation/03-replace-daemon-entity-dispatch",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:04:00.000Z",
         "updatedAt": "2026-04-26T11:04:00.000Z",
@@ -1464,6 +1471,7 @@
         "sessionId": "03-replace-daemon-entity-dispatch-verify-copilot-cli-960cce78",
         "taskId": "implementation/03-replace-daemon-entity-dispatch-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:06:00.000Z",
         "updatedAt": "2026-04-26T11:06:00.000Z",
@@ -1473,6 +1481,7 @@
         "sessionId": "04-clean-airport-repository-mirror-copilot-cli-960cce78",
         "taskId": "implementation/04-clean-airport-repository-mirror",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:13:18.000Z",
         "updatedAt": "2026-04-26T11:18:00.000Z",
@@ -1482,6 +1491,7 @@
         "sessionId": "04-clean-airport-repository-mirror-verify-copilot-cli-960cce78",
         "taskId": "implementation/04-clean-airport-repository-mirror-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:19:00.000Z",
         "updatedAt": "2026-04-26T11:22:00.000Z",
@@ -1491,6 +1501,7 @@
         "sessionId": "05-wire-sse-projection-ownership-copilot-cli-960cce78",
         "taskId": "implementation/05-wire-sse-projection-ownership",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:22:30.000Z",
         "updatedAt": "2026-04-26T11:24:00.000Z",
@@ -1500,6 +1511,7 @@
         "sessionId": "05-wire-sse-projection-ownership-verify-copilot-cli-960cce78",
         "taskId": "implementation/05-wire-sse-projection-ownership-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:24:30.000Z",
         "updatedAt": "2026-04-26T11:26:00.000Z",
@@ -1509,6 +1521,7 @@
         "sessionId": "06-tighten-exports-and-remove-transitional-layers-copilot-cli-960cce78",
         "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:27:00.000Z",
         "updatedAt": "2026-04-26T11:35:00.000Z",
@@ -1518,6 +1531,7 @@
         "sessionId": "06-tighten-exports-and-remove-transitional-layers-verify-copilot-cli-960cce78",
         "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:35:00.000Z",
         "updatedAt": "2026-04-26T11:36:00.000Z",
@@ -1527,6 +1541,7 @@
         "sessionId": "07-implement-github-repository-source-entity-copilot-cli-960cce78",
         "taskId": "implementation/07-implement-github-repository-source-entity",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:45:00.000Z",
         "updatedAt": "2026-04-26T12:15:00.000Z",
@@ -1536,6 +1551,7 @@
         "sessionId": "07-implement-github-repository-source-entity-verify-copilot-cli-960cce78",
         "taskId": "implementation/07-implement-github-repository-source-entity-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T12:15:00.000Z",
         "updatedAt": "2026-04-26T12:15:00.000Z",
@@ -1545,6 +1561,7 @@
         "sessionId": "08-create-canonical-mission-schema-contracts-copilot-cli-960cce78",
         "taskId": "implementation/08-create-canonical-mission-schema-contracts",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T13:21:00.000Z",
         "updatedAt": "2026-04-26T13:21:00.000Z",
@@ -1554,6 +1571,7 @@
         "sessionId": "08-create-canonical-mission-schema-contracts-verify-copilot-cli-960cce78",
         "taskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T13:26:00.000Z",
         "updatedAt": "2026-04-26T13:26:00.000Z",
@@ -1563,6 +1581,7 @@
         "sessionId": "09-make-mission-daemon-authoritative-copilot-cli-960cce78",
         "taskId": "implementation/09-make-mission-daemon-authoritative",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T13:32:03.000Z",
         "updatedAt": "2026-04-26T13:32:03.000Z",
@@ -1572,6 +1591,7 @@
         "sessionId": "09-make-mission-daemon-authoritative-verify-copilot-cli-960cce78",
         "taskId": "implementation/09-make-mission-daemon-authoritative-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T13:36:30.000Z",
         "updatedAt": "2026-04-26T13:36:30.000Z",
@@ -1581,6 +1601,7 @@
         "sessionId": "10-route-mission-through-explicit-dispatch-copilot-cli-960cce78",
         "taskId": "implementation/10-route-mission-through-explicit-dispatch",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T13:43:00.000Z",
         "updatedAt": "2026-04-26T13:43:00.000Z",
@@ -1590,6 +1611,7 @@
         "sessionId": "10-route-mission-through-explicit-dispatch-verify-copilot-cli-960cce78",
         "taskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T14:11:30.000Z",
         "updatedAt": "2026-04-26T14:11:30.000Z",
@@ -1599,6 +1621,7 @@
         "sessionId": "11-clean-airport-mission-mirror-copilot-cli-960cce78",
         "taskId": "implementation/11-clean-airport-mission-mirror",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T14:11:30.000Z",
         "updatedAt": "2026-04-26T14:33:00.000Z",
@@ -1608,6 +1631,7 @@
         "sessionId": "11-clean-airport-mission-mirror-verify-copilot-cli-960cce78",
         "taskId": "implementation/11-clean-airport-mission-mirror-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T14:55:00.000Z",
         "updatedAt": "2026-04-26T14:55:00.000Z",
@@ -1617,6 +1641,7 @@
         "sessionId": "12-wire-mission-projections-and-remove-runtime-routes-copilot-cli-960cce78",
         "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T15:25:00.000Z",
         "updatedAt": "2026-04-26T15:25:00.000Z",
@@ -1626,6 +1651,7 @@
         "sessionId": "12-wire-mission-projections-and-remove-runtime-routes-verify-copilot-cli-960cce78",
         "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T15:25:00.000Z",
         "updatedAt": "2026-04-26T15:30:00.000Z",
@@ -1635,6 +1661,7 @@
         "sessionId": "01-debrief-copilot-cli-960cce78",
         "taskId": "audit/01-debrief",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T11:37:00.000Z",
         "updatedAt": "2026-04-26T11:44:00.000Z",
@@ -1644,6 +1671,7 @@
         "sessionId": "13-create-child-entity-command-contracts-copilot-cli-960cce78",
         "taskId": "implementation/13-create-child-entity-command-contracts",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T16:10:00.000Z",
         "updatedAt": "2026-04-26T16:20:00.000Z",
@@ -1654,6 +1682,7 @@
         "sessionId": "13-create-child-entity-command-contracts-restart-copilot-cli-960cce78",
         "taskId": "implementation/13-create-child-entity-command-contracts",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T16:30:00.000Z",
         "updatedAt": "2026-04-26T16:40:00.000Z",
@@ -1664,10 +1693,44 @@
         "sessionId": "13-create-child-entity-command-contracts-verify-copilot-cli-960cce78",
         "taskId": "implementation/13-create-child-entity-command-contracts-verify",
         "runnerId": "copilot-cli",
+        "transportId": "terminal",
         "lifecycle": "completed",
         "launchedAt": "2026-04-26T16:46:00.000Z",
         "updatedAt": "2026-04-26T16:50:00.000Z",
         "completedAt": "2026-04-26T16:50:00.000Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli-05dcd398",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/01-debrief-copilot-cli-05dcd398.ansi",
+        "lifecycle": "terminated",
+        "launchedAt": "2026-04-26T19:08:45.212Z",
+        "updatedAt": "2026-04-26T19:08:45.447Z",
+        "terminatedAt": "2026-04-26T19:08:45.447Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli-3b975961",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/01-debrief-copilot-cli-3b975961.ansi",
+        "lifecycle": "terminated",
+        "launchedAt": "2026-04-26T19:08:45.466Z",
+        "updatedAt": "2026-04-26T19:11:50.257Z",
+        "terminatedAt": "2026-04-26T19:11:50.257Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli-52a86854",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/01-debrief-copilot-cli-52a86854.ansi",
+        "lifecycle": "terminated",
+        "launchedAt": "2026-04-26T19:11:50.275Z",
+        "updatedAt": "2026-04-26T19:14:05.518Z",
+        "terminatedAt": "2026-04-26T19:14:05.518Z"
       }
     ],
     "gates": [
@@ -1677,7 +1740,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T18:00:00.000Z"
+        "updatedAt": "2026-04-26T21:31:53.780Z"
       },
       {
         "gateId": "verify",
@@ -1685,7 +1748,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T18:00:00.000Z"
+        "updatedAt": "2026-04-26T21:31:53.780Z"
       },
       {
         "gateId": "audit",
@@ -1695,7 +1758,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-04-26T18:00:00.000Z"
+        "updatedAt": "2026-04-26T21:31:53.780Z"
       },
       {
         "gateId": "deliver",
@@ -1705,10 +1768,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-26T18:00:00.000Z"
+        "updatedAt": "2026-04-26T21:31:53.780Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-26T18:00:00.000Z"
+    "updatedAt": "2026-04-26T21:31:53.780Z"
   }
 }

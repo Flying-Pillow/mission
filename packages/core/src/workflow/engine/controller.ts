@@ -1,12 +1,12 @@
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import type {
-	AgentLaunchConfig,
+    AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
     AgentSessionReference,
     AgentSessionSnapshot
-} from '../../agent/AgentRuntimeTypes.js';
+} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
@@ -40,6 +40,7 @@ export class MissionWorkflowController {
     private readonly workflow: WorkflowGlobalSettings;
     private readonly resolveWorkflowOverride: (() => WorkflowGlobalSettings) | undefined;
     private document: MissionRuntimeRecord | undefined;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     public constructor(options: MissionWorkflowControllerOptions) {
         this.adapter = options.adapter;
@@ -120,12 +121,12 @@ export class MissionWorkflowController {
         return this.requestExecutor.getRuntimeSession(sessionId);
     }
 
-	public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-		return this.requestExecutor.attachSession(reference);
-	}
+    public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
+        return this.requestExecutor.attachSession(reference);
+    }
 
-        public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
-		return this.requestExecutor.startSession(config);
+    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
+        return this.requestExecutor.startSession(config);
     }
 
     public async cancelRuntimeSession(
@@ -139,8 +140,8 @@ export class MissionWorkflowController {
     }
 
     public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionRuntimeRecord> {
-		return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
-	}
+        return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
+    }
 
     public async completeRuntimeSession(
         sessionId: string,
@@ -152,8 +153,8 @@ export class MissionWorkflowController {
     }
 
     public async commandRuntimeSession(sessionId: string, command: AgentCommand): Promise<MissionRuntimeRecord> {
-		return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
-	}
+        return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
+    }
 
     public async terminateRuntimeSession(
         sessionId: string,
@@ -226,7 +227,15 @@ export class MissionWorkflowController {
     }
 
     public async applyEvent(event: MissionWorkflowEvent): Promise<MissionRuntimeRecord> {
+        return this.runExclusiveMutation(() => this.applyEventUnlocked(event));
+    }
+
+    private async applyEventUnlocked(event: MissionWorkflowEvent): Promise<MissionRuntimeRecord> {
         const document = await this.requireDocument();
+        const existingEventRecords = await this.adapter.readMissionRuntimeEventLog(this.descriptor.missionDir).catch(() => []);
+        if (existingEventRecords.some((eventRecord) => eventRecord.eventId === event.eventId)) {
+            return document;
+        }
         const ingested = ingestMissionWorkflowEvent(document, event);
         await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, ingested.document);
         await this.adapter.appendMissionRuntimeEventRecord(this.descriptor.missionDir, ingested.eventRecord);
@@ -234,7 +243,7 @@ export class MissionWorkflowController {
         this.document = ingested.document;
         const emittedEvents = await this.executeRequests(nextDocument, ingested.requests);
         for (const emittedEvent of emittedEvents) {
-            nextDocument = await this.applyEvent(emittedEvent);
+            nextDocument = await this.applyEventUnlocked(emittedEvent);
         }
         this.document = nextDocument;
         return nextDocument;
@@ -344,6 +353,20 @@ export class MissionWorkflowController {
 
     private resolveWorkflow(): WorkflowGlobalSettings {
         return this.resolveWorkflowOverride?.() ?? this.workflow;
+    }
+
+    private async runExclusiveMutation<T>(operation: () => Promise<T>): Promise<T> {
+        const previous = this.mutationQueue;
+        let release!: () => void;
+        this.mutationQueue = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await previous.catch(() => undefined);
+        try {
+            return await operation();
+        } finally {
+            release();
+        }
     }
 
     private async reconcileDerivedRequests(

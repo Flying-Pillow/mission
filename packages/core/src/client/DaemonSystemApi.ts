@@ -1,4 +1,4 @@
-import type { SystemState } from '../schemas/SystemState.js';
+import type { SystemState } from '../system/SystemContract.js';
 import { DaemonClient } from './DaemonClient.js';
 
 export class DaemonSystemApi {

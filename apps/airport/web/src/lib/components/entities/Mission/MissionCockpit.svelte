@@ -35,8 +35,39 @@
         return node.statusLabel ?? "Pending";
     }
 
+    function normalizeStatusLabel(statusLabel: string | undefined): string {
+        return statusLabel?.trim().toLowerCase() ?? "";
+    }
+
+    function statusColor(statusLabel: string | undefined): string {
+        switch (normalizeStatusLabel(statusLabel)) {
+            case "active":
+            case "running":
+                return "#0ea5e9";
+            case "ready":
+            case "queued":
+            case "starting":
+            case "awaiting input":
+                return "#f59e0b";
+            case "completed":
+            case "delivered":
+                return "#10b981";
+            case "failed":
+            case "panicked":
+                return "#ef4444";
+            case "cancelled":
+            case "terminated":
+            case "paused":
+                return "#94a3b8";
+            case "pending":
+            case "draft":
+            default:
+                return "#8b949e";
+        }
+    }
+
     function stageColor(node: MissionTowerTreeNode): string {
-        return node.color?.trim() || "hsl(var(--primary))";
+        return statusColor(node.statusLabel);
     }
 
     function connectorFillOpacity(index: number): number {

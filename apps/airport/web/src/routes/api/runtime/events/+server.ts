@@ -1,8 +1,12 @@
 // /apps/airport/web/src/routes/api/runtime/events/+server.ts: Server-sent event stream that forwards existing daemon notifications for Airport web.
 import { randomUUID } from 'node:crypto';
-import { airportRuntimeEventsQuerySchema } from '@flying-pillow/mission-core/schemas';
+import { z } from 'zod/v4';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
+
+const airportRuntimeEventsQuerySchema = z.object({
+    missionId: z.string().trim().min(1).optional()
+}).strict();
 
 function serializeSseEvent(input: {
     event: string;

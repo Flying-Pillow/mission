@@ -97,42 +97,19 @@ function shutdown(exitCode = 0, signal) {
 }
 
 runChecked('pnpm', ['run', 'mission:install:local:dev']);
-if (enableDaemon) {
-	runChecked('pnpm', [
-		'--dir',
-		'./packages/mission',
-		'exec',
-		'node',
-		'--conditions=development',
-		'--import',
-		'tsx',
-		'./src/mission.ts',
-		'daemon:stop',
-		'--json'
-	]);
-}
 
-const supervisedEnv = {
-	MISSION_DAEMON_SUPERVISED: '1'
-};
+const webEnv = enableDaemon ? {} : { MISSION_DAEMON_SUPERVISED: '1' };
 
 const web = spawnManaged(
 	'pnpm',
 	['--dir', './apps/airport/web', 'run', 'dev', '--', ...userArgs],
-	supervisedEnv,
+	webEnv,
 	'web.log'
 );
 
 if (enableDaemon) {
-	const daemon = spawnManaged(
-		'pnpm',
-		['--dir', './packages/core', 'run', 'daemon:dev'],
-		supervisedEnv,
-		'daemon.log'
-	);
-	children.add(daemon);
 	process.stdout.write(
-		`Development logs: ${path.join(logsDir, 'daemon.log')} and ${path.join(logsDir, 'web.log')}\n`
+		`Development log: ${path.join(logsDir, 'web.log')} (Airport web will start or reuse the Mission daemon)\n`
 	);
 } else {
 	process.stdout.write(

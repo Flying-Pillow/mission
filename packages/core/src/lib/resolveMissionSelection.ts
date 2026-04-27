@@ -183,16 +183,20 @@ function resolveStageTarget(
 		return missionId ? { missionId } : undefined;
 	}
 	const stageArtifact = resolveStageResultArtifact(stageId, domain, missionId, target.sourcePath);
+	const preferredTask = resolvePreferredStageTask(stageId, missionId, domain);
 	const preferredSession = resolvePreferredStageSession(stageId, missionId, domain);
 	return {
 		...(missionId
 			? { missionId }
 			: stageArtifact?.missionId
 				? { missionId: stageArtifact.missionId }
-				: preferredSession?.missionId
-					? { missionId: preferredSession.missionId }
-					: {}),
+				: preferredTask?.missionId
+					? { missionId: preferredTask.missionId }
+					: preferredSession?.missionId
+						? { missionId: preferredSession.missionId }
+						: {}),
 		stageId,
+		...(preferredTask?.taskId ? { taskId: preferredTask.taskId } : {}),
 		...(stageArtifact ? { activeStageResultArtifactId: stageArtifact.artifactId, activeStageResultPath: stageArtifact.filePath } : {}),
 		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
@@ -287,6 +291,23 @@ function resolvePreferredTaskSession(
 		.map((sessionId) => domain.agentSessions[sessionId])
 		.filter((session): session is AgentSessionContext => Boolean(session));
 	return sessions.sort(comparePreferredAgentSessions)[0];
+}
+
+function resolvePreferredStageTask(
+	stageId: MissionStageId,
+	missionId: string | undefined,
+	domain: ContextGraph
+): TaskContext | undefined {
+	const orderedTaskIds = missionId ? domain.missions[missionId]?.taskIds : undefined;
+	const tasks = (orderedTaskIds?.length
+		? orderedTaskIds.map((taskId) => domain.tasks[taskId])
+		: Object.values(domain.tasks))
+		.filter((task): task is TaskContext => Boolean(task))
+		.filter((task) => task.stageId === stageId && (!missionId || !task.missionId || task.missionId === missionId));
+
+	return tasks.find((task) => task.lifecycleState === 'running')
+		?? tasks.find((task) => task.lifecycleState === 'ready' || task.lifecycleState === 'queued')
+		?? tasks.at(-1);
 }
 
 function resolvePreferredStageSession(

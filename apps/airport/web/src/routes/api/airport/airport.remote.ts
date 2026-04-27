@@ -1,8 +1,6 @@
 import { command, getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import {
-    airportHomeSnapshotSchema
-} from '@flying-pillow/mission-core/schemas';
+import { airportHomeSnapshotSchema } from '$lib/contracts/airport-home';
 
 const airportRouteQuerySchema = z.object({});
 

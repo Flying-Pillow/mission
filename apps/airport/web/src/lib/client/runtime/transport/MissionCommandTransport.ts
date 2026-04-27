@@ -3,14 +3,16 @@ import type {
     MissionActionQueryContext,
     MissionActionListSnapshot,
     MissionCommandAcknowledgement,
-    MissionProjectionSnapshot,
+    MissionProjectionSnapshot
+} from '@flying-pillow/mission-core/entities';
+import type {
     OperatorActionExecutionStep
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/browser';
 import type {
     EntityCommandInvocation,
     EntityQueryInvocation,
     EntityRemoteResult
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 import {
     missionActionListSnapshotSchema,
     missionCommandAcknowledgementSchema,
@@ -18,7 +20,7 @@ import {
     missionMissionCommandSchema,
     missionProjectionSnapshotSchema,
     missionWorktreeSnapshotSchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import type {
     MissionCommandGateway,
     MissionDocumentPayload

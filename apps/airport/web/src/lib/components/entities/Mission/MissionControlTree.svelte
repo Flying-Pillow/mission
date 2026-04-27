@@ -36,14 +36,12 @@
         outline,
         missionId,
         activeNodeId,
-        title = "Mission files",
         class: className,
         onSelectNode,
     }: {
         outline?: ActiveMissionOutline;
         missionId?: string;
         activeNodeId?: string;
-        title?: string;
         class?: string;
         onSelectNode: (nodeId: string) => void;
     } = $props();
@@ -168,8 +166,42 @@
         return basename(node.sourcePath) ?? node.label;
     }
 
+    function statusColor(statusLabel: string | undefined): string | undefined {
+        switch (normalizeStatusLabel(statusLabel)) {
+            case "active":
+            case "running":
+                return "#0ea5e9";
+            case "ready":
+            case "queued":
+            case "starting":
+            case "awaiting input":
+                return "#f59e0b";
+            case "completed":
+            case "delivered":
+                return "#10b981";
+            case "failed":
+            case "panicked":
+                return "#ef4444";
+            case "cancelled":
+            case "terminated":
+            case "paused":
+                return "#94a3b8";
+            case "pending":
+            case "draft":
+            case "mission artifact":
+            case "stage artifact":
+            case "task artifact":
+                return "#8b949e";
+            default:
+                return undefined;
+        }
+    }
+
     function nodeColor(node: MissionTowerTreeNode): string | undefined {
-        const color = node.color?.trim();
+        const normalizedStatus = normalizeStatusLabel(node.statusLabel);
+        const color = normalizedStatus
+            ? (statusColor(node.statusLabel) ?? "#8b949e")
+            : node.color?.trim();
         return color && color.length > 0 ? color : undefined;
     }
 
@@ -292,17 +324,10 @@
 
 <section
     class={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
+        "grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
         className,
     )}
 >
-    <header class="space-y-1 border-b px-3 py-2">
-        <h2 class="text-sm font-semibold text-foreground">{title}</h2>
-        <p class="text-xs text-muted-foreground">
-            {missionOutline?.title ?? missionId ?? "Mission outline"}
-        </p>
-    </header>
-
     <div class="min-h-0 overflow-auto p-2">
         {#if missionOutline}
             <TreeView.Root class="gap-1">

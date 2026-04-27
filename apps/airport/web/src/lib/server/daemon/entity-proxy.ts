@@ -4,7 +4,7 @@ import type {
     EntityFormInvocation,
     EntityQueryInvocation,
     EntityRemoteResult
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 import { connectSharedAuthenticatedDaemonClient } from './connections.server';
 
 const ENTITY_REQUEST_TIMEOUT_MS = 8_000;

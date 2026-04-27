@@ -4,28 +4,19 @@ import {
 	executeEntityCommandInDaemon,
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
-import { AgentSessionCommands } from '../entities/AgentSession/AgentSessionCommands.js';
-import { ArtifactCommands } from '../entities/Artifact/ArtifactCommands.js';
 import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
-import { MissionCommands } from '../entities/Mission/MissionCommands.js';
-import type { MissionRuntimeHandle } from '../entities/Mission/MissionRuntimeAccess.js';
+import { MissionDaemonService, type MissionRuntimeHandle } from './runtime/mission/MissionDaemonService.js';
 import { Repository } from '../entities/Repository/Repository.js';
-import { StageCommands } from '../entities/Stage/StageCommands.js';
-import { TaskCommands } from '../entities/Task/TaskCommands.js';
-import { PROTOCOL_VERSION } from './protocol/contracts.js';
+import { PROTOCOL_VERSION } from './protocol/transport.js';
 import type {
-	MissionActionListSnapshot,
 	MissionCommandAcknowledgement,
-	MissionDocumentSnapshot,
-	MissionProjectionSnapshot,
 	MissionSnapshot,
-	MissionWorktreeSnapshot
-} from '../schemas/Mission.js';
-import { repositoryMissionStartAcknowledgementSchema } from '../schemas/Repository.js';
+} from '../entities/Mission/MissionContract.js';
+import { repositoryMissionStartAcknowledgementSchema } from '../entities/Repository/RepositoryContract.js';
 
 describe('daemon entity dispatch', () => {
 	it('uses the bumped daemon protocol version', () => {
-		expect(PROTOCOL_VERSION).toBe(27);
+		expect(PROTOCOL_VERSION).toBe(28);
 	});
 
 	it('uses source acknowledgements for Repository mission-start commands', () => {
@@ -226,6 +217,11 @@ describe('daemon entity dispatch', () => {
 				id: 'mission-2'
 			});
 
+			expect(resolveSpy).toHaveBeenNthCalledWith(1, identity);
+			expect(resolveSpy).toHaveBeenNthCalledWith(2, identity);
+			expect(resolveSpy).toHaveBeenNthCalledWith(3, identity);
+			expect(resolveSpy).toHaveBeenNthCalledWith(4, identity);
+			expect(resolveSpy).toHaveBeenNthCalledWith(5, identity);
 			expect(resolveSpy).toHaveBeenCalledTimes(5);
 			expect(repository.read).toHaveBeenCalledOnce();
 			expect(repository.listIssues).toHaveBeenCalledOnce();
@@ -238,220 +234,145 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('dispatches Mission source methods through explicit handlers', async () => {
-		const querySpies = [
-			vi.spyOn(MissionCommands, 'read').mockResolvedValue(createMissionSnapshot()),
-			vi.spyOn(MissionCommands, 'readProjection').mockResolvedValue(createMissionProjectionSnapshot()),
-			vi.spyOn(MissionCommands, 'listActions').mockResolvedValue(createMissionActionListSnapshot()),
-			vi.spyOn(MissionCommands, 'readDocument').mockResolvedValue(createMissionDocumentSnapshot()),
-			vi.spyOn(MissionCommands, 'readWorktree').mockResolvedValue(createMissionWorktreeSnapshot())
-		];
-		const commandSpies = [
-			vi.spyOn(MissionCommands, 'command').mockResolvedValue(createMissionAcknowledgement('command')),
-			vi.spyOn(MissionCommands, 'taskCommand').mockResolvedValue(createMissionAcknowledgement('taskCommand', { taskId: 'implementation/01-task' })),
-			vi.spyOn(MissionCommands, 'sessionCommand').mockResolvedValue(createMissionAcknowledgement('sessionCommand', { sessionId: 'session-1' })),
-			vi.spyOn(MissionCommands, 'executeAction').mockResolvedValue(createMissionAcknowledgement('executeAction', { actionId: 'pause' })),
-			vi.spyOn(MissionCommands, 'writeDocument').mockResolvedValue(createMissionDocumentSnapshot())
-		];
+		const missionRuntime = createMissionRuntimeHandle(createMissionSnapshot().mission);
+		const loadRuntime = vi.fn(async () => missionRuntime);
+		const context = {
+			surfacePath: '/repo/root',
+			missionService: new MissionDaemonService({ loadRuntime })
+		};
 
-		try {
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'read',
-				payload: { missionId: 'mission-1' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ mission: { missionId: 'mission-1' } });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Mission',
+			method: 'read',
+			payload: { missionId: 'mission-1' }
+		}, context)).resolves.toMatchObject({ mission: { missionId: 'mission-1' } });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'readProjection',
-				payload: { missionId: 'mission-1' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ missionId: 'mission-1' });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Mission',
+			method: 'readProjection',
+			payload: { missionId: 'mission-1' }
+		}, context)).resolves.toMatchObject({ missionId: 'mission-1' });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'listActions',
-				payload: { missionId: 'mission-1', context: { taskId: 'implementation/01-task' } }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ missionId: 'mission-1' });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Mission',
+			method: 'listActions',
+			payload: { missionId: 'mission-1', context: { taskId: 'implementation/01-task' } }
+		}, context)).resolves.toMatchObject({ missionId: 'mission-1' });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'readDocument',
-				payload: { missionId: 'mission-1', path: '/repo/root/README.md' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ filePath: '/repo/root/README.md' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Mission',
+			method: 'command',
+			payload: { missionId: 'mission-1', command: { action: 'pause' } }
+		}, context)).resolves.toEqual(createMissionAcknowledgement('command'));
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'readWorktree',
-				payload: { missionId: 'mission-1' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ rootPath: '/repo/root/.mission/worktrees/mission-1' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Mission',
+			method: 'taskCommand',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task', command: { action: 'complete' } }
+		}, context)).resolves.toEqual(createMissionAcknowledgement('taskCommand', { taskId: 'implementation/01-task' }));
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'command',
-				payload: { missionId: 'mission-1', command: { action: 'pause' } }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createMissionAcknowledgement('command'));
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Mission',
+			method: 'sessionCommand',
+			payload: { missionId: 'mission-1', sessionId: 'session-1', command: { action: 'complete' } }
+		}, context)).resolves.toEqual(createMissionAcknowledgement('sessionCommand', { sessionId: 'session-1' }));
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'taskCommand',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task', command: { action: 'complete' } }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createMissionAcknowledgement('taskCommand', { taskId: 'implementation/01-task' }));
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Mission',
+			method: 'executeAction',
+			payload: { missionId: 'mission-1', actionId: 'pause' }
+		}, context)).resolves.toEqual(createMissionAcknowledgement('executeAction', { actionId: 'pause' }));
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'sessionCommand',
-				payload: { missionId: 'mission-1', sessionId: 'session-1', command: { action: 'complete' } }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createMissionAcknowledgement('sessionCommand', { sessionId: 'session-1' }));
-
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'executeAction',
-				payload: { missionId: 'mission-1', actionId: 'pause' }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createMissionAcknowledgement('executeAction', { actionId: 'pause' }));
-
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'writeDocument',
-				payload: { missionId: 'mission-1', path: '/repo/root/README.md', content: 'Updated' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ filePath: '/repo/root/README.md' });
-
-			expect(querySpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
-			expect(commandSpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
-		} finally {
-			for (const spy of [...querySpies, ...commandSpies]) {
-				spy.mockRestore();
-			}
-		}
+		expect(missionRuntime.pauseMission).toHaveBeenCalledOnce();
+		expect(missionRuntime.completeTask).toHaveBeenCalledWith('implementation/01-task');
+		expect(missionRuntime.completeAgentSession).toHaveBeenCalledWith('session-1');
+		expect(missionRuntime.executeAction).toHaveBeenCalledWith('pause', [], {});
+		expect(loadRuntime).toHaveBeenCalledTimes(1);
+		expect(missionRuntime.dispose).not.toHaveBeenCalled();
 	});
 
 	it('dispatches child Mission entities through explicit handlers', async () => {
-		const querySpies = [
-			vi.spyOn(StageCommands, 'read').mockResolvedValue(createMissionStageSnapshot()),
-			vi.spyOn(StageCommands, 'listCommands').mockResolvedValue(createStageCommandListSnapshot()),
-			vi.spyOn(TaskCommands, 'read').mockResolvedValue(createMissionTaskSnapshot()),
-			vi.spyOn(TaskCommands, 'listCommands').mockResolvedValue(createTaskCommandListSnapshot()),
-			vi.spyOn(ArtifactCommands, 'read').mockResolvedValue(createMissionArtifactSnapshot()),
-			vi.spyOn(ArtifactCommands, 'readDocument').mockResolvedValue(createArtifactDocumentSnapshot()),
-			vi.spyOn(ArtifactCommands, 'listCommands').mockResolvedValue(createArtifactCommandListSnapshot()),
-			vi.spyOn(AgentSessionCommands, 'read').mockResolvedValue(createMissionAgentSessionSnapshot()),
-			vi.spyOn(AgentSessionCommands, 'listCommands').mockResolvedValue(createAgentSessionCommandListSnapshot())
-		];
-		const commandSpies = [
-			vi.spyOn(StageCommands, 'executeCommand').mockResolvedValue(createStageCommandAcknowledgement()),
-			vi.spyOn(TaskCommands, 'executeCommand').mockResolvedValue(createTaskCommandAcknowledgement()),
-			vi.spyOn(ArtifactCommands, 'writeDocument').mockResolvedValue(createArtifactDocumentSnapshot('Updated')),
-			vi.spyOn(ArtifactCommands, 'executeCommand').mockResolvedValue(createArtifactCommandAcknowledgement()),
-			vi.spyOn(AgentSessionCommands, 'executeCommand').mockResolvedValue(createAgentSessionCommandAcknowledgement('executeCommand')),
-			vi.spyOn(AgentSessionCommands, 'sendPrompt').mockResolvedValue(createAgentSessionCommandAcknowledgement('sendPrompt')),
-			vi.spyOn(AgentSessionCommands, 'sendCommand').mockResolvedValue(createAgentSessionCommandAcknowledgement('sendCommand'))
-		];
+		const missionRuntime = createMissionRuntimeHandle({
+			...createMissionSnapshot().mission,
+			artifacts: [createMissionArtifactSnapshot()],
+			agentSessions: [createMissionAgentSessionSnapshot()]
+		});
+		const loadRuntime = vi.fn(async () => missionRuntime);
+		const context = {
+			surfacePath: '/repo/root',
+			missionService: new MissionDaemonService({ loadRuntime })
+		};
 
-		try {
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Stage',
-				method: 'read',
-				payload: { missionId: 'mission-1', stageId: 'implementation' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ stageId: 'implementation' });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Stage',
+			method: 'read',
+			payload: { missionId: 'mission-1', stageId: 'implementation' }
+		}, context)).resolves.toMatchObject({ stageId: 'implementation', commands: [] });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Stage',
-				method: 'listCommands',
-				payload: { missionId: 'mission-1', stageId: 'implementation' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Stage', stageId: 'implementation' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Stage',
+			method: 'executeCommand',
+			payload: { missionId: 'mission-1', stageId: 'implementation', commandId: 'stage.generateTasks' }
+		}, context)).resolves.toEqual(createStageCommandAcknowledgement());
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Stage',
-				method: 'executeCommand',
-				payload: { missionId: 'mission-1', stageId: 'implementation', commandId: 'stage.generateTasks' }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createStageCommandAcknowledgement());
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Task',
+			method: 'read',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
+		}, context)).resolves.toMatchObject({ taskId: 'implementation/01-task', commands: [] });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Task',
-				method: 'read',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ taskId: 'implementation/01-task' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Task',
+			method: 'executeCommand',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
+		}, context)).resolves.toEqual(createTaskCommandAcknowledgement());
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Task',
-				method: 'listCommands',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Task', taskId: 'implementation/01-task' });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Artifact',
+			method: 'read',
+			payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
+		}, context)).resolves.toMatchObject({ artifactId: 'mission:brief', commands: [] });
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Task',
-				method: 'executeCommand',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createTaskCommandAcknowledgement());
+		await expect(executeEntityCommandInDaemon({
+			entity: 'Artifact',
+			method: 'executeCommand',
+			payload: { missionId: 'mission-1', artifactId: 'mission:brief', commandId: 'artifact.review' }
+		}, context)).rejects.toThrow("Artifact command 'artifact.review' is not implemented in the daemon.");
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Artifact',
-				method: 'read',
-				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ artifactId: 'mission:brief' });
+		await expect(executeEntityQueryInDaemon({
+			entity: 'AgentSession',
+			method: 'read',
+			payload: { missionId: 'mission-1', sessionId: 'session-1' }
+		}, context)).resolves.toMatchObject({ sessionId: 'session-1', commands: [] });
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Artifact',
-				method: 'readDocument',
-				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ content: 'Artifact document' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'AgentSession',
+			method: 'executeCommand',
+			payload: { missionId: 'mission-1', sessionId: 'session-1', commandId: 'agentSession.cancel' }
+		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('executeCommand'));
 
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Artifact',
-				method: 'listCommands',
-				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Artifact', artifactId: 'mission:brief' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'AgentSession',
+			method: 'sendPrompt',
+			payload: { missionId: 'mission-1', sessionId: 'session-1', prompt: { source: 'operator', text: 'Continue.' } }
+		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendPrompt'));
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Artifact',
-				method: 'writeDocument',
-				payload: { missionId: 'mission-1', artifactId: 'mission:brief', content: 'Updated' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ content: 'Updated' });
+		await expect(executeEntityCommandInDaemon({
+			entity: 'AgentSession',
+			method: 'sendCommand',
+			payload: { missionId: 'mission-1', sessionId: 'session-1', command: { type: 'nudge' } }
+		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendCommand'));
 
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Artifact',
-				method: 'executeCommand',
-				payload: { missionId: 'mission-1', artifactId: 'mission:brief', commandId: 'artifact.review' }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createArtifactCommandAcknowledgement());
-
-			await expect(executeEntityQueryInDaemon({
-				entity: 'AgentSession',
-				method: 'read',
-				payload: { missionId: 'mission-1', sessionId: 'session-1' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ sessionId: 'session-1' });
-
-			await expect(executeEntityQueryInDaemon({
-				entity: 'AgentSession',
-				method: 'listCommands',
-				payload: { missionId: 'mission-1', sessionId: 'session-1' }
-			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'AgentSession', sessionId: 'session-1' });
-
-			await expect(executeEntityCommandInDaemon({
-				entity: 'AgentSession',
-				method: 'executeCommand',
-				payload: { missionId: 'mission-1', sessionId: 'session-1', commandId: 'agentSession.cancel' }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('executeCommand'));
-
-			await expect(executeEntityCommandInDaemon({
-				entity: 'AgentSession',
-				method: 'sendPrompt',
-				payload: { missionId: 'mission-1', sessionId: 'session-1', prompt: { source: 'operator', text: 'Continue.' } }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendPrompt'));
-
-			await expect(executeEntityCommandInDaemon({
-				entity: 'AgentSession',
-				method: 'sendCommand',
-				payload: { missionId: 'mission-1', sessionId: 'session-1', command: { type: 'nudge' } }
-			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendCommand'));
-
-			expect(querySpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
-			expect(commandSpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
-		} finally {
-			for (const spy of [...querySpies, ...commandSpies]) {
-				spy.mockRestore();
-			}
-		}
+		expect(missionRuntime.executeAction).toHaveBeenCalledWith('generation.tasks.implementation', []);
+		expect(missionRuntime.startTask).toHaveBeenCalledWith('implementation/01-task', {});
+		expect(missionRuntime.cancelAgentSession).toHaveBeenCalledWith('session-1', undefined);
+		expect(missionRuntime.sendAgentSessionPrompt).toHaveBeenCalledOnce();
+		expect(missionRuntime.sendAgentSessionCommand).toHaveBeenCalledOnce();
+		expect(loadRuntime).toHaveBeenCalledTimes(1);
+		expect(missionRuntime.dispose).not.toHaveBeenCalled();
 	});
 
-	it('rejects invalid child entity payloads and results before returning', async () => {
+	it('rejects invalid child entity payloads and unavailable runtime context', async () => {
 		await expect(executeEntityQueryInDaemon({
 			entity: 'Task',
 			method: 'read',
@@ -460,49 +381,24 @@ describe('daemon entity dispatch', () => {
 			surfacePath: process.cwd()
 		})).rejects.toBeInstanceOf(ZodError);
 
-		const readTaskSpy = vi.spyOn(TaskCommands, 'read').mockResolvedValue({ bad: true } as never);
-		try {
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Task',
-				method: 'read',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
-			}, {
-				surfacePath: process.cwd()
-			})).rejects.toBeInstanceOf(ZodError);
-		} finally {
-			readTaskSpy.mockRestore();
-		}
-
-		const commandSpy = vi.spyOn(TaskCommands, 'executeCommand').mockResolvedValue({
-			ok: true,
+		await expect(executeEntityQueryInDaemon({
 			entity: 'Task',
-			method: 'executeCommand',
-			id: 'implementation/01-task',
-			missionId: 'mission-1',
-			taskId: 'implementation/01-task',
-			commandId: 'task.start',
-			status: { missionId: 'mission-1' }
-		} as never);
-		try {
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Task',
-				method: 'executeCommand',
-				payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
-			}, {
-				surfacePath: process.cwd()
-			})).rejects.toBeInstanceOf(ZodError);
-		} finally {
-			commandSpy.mockRestore();
-		}
+			method: 'read',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
+		}, {
+			surfacePath: process.cwd(),
+			missionService: new MissionDaemonService({ loadRuntime: async () => undefined })
+		})).rejects.toThrow("Mission 'mission-1' could not be resolved.");
 	});
 
-	it('fails loudly when child command collaborators cannot resolve the mission or child entity', async () => {
-		await expect(StageCommands.read({
-			missionId: 'missing-mission',
-			stageId: 'implementation'
+	it('fails loudly when child contracts cannot resolve the mission or child entity', async () => {
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Stage',
+			method: 'read',
+			payload: { missionId: 'missing-mission', stageId: 'implementation' }
 		}, {
 			surfacePath: '/repo/root',
-			loadRuntime: async () => undefined
+			missionService: new MissionDaemonService({ loadRuntime: async () => undefined })
 		})).rejects.toThrow("Mission 'missing-mission' could not be resolved.");
 
 		const emptyRuntime = createMissionRuntimeHandle({
@@ -513,27 +409,31 @@ describe('daemon entity dispatch', () => {
 		});
 		const context = {
 			surfacePath: '/repo/root',
-			loadRuntime: async () => emptyRuntime
+			missionService: new MissionDaemonService({ loadRuntime: async () => emptyRuntime })
 		};
 
-		await expect(StageCommands.read({
-			missionId: 'mission-1',
-			stageId: 'implementation'
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Stage',
+			method: 'read',
+			payload: { missionId: 'mission-1', stageId: 'implementation' }
 		}, context)).rejects.toThrow("Stage 'implementation' could not be resolved in Mission 'mission-1'.");
 
-		await expect(TaskCommands.read({
-			missionId: 'mission-1',
-			taskId: 'implementation/01-task'
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Task',
+			method: 'read',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
 		}, context)).rejects.toThrow("Task 'implementation/01-task' could not be resolved in Mission 'mission-1'.");
 
-		await expect(ArtifactCommands.read({
-			missionId: 'mission-1',
-			artifactId: 'mission:brief'
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Artifact',
+			method: 'read',
+			payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
 		}, context)).rejects.toThrow("Artifact 'mission:brief' could not be resolved in Mission 'mission-1'.");
 
-		await expect(AgentSessionCommands.read({
-			missionId: 'mission-1',
-			sessionId: 'session-1'
+		await expect(executeEntityQueryInDaemon({
+			entity: 'AgentSession',
+			method: 'read',
+			payload: { missionId: 'mission-1', sessionId: 'session-1' }
 		}, context)).rejects.toThrow("AgentSession 'session-1' could not be resolved in Mission 'mission-1'.");
 	});
 
@@ -572,38 +472,14 @@ describe('daemon entity dispatch', () => {
 			surfacePath: process.cwd()
 		})).rejects.toBeInstanceOf(ZodError);
 
-		const readSpy = vi.spyOn(MissionCommands, 'read').mockResolvedValue({ bad: true } as never);
-		try {
-			await expect(executeEntityQueryInDaemon({
-				entity: 'Mission',
-				method: 'read',
-				payload: { missionId: 'mission-1' }
-			}, {
-				surfacePath: process.cwd()
-			})).rejects.toBeInstanceOf(ZodError);
-		} finally {
-			readSpy.mockRestore();
-		}
-
-		const commandSpy = vi.spyOn(MissionCommands, 'command').mockResolvedValue({
-			ok: true,
+		await expect(executeEntityQueryInDaemon({
 			entity: 'Mission',
-			method: 'command',
-			id: 'mission-1',
-			missionId: 'mission-1',
-			status: { missionId: 'mission-1' }
-		} as never);
-		try {
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Mission',
-				method: 'command',
-				payload: { missionId: 'mission-1', command: { action: 'pause' } }
-			}, {
-				surfacePath: process.cwd()
-			})).rejects.toBeInstanceOf(ZodError);
-		} finally {
-			commandSpy.mockRestore();
-		}
+			method: 'read',
+			payload: { missionId: 'mission-1' }
+		}, {
+			surfacePath: process.cwd(),
+			missionService: new MissionDaemonService({ loadRuntime: async () => createMissionRuntimeHandle({ bad: true } as never) })
+		})).rejects.toBeInstanceOf(ZodError);
 	});
 
 	it('rejects invalid payloads and missing Repository instances', async () => {
@@ -715,54 +591,6 @@ function createMissionRuntimeHandle(snapshot: MissionSnapshot['mission']): Missi
 	} as unknown as MissionRuntimeHandle;
 }
 
-function createMissionProjectionSnapshot(): MissionProjectionSnapshot {
-	return {
-		missionId: 'mission-1',
-		status: createMissionSnapshot().status,
-		workflow: createMissionSnapshot().workflow,
-		actions: createMissionActionListSnapshot(),
-		updatedAt: '2026-04-26T13:36:00.000Z'
-	};
-}
-
-function createMissionActionListSnapshot(): MissionActionListSnapshot {
-	return {
-		missionId: 'mission-1',
-		actions: [
-			{
-				actionId: 'pause',
-				label: 'Pause',
-				kind: 'mission' as const,
-				target: { scope: 'mission' },
-				disabled: false
-			}
-		]
-	};
-}
-
-function createMissionDocumentSnapshot(): MissionDocumentSnapshot {
-	return {
-		filePath: '/repo/root/README.md',
-		content: 'Mission document',
-		updatedAt: '2026-04-26T13:36:00.000Z'
-	};
-}
-
-function createMissionWorktreeSnapshot(): MissionWorktreeSnapshot {
-	return {
-		rootPath: '/repo/root/.mission/worktrees/mission-1',
-		fetchedAt: '2026-04-26T13:36:00.000Z',
-		tree: [
-			{
-				name: 'README.md',
-				relativePath: 'README.md',
-				absolutePath: '/repo/root/.mission/worktrees/mission-1/README.md',
-				kind: 'file' as const
-			}
-		]
-	};
-}
-
 function createMissionAcknowledgement(
 	method: 'command' | 'taskCommand' | 'sessionCommand' | 'executeAction',
 	identifiers: { taskId?: string; sessionId?: string; actionId?: string } = {}
@@ -824,60 +652,6 @@ function createMissionAgentSessionSnapshot() {
 	};
 }
 
-function createStageCommandListSnapshot() {
-	return {
-		entity: 'Stage' as const,
-		entityId: 'implementation',
-		missionId: 'mission-1',
-		stageId: 'implementation',
-		commands: [
-			{ commandId: 'stage.generateTasks', label: 'Generate Tasks', disabled: true, disabledReason: 'Stage already has tasks.' }
-		]
-	};
-}
-
-function createTaskCommandListSnapshot() {
-	return {
-		entity: 'Task' as const,
-		entityId: 'implementation/01-task',
-		missionId: 'mission-1',
-		taskId: 'implementation/01-task',
-		commands: [
-			{ commandId: 'task.start', label: 'Start Ready Task', disabled: false }
-		]
-	};
-}
-
-function createArtifactCommandListSnapshot() {
-	return {
-		entity: 'Artifact' as const,
-		entityId: 'mission:brief',
-		missionId: 'mission-1',
-		artifactId: 'mission:brief',
-		commands: []
-	};
-}
-
-function createAgentSessionCommandListSnapshot() {
-	return {
-		entity: 'AgentSession' as const,
-		entityId: 'session-1',
-		missionId: 'mission-1',
-		sessionId: 'session-1',
-		commands: [
-			{ commandId: 'agentSession.cancel', label: 'Cancel', disabled: false }
-		]
-	};
-}
-
-function createArtifactDocumentSnapshot(content = 'Artifact document') {
-	return {
-		filePath: '/repo/root/BRIEF.md',
-		content,
-		updatedAt: '2026-04-26T13:36:00.000Z'
-	};
-}
-
 function createStageCommandAcknowledgement() {
 	return {
 		ok: true as const,
@@ -899,18 +673,6 @@ function createTaskCommandAcknowledgement() {
 		missionId: 'mission-1',
 		taskId: 'implementation/01-task',
 		commandId: 'task.start'
-	};
-}
-
-function createArtifactCommandAcknowledgement() {
-	return {
-		ok: true as const,
-		entity: 'Artifact' as const,
-		method: 'executeCommand' as const,
-		id: 'mission:brief',
-		missionId: 'mission-1',
-		artifactId: 'mission:brief',
-		commandId: 'artifact.review'
 	};
 }
 

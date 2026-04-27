@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
 import type {
+    AgentSessionCommandAcknowledgement,
+    ArtifactCommandAcknowledgement,
     MissionAgentSessionSnapshot,
     MissionArtifactSnapshot,
     MissionActionListSnapshot,
+    MissionCommandAcknowledgement,
     MissionSnapshot,
     MissionStageSnapshot,
-    MissionTaskSnapshot
-} from '@flying-pillow/mission-core/schemas';
-import type { MissionCommandGateway } from './Mission.svelte.js';
+    MissionTaskSnapshot,
+    StageCommandAcknowledgement,
+    TaskCommandAcknowledgement
+} from '@flying-pillow/mission-core/entities';
+import type { MissionChildEntityCommandGateway, MissionCommandGateway } from './Mission.svelte.js';
 
 describe('Mission projection reconciliation', () => {
     it('reconciles targeted child entity snapshots without replacing unrelated mirrors', () => {
@@ -70,39 +75,19 @@ describe('Mission projection reconciliation', () => {
         expect(mission.getTask('task-2')).toBeUndefined();
     });
 
-    it('exposes only Mission-scoped actions as Mission entity commands', async () => {
+    it('exposes Mission entity commands from the entity snapshot', () => {
         const mission = new Mission(
-            createMissionSnapshot(),
-            async () => createMissionSnapshot(),
-            createMissionCommandGateway({
-                missionId: 'mission-29',
-                actions: [
-                    {
-                        actionId: 'mission.pause',
-                        label: 'Pause Mission',
-                        kind: 'mission',
-                        target: { scope: 'mission' },
-                        disabled: false
-                    },
-                    {
-                        actionId: 'task.start.task-1',
-                        label: 'Start Task',
-                        kind: 'task',
-                        target: { scope: 'task', targetId: 'task-1' },
-                        disabled: false
-                    },
-                    {
-                        actionId: 'session.cancel.session-1',
-                        label: 'Cancel Session',
-                        kind: 'session',
-                        target: { scope: 'session', targetId: 'session-1' },
-                        disabled: false
-                    }
-                ]
-            })
+            {
+                ...createMissionSnapshot(),
+                mission: {
+                    ...createMissionSnapshot().mission,
+                    commands: [{ commandId: 'mission.pause', label: 'Pause Mission', disabled: false }]
+                }
+            },
+            async () => createMissionSnapshot()
         );
 
-        await expect(mission.listCommands()).resolves.toEqual([
+        expect(mission.commands).toEqual([
             {
                 commandId: 'mission.pause',
                 label: 'Pause Mission',
@@ -110,16 +95,44 @@ describe('Mission projection reconciliation', () => {
             }
         ]);
     });
+
+    it('reads a preselected placeholder artifact with the reconciled artifact id', async () => {
+        const readArtifactDocumentCalls: string[] = [];
+        const mission = new Mission(
+            createMissionSnapshot(),
+            async () => createMissionSnapshot(),
+            createMissionCommandGateway({ missionId: 'mission-29', actions: [] }),
+            createChildEntityCommandGateway(readArtifactDocumentCalls)
+        );
+        const placeholderArtifact = mission.resolveArtifact({
+            filePath: 'PRD.md',
+            label: 'Requirements',
+            stageId: 'prd'
+        });
+
+        mission.applyArtifactSnapshot({
+            artifactId: 'mission-29:prd',
+            kind: 'stage',
+            label: 'Requirements',
+            fileName: 'PRD.md',
+            relativePath: 'PRD.md',
+            stageId: 'prd'
+        });
+
+        await placeholderArtifact.read({ executionContext: 'render' });
+
+        expect(readArtifactDocumentCalls).toEqual(['mission-29:prd']);
+    });
 });
 
 function createMissionCommandGateway(actions: MissionActionListSnapshot): MissionCommandGateway {
     return {
-        pauseMission: async () => createMissionAcknowledgement('pause'),
-        resumeMission: async () => createMissionAcknowledgement('resume'),
-        panicStopMission: async () => createMissionAcknowledgement('panic'),
-        clearMissionPanic: async () => createMissionAcknowledgement('clearPanic'),
-        restartLaunchQueue: async () => createMissionAcknowledgement('restartQueue'),
-        deliverMission: async () => createMissionAcknowledgement('deliver'),
+        pauseMission: async () => createMissionAcknowledgement('command'),
+        resumeMission: async () => createMissionAcknowledgement('command'),
+        panicMission: async () => createMissionAcknowledgement('command'),
+        clearMissionPanic: async () => createMissionAcknowledgement('command'),
+        restartMissionQueue: async () => createMissionAcknowledgement('command'),
+        deliverMission: async () => createMissionAcknowledgement('command'),
         getMissionProjection: async () => ({
             missionId: 'mission-29'
         }),
@@ -133,18 +146,88 @@ function createMissionCommandGateway(actions: MissionActionListSnapshot): Missio
             filePath: '/repo/root/README.md',
             content: ''
         }),
-        readMissionWorktree: async () => ({
-            missionId: 'mission-29',
+        getMissionWorktree: async () => ({
             rootPath: '/repo/root',
-            nodes: []
+            fetchedAt: '2026-04-27T00:00:00.000Z',
+            tree: []
         })
     };
 }
 
-function createMissionAcknowledgement(method: string) {
+function createChildEntityCommandGateway(readArtifactDocumentCalls: string[]): MissionChildEntityCommandGateway {
     return {
-        ok: true as const,
-        entity: 'Mission' as const,
+        executeStageCommand: async () => createStageAcknowledgement(),
+        executeTaskCommand: async () => createTaskAcknowledgement(),
+        executeArtifactCommand: async () => createArtifactAcknowledgement(),
+        executeAgentSessionCommand: async () => createAgentSessionAcknowledgement('executeCommand'),
+        sendAgentSessionPrompt: async () => createAgentSessionAcknowledgement('sendPrompt'),
+        sendAgentSessionCommand: async () => createAgentSessionAcknowledgement('sendCommand'),
+        readArtifactDocument: async (input) => {
+            readArtifactDocumentCalls.push(input.artifactId);
+            return {
+                filePath: 'PRD.md',
+                content: '# PRD'
+            };
+        },
+        writeArtifactDocument: async () => ({
+            filePath: 'PRD.md',
+            content: '# PRD'
+        })
+    };
+}
+
+function createStageAcknowledgement(): StageCommandAcknowledgement {
+    return {
+        ok: true,
+        entity: 'Stage',
+        method: 'executeCommand',
+        id: 'stage-1',
+        missionId: 'mission-29',
+        stageId: 'stage-1',
+        commandId: 'stage.generateTasks'
+    };
+}
+
+function createTaskAcknowledgement(): TaskCommandAcknowledgement {
+    return {
+        ok: true,
+        entity: 'Task',
+        method: 'executeCommand',
+        id: 'task-1',
+        missionId: 'mission-29',
+        taskId: 'task-1',
+        commandId: 'task.start'
+    };
+}
+
+function createArtifactAcknowledgement(): ArtifactCommandAcknowledgement {
+    return {
+        ok: true,
+        entity: 'Artifact',
+        method: 'executeCommand',
+        id: 'artifact-1',
+        missionId: 'mission-29',
+        artifactId: 'artifact-1',
+        commandId: 'artifact.review'
+    };
+}
+
+function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledgement['method']): AgentSessionCommandAcknowledgement {
+    return {
+        ok: true,
+        entity: 'AgentSession',
+        method,
+        id: 'session-1',
+        missionId: 'mission-29',
+        sessionId: 'session-1',
+        ...(method === 'executeCommand' ? { commandId: 'agentSession.cancel' } : {})
+    };
+}
+
+function createMissionAcknowledgement(method: MissionCommandAcknowledgement['method']): MissionCommandAcknowledgement {
+    return {
+        ok: true,
+        entity: 'Mission',
         method,
         id: 'mission-29',
         missionId: 'mission-29'

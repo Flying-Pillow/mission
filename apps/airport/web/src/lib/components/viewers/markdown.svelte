@@ -1,5 +1,6 @@
 <!-- /apps/airport/web/src/lib/components/viewers/markdown.svelte: Shared markdown viewer for Airport web based on the Flying Pillow renderer pattern. -->
 <script lang="ts">
+    import { mode } from "mode-watcher";
     import { marked } from "marked";
     import sanitizeHtml from "sanitize-html";
     import { renderMermaidDiagrams } from "../../utils/mermaid.ts";
@@ -13,11 +14,14 @@
         body: string;
     };
 
-    const document = $derived.by(() => splitFrontmatter(source ?? ""));
+    const markdownDocument = $derived.by(() => splitFrontmatter(source ?? ""));
 
     const rendered = $derived.by(() =>
         sanitizeHtml(
-            marked.parse(document.body, { breaks: true, gfm: true }) as string,
+            marked.parse(markdownDocument.body, {
+                breaks: true,
+                gfm: true,
+            }) as string,
             {
                 allowedTags: sanitizeHtml.defaults.allowedTags.concat([
                     "h1",
@@ -67,6 +71,10 @@
         }
 
         await tick();
+        if (!containerElement) {
+            return;
+        }
+
         await renderMermaidDiagrams(containerElement);
     }
 
@@ -81,11 +89,11 @@
     bind:this={containerElement}
     class="markdown-viewer max-w-none break-words p-2 pb-6 text-sm text-foreground"
 >
-    {#if document.frontmatter}
-        <pre class="markdown-frontmatter">{document.frontmatter}</pre>
+    {#if markdownDocument.frontmatter}
+        <pre class="markdown-frontmatter">{markdownDocument.frontmatter}</pre>
     {/if}
 
-    <div class="markdown markdown-body">
+    <div class="markdown markdown-body" data-theme={mode.current}>
         {@html rendered}
     </div>
 </div>

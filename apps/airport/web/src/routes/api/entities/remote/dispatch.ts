@@ -3,12 +3,12 @@ import type {
     EntityFormInvocation,
     EntityQueryInvocation,
     EntityRemoteResult
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 import {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,
     entityQueryInvocationSchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/protocol/entity-remote';
 
 export {
     entityCommandInvocationSchema,

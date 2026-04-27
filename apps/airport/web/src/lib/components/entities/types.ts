@@ -1,11 +1,16 @@
 import type {
     GitHubIssueDetail,
-    AgentSession,
-    AirportRuntimeEventEnvelope,
+    AgentSessionSnapshot,
     MissionSnapshot,
     MissionReference,
-    MissionSessionTerminalSnapshot,
+    AgentSessionTerminalSnapshot,
     MissionTerminalSnapshot,
+    Repository,
+    RepositorySnapshot,
+    TrackedIssueSummary,
+    GitHubVisibleRepository,
+} from "@flying-pillow/mission-core/entities";
+import type {
     MissionStageId,
     MissionTowerTreeNode,
     OperatorActionDescriptor,
@@ -15,11 +20,8 @@ import type {
     OperatorActionQueryContext,
     OperatorActionTargetContext,
     OperatorStatus,
-    Repository,
-    RepositorySnapshot,
-    TrackedIssueSummary,
-} from "@flying-pillow/mission-core/schemas";
-import type { GitHubVisibleRepository } from "@flying-pillow/mission-core/schemas";
+} from "@flying-pillow/mission-core/browser";
+import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 
 export type RepositorySummary = Repository;
 export type GitHubVisibleRepositorySummary = GitHubVisibleRepository;
@@ -28,12 +30,12 @@ export type SidebarRepositorySummary = RepositorySummary & {
     missions?: MissionSummary[];
 };
 export type IssueSummary = TrackedIssueSummary;
-export type MissionSessionSummary = AgentSession;
+export type MissionSessionSummary = AgentSessionSnapshot;
 export type SelectedMissionSummary = MissionSnapshot;
 export type SelectedIssueSummary = GitHubIssueDetail;
 export type RepositorySnapshotData = RepositorySnapshot;
 export type MissionRuntimeEventEnvelope = AirportRuntimeEventEnvelope;
-export type MissionSessionTerminalSnapshotData = MissionSessionTerminalSnapshot;
+export type MissionSessionTerminalSnapshotData = AgentSessionTerminalSnapshot;
 export type MissionTerminalSnapshotData = MissionTerminalSnapshot;
 export type MissionStageIdData = MissionStageId;
 export type MissionTowerTreeNodeData = MissionTowerTreeNode;

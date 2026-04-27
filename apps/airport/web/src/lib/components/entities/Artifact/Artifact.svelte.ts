@@ -1,5 +1,5 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type { EntityCommandDescriptor, MissionDocumentSnapshot } from '@flying-pillow/mission-core/schemas';
+import type { EntityCommandDescriptor, MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities';
 
 export type ArtifactDocumentPayload = MissionDocumentSnapshot;
 
@@ -9,10 +9,10 @@ export type ArtifactSnapshot = {
     label?: string;
     stageId?: string;
     taskId?: string;
+    commands?: EntityCommandDescriptor[];
 };
 
 export type ArtifactOwner = {
-    listArtifactCommands(artifactId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
     executeArtifactCommand(artifactId: string, commandId: string, input?: unknown): Promise<void>;
     readArtifact(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
     writeArtifact(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
@@ -76,17 +76,16 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return this.snapshot.taskId;
     }
 
+    public get commands(): EntityCommandDescriptor[] {
+        return structuredClone(this.snapshot.commands ?? []);
+    }
+
     public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentPayload> {
         return this.owner.readArtifact(this.filePath, input);
     }
 
     public async write(content: string): Promise<ArtifactDocumentPayload> {
         return this.owner.writeArtifact(this.filePath, content);
-    }
-
-    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
-        const snapshot = await this.owner.listArtifactCommands(this.artifactId, input);
-        return structuredClone(snapshot.commands);
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {

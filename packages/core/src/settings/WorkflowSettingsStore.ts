@@ -4,7 +4,10 @@ import {
 	resolveRepositorySettingsDocument,
 	writeRepositorySettingsDocument
 } from '../lib/daemonConfig.js';
-import type { RepositorySettings } from '../schemas/RepositorySettings.js';
+import {
+	createDefaultRepositorySettings,
+	type RepositorySettings
+} from '../entities/Repository/RepositorySettings.js';
 import {
 	DEFAULT_WORKFLOW_VERSION,
 	createDefaultWorkflowSettings
@@ -121,7 +124,7 @@ export class WorkflowSettingsStore {
 	}
 
 	private createInitializedDocument(currentDocument?: RepositorySettings): RepositorySettings {
-		return resolveRepositorySettingsDocument(currentDocument ?? {});
+		return resolveRepositorySettingsDocument(currentDocument ?? createDefaultRepositorySettings());
 	}
 
 	private toGetResult(state: WorkflowSettingsFileState): WorkflowSettingsGetResult {

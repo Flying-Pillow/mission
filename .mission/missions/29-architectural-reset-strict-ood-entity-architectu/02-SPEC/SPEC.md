@@ -64,6 +64,18 @@ A source operation is the direct query or command invoked by a client mirror, su
 
 A projection event is an SSE event published by the daemon to describe authoritative state changes. Projection events update mirrored entities after workflow, mission, task, artifact, session, or repository side effects occur.
 
+### Entity Id
+
+Every daemon-owned entity has a canonical `id` in the shape `table:uniqueId`. The table segment is the entity collection name. The unique id segment may be composite when a child entity is scoped by its aggregate, such as `task:<mission-id>/<task-id>` or `agent_session:<mission-id>/<session-id>`.
+
+Legacy entity-specific identifiers such as `missionId`, `taskId`, and `sessionId` may remain inside entity payloads while those payloads are migrated, but they are not the transport address. The transport address is always the canonical `id`.
+
+### Entity Channel
+
+Entity publication channels use the canonical entity id plus an event suffix: `table:uniqueId.event`. Examples are `mission:29.status`, `task:29/implementation/01-spec.snapshot.changed`, and `agent_session:29/session-1.lifecycle`.
+
+Subscriptions are channel subscriptions. A client may subscribe to an exact channel or a wildcard channel pattern such as `task:29/*.*`. The daemon performs channel matching before events leave the daemon process. Airport web must not infer event ownership from notification type names.
+
 ### Runtime
 
 `runtime` is reserved for active execution boundaries such as workflow execution, agent session execution, terminal streams, and SSE streams. Entity wrappers must not be named `RepositoryRuntime`, `MissionRuntime`, or similar unless they truly represent active execution infrastructure.
@@ -128,6 +140,7 @@ Responsibilities:
 - Define generic entity remote invocation schemas.
 - Define command acknowledgement schemas.
 - Define SSE event envelope and payload schemas.
+- Define canonical entity id and entity channel schemas.
 - Export all public schemas through `packages/core/src/schemas/index.ts`.
 
 ### Daemon Dispatch Layer
@@ -180,6 +193,9 @@ Responsibilities:
 - Validate event envelopes with shared schemas.
 - Reconcile entity mirrors from projection events.
 - Keep streaming transport separate from source command responses.
+- Subscribe by entity channel, not by daemon notification type.
+
+This layer must not contain mission-matching switches, event-type ownership switches, local repository hydration fallbacks, or transport-specific compatibility aliases. The daemon/event source owns `entityId`, `channel`, `eventName`, and `occurredAt`; Airport forwards and validates those fields.
 
 ## Shared Schemas
 
@@ -427,6 +443,12 @@ The target migration collapses that split into a canonical entity contract witho
 - Workflow reducer rules as UI logic. Reducer/policy rules remain workflow-engine internals consumed by Mission.
 - Stage, Task, Artifact, or AgentSession direct behavior once those entities are promoted to first-class source entities.
 - `MissionRuntimeSnapshot` as a command response for unrelated global reconciliation.
+
+### Terminal Runtime Boundary
+
+Terminal runtime services are transport adapters only. They are allowed to resolve an existing terminal stream, explicitly create a mission shell when a terminal-specific command asks for creation, send raw bytes, resize a terminal, return terminal snapshots, publish terminal stream notifications, and return a persisted transcript for a detached historical agent session.
+
+Terminal runtime services must not derive Mission, Task, Stage, Artifact, or AgentSession lifecycle. They must not emit workflow lifecycle events, treat a missing process-local terminal registry as authoritative workflow termination, create terminals as a read/state side effect, relaunch, terminate, cancel, or complete workflow sessions, repair launch queues, autostart, or panic state, or invent transcript text as domain truth.
 
 ### Mission Data Properties
 

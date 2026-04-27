@@ -1,8 +1,7 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { githubVisibleRepositorySchema } from '@flying-pillow/mission-core/schemas';
+import { githubVisibleRepositorySchema } from '@flying-pillow/mission-core/entities';
 import { executeEntityQuery } from '../../api/entities/remote/dispatch';
-import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
 const airportHomeDataQuerySchema = z.object({});
 
@@ -10,6 +9,7 @@ export const getAirportHomeData = query(
     airportHomeDataQuerySchema,
     async () => {
         const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
+        const { EntityProxy } = await import('$lib/server/daemon/entity-proxy');
         const event = getRequestEvent();
         const gateway = new DaemonGateway(event.locals);
         const entityProxy = new EntityProxy(event.locals);

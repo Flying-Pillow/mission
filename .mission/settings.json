@@ -1,9 +1,7 @@
 {
-  "platform": "github",
-  "paths": {
-    "skills": ".agents/skills",
-    "instructions": ".agents",
-    "missions": ".mission/missions"
-  },
+  "missionWorkspaceRoot": "missions",
+  "trackingProvider": "github",
+  "instructionsPath": ".agents",
+  "skillsPath": ".agents/skills",
   "agentRunner": "copilot-cli"
 }

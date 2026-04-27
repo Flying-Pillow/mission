@@ -2,7 +2,7 @@
 import type {
     EntityCommandDescriptor,
     MissionTaskSnapshot
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskData = MissionTaskSnapshot;
@@ -17,7 +17,6 @@ export type TaskStartOptions = {
 };
 
 export type TaskCommandOwner = {
-    listTaskCommands(taskId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
     executeTaskCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
@@ -79,14 +78,13 @@ export class Task implements EntityModel<TaskSnapshot> {
         return [...this.snapshot.task.waitingOnTaskIds];
     }
 
+    public get commands(): EntityCommandDescriptor[] {
+        return structuredClone(this.snapshot.task.commands ?? []);
+    }
+
     public async start(options: TaskStartOptions = {}): Promise<this> {
         await this.executeCommand('task.start', options);
         return this;
-    }
-
-    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
-        const snapshot = await this.owner.listTaskCommands(this.taskId, input);
-        return structuredClone(snapshot.commands);
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {

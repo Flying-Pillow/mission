@@ -31,6 +31,22 @@ describe('FilesystemAdapter', () => {
 		);
 	});
 
+	it('appends mission session logs through recorded relative log paths', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-session-log-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			const sessionLogPath = adapter.getMissionSessionLogRelativePath('session-1');
+
+			expect(sessionLogPath).toBe('session-logs/session-1.log');
+			await adapter.ensureMissionSessionLogFile(missionDir, sessionLogPath);
+			await adapter.appendMissionSessionLogChunk(missionDir, sessionLogPath, '\u001b[32mready\u001b[0m\n');
+
+			await expect(adapter.readMissionSessionLog(missionDir, sessionLogPath)).resolves.toBe('\u001b[32mready\u001b[0m\n');
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
+
 	it('nests mission worktrees under the full GitHub repository path', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-github-'));
 		try {

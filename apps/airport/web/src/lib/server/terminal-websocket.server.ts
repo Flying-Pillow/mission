@@ -1,6 +1,6 @@
 import {
     DaemonApi,
-    type Notification,
+    type Notification as DaemonNotification,
     type MissionAgentTerminalState
 } from '@flying-pillow/mission-core';
 import {
@@ -8,13 +8,15 @@ import {
     missionTerminalSnapshotSchema,
     missionTerminalSocketClientMessageSchema,
     missionTerminalSocketServerMessageSchema,
-    missionSessionTerminalOutputSchema,
-    missionSessionTerminalSnapshotSchema,
-    missionSessionTerminalSocketClientMessageSchema,
-    missionSessionTerminalSocketServerMessageSchema,
-    missionSessionTerminalRouteParamsSchema,
-    missionSessionTerminalQuerySchema
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import {
+    agentSessionTerminalOutputSchema as missionSessionTerminalOutputSchema,
+    agentSessionTerminalSnapshotSchema as missionSessionTerminalSnapshotSchema,
+    agentSessionTerminalSocketClientMessageSchema as missionSessionTerminalSocketClientMessageSchema,
+    agentSessionTerminalSocketServerMessageSchema as missionSessionTerminalSocketServerMessageSchema,
+    agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema,
+    agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema
+} from '@flying-pillow/mission-core/entities';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
@@ -91,12 +93,10 @@ async function handleTerminalConnection(
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const query = missionSessionTerminalQuerySchema.extend({
-        repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional(),
-        repositoryRootPath: missionSessionTerminalQuerySchema.shape.missionId.optional()
+        repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional()
     }).parse({
         missionId: requestUrl.searchParams.get('missionId'),
-        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
-        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
     });
 
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
@@ -208,19 +208,16 @@ async function handleTerminalConnection(
     });
 
     try {
-        const repositoryRootPath = query.repositoryRootPath?.trim()
-            || (query.repositoryId
-                ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
-                : undefined);
+        const repositoryRootPath = query.repositoryId
+            ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
+            : undefined;
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         api = new DaemonApi(daemon.client);
         await daemon.client.request<null>('event.subscribe', {
-            eventTypes: ['session.terminal'],
-            missionId: query.missionId,
-            sessionId
+            channels: [`agent_session:${query.missionId}/${sessionId}.terminal`]
         });
 
         const initialState = await api.mission.getSessionTerminalState({ missionId: query.missionId }, sessionId);
@@ -232,7 +229,7 @@ async function handleTerminalConnection(
             return;
         }
 
-        subscription = daemon.client.onDidEvent((event: Notification) => {
+        subscription = daemon.client.onDidEvent((event: DaemonNotification) => {
             if (event.type !== 'session.terminal' || event.missionId !== query.missionId || event.sessionId !== sessionId) {
                 return;
             }
@@ -274,14 +271,15 @@ async function handleMissionTerminalConnection(
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const repositoryId = requestUrl.searchParams.get('repositoryId')?.trim();
-    const requestedRepositoryRootPath = requestUrl.searchParams.get('repositoryRootPath')?.trim();
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
     let api: DaemonApi | undefined;
     let closed = false;
     let subscription: { dispose(): void } | undefined;
-    let sessionId: string | undefined;
     let terminalReady = false;
     const pendingMessages: Buffer[] = [];
+    let lastScreen = '';
+    let lastDead = true;
+    let repositoryRootPath: string | undefined;
 
     const dispose = () => {
         if (closed) {
@@ -332,12 +330,31 @@ async function handleMissionTerminalConnection(
         }));
     };
 
+    const sendMissionState = (state: MissionAgentTerminalState) => {
+        const appendedChunk = state.screen.startsWith(lastScreen)
+            ? state.screen.slice(lastScreen.length)
+            : undefined;
+        const nextDisconnected = state.dead || !state.connected;
+
+        if (typeof appendedChunk === 'string' && appendedChunk.length > 0 && !nextDisconnected) {
+            sendOutput({
+                ...state,
+                chunk: appendedChunk,
+            });
+        } else {
+            sendSnapshot(state, nextDisconnected ? 'disconnected' : 'snapshot');
+        }
+
+        lastScreen = state.screen;
+        lastDead = state.dead;
+    };
+
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
             const message = missionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
             const nextState = await daemon?.client.request<MissionAgentTerminalState | null>('mission.terminal.input', {
                 selector: { missionId },
-                respondWithState: false,
+                respondWithState: message.type !== 'input',
                 ...(message.type === 'input'
                     ? {
                         data: message.data,
@@ -348,9 +365,17 @@ async function handleMissionTerminalConnection(
                         rows: message.rows
                     })
             });
+            if (!nextState) {
+                if (message.type === 'input') {
+                    return;
+                }
+                sendError(`Mission terminal for '${missionId}' is not available.`);
+                return;
+            }
             if (message.type === 'input') {
                 return;
             }
+            sendMissionState(nextState);
             if (message.type === 'resize' && nextState === null) {
                 const currentState = await api?.mission.getMissionTerminalState({ missionId });
                 if (!currentState) {
@@ -359,13 +384,6 @@ async function handleMissionTerminalConnection(
                 }
                 sendSnapshot(currentState, currentState.dead || !currentState.connected ? 'disconnected' : 'snapshot');
                 return;
-            }
-            if (!nextState) {
-                sendError(`Mission terminal for '${missionId}' is not available.`);
-                return;
-            }
-            if (message.type === 'resize' || nextState.dead || !nextState.connected) {
-                sendSnapshot(nextState, nextState.dead || !nextState.connected ? 'disconnected' : 'snapshot');
             }
         } catch (error) {
             sendError(error instanceof Error ? error.message : String(error));
@@ -381,31 +399,29 @@ async function handleMissionTerminalConnection(
     });
 
     try {
-        const repositoryRootPath = requestedRepositoryRootPath
-            || (repositoryId
-                ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
-                : undefined);
+        repositoryRootPath = repositoryId
+            ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
+            : undefined;
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         api = new DaemonApi(daemon.client);
-        const initialState = await api.mission.getMissionTerminalState({ missionId });
-        sessionId = initialState?.sessionId?.trim();
-        if (!sessionId) {
+        await daemon.client.request<null>('event.subscribe', {
+            channels: [`mission:${missionId}.terminal`]
+        });
+        const initialState = await api.mission.ensureMissionTerminalState({ missionId });
+        if (!initialState) {
             sendSnapshot(initialState);
             sendSnapshot(initialState, 'disconnected');
             dispose();
             webSocket.close();
             return;
         }
-        await daemon.client.request<null>('event.subscribe', {
-            eventTypes: ['session.terminal'],
-            missionId,
-            sessionId
-        });
 
         sendSnapshot(initialState);
+        lastScreen = initialState.screen;
+        lastDead = initialState.dead;
         if (!initialState?.connected || initialState.dead) {
             sendSnapshot(initialState, 'disconnected');
             dispose();
@@ -413,25 +429,19 @@ async function handleMissionTerminalConnection(
             return;
         }
 
-        subscription = daemon.client.onDidEvent((event: Notification) => {
-            if (event.type !== 'session.terminal' || event.missionId !== missionId || event.sessionId !== sessionId) {
+        subscription = daemon.client.onDidEvent((event: DaemonNotification) => {
+            if (event.type !== 'mission.terminal' || event.missionId !== missionId) {
+                return;
+            }
+            if (repositoryRootPath && event.workspaceRoot !== repositoryRootPath) {
                 return;
             }
 
-            const state = event.state;
-            if (!state.connected || state.dead) {
-                sendSnapshot(state, 'disconnected');
+            sendMissionState(event.state);
+            if (!event.state.connected || event.state.dead) {
                 dispose();
                 webSocket.close();
-                return;
             }
-
-            if (typeof state.chunk === 'string' && state.chunk.length > 0) {
-                sendOutput(state);
-                return;
-            }
-
-            sendSnapshot(state);
         });
 
         terminalReady = true;

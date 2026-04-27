@@ -1,8 +1,5 @@
 import { json } from '@sveltejs/kit';
-import {
-    missionRuntimeRouteParamsSchema,
-    missionTerminalInputSchema
-} from '@flying-pillow/mission-core/schemas';
+import { missionTerminalInputSchema } from '@flying-pillow/mission-core/entities';
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import {
@@ -12,15 +9,18 @@ import {
 } from '$lib/server/mission-terminal-errors';
 import type { RequestHandler } from './$types';
 
+const missionRuntimeRouteParamsSchema = z.object({
+    missionId: z.string().trim().min(1)
+}).strict();
+
 export const GET: RequestHandler = async ({ locals, params, url }) => {
     const { missionId } = missionRuntimeRouteParamsSchema.parse(params);
     const query = missionTerminalQuerySchema.parse({
-        repositoryId: url.searchParams.get('repositoryId') ?? undefined,
-        repositoryRootPath: url.searchParams.get('repositoryRootPath') ?? undefined
+        repositoryId: url.searchParams.get('repositoryId') ?? undefined
     });
 
     try {
-        const snapshot = await readMissionTerminalSnapshot(locals, missionId, query.repositoryId, query.repositoryRootPath);
+        const snapshot = await readMissionTerminalSnapshot(locals, missionId, query.repositoryId);
 
         return json(snapshot, {
             headers: {
@@ -42,8 +42,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const { missionId } = missionRuntimeRouteParamsSchema.parse(params);
     const requestUrl = new URL(request.url);
     const query = missionTerminalQuerySchema.parse({
-        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
-        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
     });
     const body = missionTerminalInputSchema.parse(await request.json());
 
@@ -54,8 +53,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
             ...(body.literal !== undefined ? { literal: body.literal } : {}),
             ...(body.cols !== undefined ? { cols: body.cols } : {}),
             ...(body.rows !== undefined ? { rows: body.rows } : {}),
-            ...(query.repositoryId ? { repositoryId: query.repositoryId } : {}),
-            ...(query.repositoryRootPath ? { repositoryRootPath: query.repositoryRootPath } : {})
+            ...(query.repositoryId ? { repositoryId: query.repositoryId } : {})
         });
 
         return json(snapshot, {
@@ -75,17 +73,14 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 };
 
 const missionTerminalQuerySchema = z.object({
-    repositoryId: z.string().trim().min(1).optional(),
-    repositoryRootPath: z.string().trim().min(1).optional()
+    repositoryId: z.string().trim().min(1).optional()
 });
 
-async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, repositoryId?: string, repositoryRootPath?: string) {
+async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, repositoryId?: string) {
     const gateway = new DaemonGateway(locals);
-    const repository = repositoryRootPath
-        ? { repositoryRootPath }
-        : repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId })
-            : undefined;
+    const repository = repositoryId
+        ? await gateway.resolveRepositoryCandidate({ repositoryId })
+        : undefined;
     try {
         return await gateway.getMissionTerminalSnapshot({
             missionId,
@@ -113,15 +108,12 @@ async function sendMissionTerminalInput(
         cols?: number;
         rows?: number;
         repositoryId?: string;
-        repositoryRootPath?: string;
     }
 ) {
     const gateway = new DaemonGateway(locals);
-    const repository = input.repositoryRootPath
-        ? { repositoryRootPath: input.repositoryRootPath }
-        : input.repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId: input.repositoryId })
-            : undefined;
+    const repository = input.repositoryId
+        ? await gateway.resolveRepositoryCandidate({ repositoryId: input.repositoryId })
+        : undefined;
     try {
         return await gateway.sendMissionTerminalInput({
             ...input,

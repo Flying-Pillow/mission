@@ -1,8 +1,8 @@
-import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/schemas';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities';
 
 export type ActionableEntity = {
     readonly entityName: string;
     readonly entityId: string;
-    listCommands(input?: { executionContext?: 'event' | 'render' }): Promise<EntityCommandDescriptor[]>;
+    readonly commands: EntityCommandDescriptor[];
     executeCommand(commandId: string, input?: unknown): Promise<void>;
 };

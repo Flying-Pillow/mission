@@ -1,4 +1,4 @@
-import { Entity } from '../Entity.js';
+import { Entity } from '../Entity/Entity.js';
 import {
 	MISSION_ARTIFACT_KEYS,
 	getMissionStageDefinition

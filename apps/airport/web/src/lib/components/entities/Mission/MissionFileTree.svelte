@@ -11,13 +11,11 @@
     let {
         activePath,
         refreshNonce = 0,
-        title = "Worktree files",
         class: className,
         onSelectPath,
     }: {
         activePath?: string;
         refreshNonce?: number;
-        title?: string;
         class?: string;
         onSelectPath?: (node: MissionFileTreeNode) => void;
     } = $props();
@@ -25,7 +23,6 @@
 
     let branchOverrides = $state<Record<string, boolean>>({});
     let tree = $state<MissionFileTreeNode[]>([]);
-    let rootPath = $state<string | undefined>(undefined);
     let error = $state<string | null>(null);
     let loading = $state(true);
     let requestVersion = 0;
@@ -40,7 +37,6 @@
 
         if (!normalizedMissionId || !normalizedRepositoryRootPath) {
             tree = [];
-            rootPath = undefined;
             error = null;
             loading = false;
             return;
@@ -65,7 +61,6 @@
                 }
 
                 tree = payload.tree;
-                rootPath = payload.rootPath;
             } catch (loadError) {
                 if (currentVersion !== requestVersion) {
                     return;
@@ -76,7 +71,6 @@
                         ? loadError.message
                         : String(loadError);
                 tree = [];
-                rootPath = undefined;
             } finally {
                 if (currentVersion === requestVersion) {
                     loading = false;
@@ -88,17 +82,10 @@
 
 <section
     class={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
+        "grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
         className,
     )}
 >
-    <header class="space-y-1 border-b px-3 py-2">
-        <h2 class="text-sm font-semibold text-foreground">{title}</h2>
-        <p class="truncate text-xs text-muted-foreground">
-            {rootPath ?? repositoryRootPath}
-        </p>
-    </header>
-
     <div class="min-h-0 overflow-auto p-2">
         {#if loading}
             <div

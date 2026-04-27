@@ -3,10 +3,8 @@ import { createContext } from "svelte";
 import { app, type AirportApplication } from "$lib/client/Application.svelte.js";
 import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
-import type {
-    AirportRuntimeEventEnvelope,
-    MissionTowerTreeNode,
-} from "@flying-pillow/mission-core/schemas";
+import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/browser";
+import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 import type { SidebarRepositorySummary } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/transport/EntityRuntimeTransport";
 import type { AirportRouteData } from "../../../routes/api/airport/airport.remote";

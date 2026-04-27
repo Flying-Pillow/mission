@@ -1,18 +1,24 @@
 <script lang="ts">
     import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
+    import TaskActionbar from "$lib/components/entities/Task/TaskActionbar.svelte";
+    import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
+    import { artifactDocumentSnapshotSchema } from "@flying-pillow/mission-core/entities";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
+    import { qry } from "../../../../routes/api/entities/remote/query.remote";
 
     let {
         refreshNonce,
         artifact,
+        task,
         onEditRequested,
         onActionExecuted,
     }: {
         refreshNonce: number;
         artifact?: Artifact;
+        task?: Task;
         onEditRequested: () => void;
         onActionExecuted: () => Promise<void>;
     } = $props();
@@ -20,11 +26,27 @@
     const mission = $derived(missionScope.mission);
 
     const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
-    const artifactDocumentPromise = $derived(
-        artifact && mission
-            ? artifact.read({ executionContext: "render" })
-            : null,
+    const artifactDocumentKey = $derived(
+        artifact ? `${artifact.artifactId}:${refreshNonce}` : "none",
     );
+    const artifactDocumentQueryInput = $derived.by(() => {
+        refreshNonce;
+        if (!artifact || !mission) {
+            return null;
+        }
+
+        return {
+            entity: "Artifact",
+            method: "readDocument",
+            payload: {
+                missionId: mission.missionId,
+                artifactId: artifact.artifactId,
+                ...(mission.missionWorktreePath
+                    ? { repositoryRootPath: mission.missionWorktreePath }
+                    : {}),
+            },
+        };
+    });
 </script>
 
 <section
@@ -37,6 +59,10 @@
             </h2>
         </div>
 
+        <div class="flex flex-wrap items-center gap-2">
+            <TaskActionbar {refreshNonce} {task} {onActionExecuted} />
+        </div>
+
         {#if artifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
                 <PencilIcon />
@@ -47,26 +73,32 @@
 
     <div class="min-h-0 overflow-auto p-2">
         {#if artifact}
-            {#if artifactDocumentPromise}
-                {#await artifactDocumentPromise}
-                    <div
-                        class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
-                    >
-                        Loading artifact content...
-                    </div>
-                {:then artifactDocument}
-                    <div class="bg-background/80">
-                        <MarkdownViewer source={artifactDocument.content} />
-                    </div>
-                {:catch loadError}
-                    <div
-                        class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
-                    >
-                        {loadError instanceof Error
-                            ? loadError.message
-                            : String(loadError)}
-                    </div>
-                {/await}
+            {#if artifactDocumentQueryInput}
+                {#key artifactDocumentKey}
+                    {#await qry(artifactDocumentQueryInput)}
+                        <div
+                            class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                        >
+                            Loading artifact content...
+                        </div>
+                    {:then artifactDocumentResult}
+                        {@const artifactDocument =
+                            artifactDocumentSnapshotSchema.parse(
+                                artifactDocumentResult,
+                            )}
+                        <div class="bg-background/80">
+                            <MarkdownViewer source={artifactDocument.content} />
+                        </div>
+                    {:catch loadError}
+                        <div
+                            class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                        >
+                            {loadError instanceof Error
+                                ? loadError.message
+                                : String(loadError)}
+                        </div>
+                    {/await}
+                {/key}
             {/if}
         {:else}
             <div

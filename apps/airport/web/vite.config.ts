@@ -15,9 +15,6 @@ const workspacePackageRoots = [
 
 type ViteHttpServer = HttpServer | HttpsServer;
 
-const enableMissionTerminalWebSockets =
-	process.env.MISSION_AIRPORT_ENABLE_TERMINAL_WS === "true";
-
 async function attachMissionTerminalWebSockets(
 	server: ViteHttpServer,
 ): Promise<void> {
@@ -31,12 +28,12 @@ function missionTerminalWebSocketPlugin() {
 	return {
 		name: "mission-terminal-websocket",
 		configureServer(server: { httpServer?: ViteHttpServer | null }) {
-			if (enableMissionTerminalWebSockets && server.httpServer) {
+			if (server.httpServer) {
 				void attachMissionTerminalWebSockets(server.httpServer);
 			}
 		},
 		configurePreviewServer(server: { httpServer?: ViteHttpServer | null }) {
-			if (enableMissionTerminalWebSockets && server.httpServer) {
+			if (server.httpServer) {
 				void attachMissionTerminalWebSockets(server.httpServer);
 			}
 		}

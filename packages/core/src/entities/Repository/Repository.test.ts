@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Repository } from './Repository.js';
-import { createDefaultRepositorySettings } from '../../schemas/RepositorySettings.js';
+import { createDefaultRepositorySettings } from './RepositorySettings.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 
 describe('Repository', () => {

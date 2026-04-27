@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
@@ -44,10 +45,14 @@
         event.preventDefault();
 
         try {
-            await appContext.application.addRepository({
+            const addedRepository = await appContext.application.addRepository({
                 repositoryPath,
                 githubRepository: repository.fullName,
             });
+            detailsOpen = false;
+            await goto(
+                `/repository/${encodeURIComponent(addedRepository.repositoryId)}`,
+            );
         } catch {
             return;
         }

@@ -43,9 +43,6 @@
     const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryId = $derived(activeRepository?.repositoryId ?? "");
-    const repositoryRootPath = $derived(
-        mission?.missionWorktreePath ?? activeRepository?.repositoryRootPath ?? "",
-    );
 
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<MissionTerminalSnapshot | null>(null);
@@ -58,7 +55,9 @@
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalTransport =
-        $state<SharedTerminalTransportSubscription<MissionTerminalSnapshot> | null>(null);
+        $state<SharedTerminalTransportSubscription<MissionTerminalSnapshot> | null>(
+            null,
+        );
     let pendingInput = "";
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
@@ -109,13 +108,8 @@
     $effect(() => {
         const normalizedMissionId = missionId?.trim();
         const normalizedRepositoryId = repositoryId?.trim();
-        const normalizedRepositoryRootPath = repositoryRootPath?.trim();
 
-        if (
-            !normalizedMissionId ||
-            !normalizedRepositoryId ||
-            !normalizedRepositoryRootPath
-        ) {
+        if (!normalizedMissionId || !normalizedRepositoryId) {
             activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
@@ -128,7 +122,6 @@
         const nextTransportKey = [
             normalizedMissionId,
             normalizedRepositoryId,
-            normalizedRepositoryRootPath,
         ].join(":");
 
         if (activeTransportKey === nextTransportKey) {
@@ -137,15 +130,17 @@
 
         activeTransportKey = nextTransportKey;
         terminalTransport?.dispose();
-        terminalTransport = subscribeMissionTerminalTransport({
-            missionId: normalizedMissionId,
-            repositoryId: normalizedRepositoryId,
-            repositoryRootPath: normalizedRepositoryRootPath,
-        }, (state) => {
-            terminalSnapshot = state.snapshot;
-            loading = state.loading;
-            error = state.error;
-        });
+        terminalTransport = subscribeMissionTerminalTransport(
+            {
+                missionId: normalizedMissionId,
+                repositoryId: normalizedRepositoryId,
+            },
+            (state) => {
+                terminalSnapshot = state.snapshot;
+                loading = state.loading;
+                error = state.error;
+            },
+        );
     });
 
     $effect(() => {
@@ -155,6 +150,18 @@
             typeof screen !== "string" ||
             screen === lastRenderedScreen
         ) {
+            return;
+        }
+
+        if (
+            lastRenderedScreen.length > 0 &&
+            screen.startsWith(lastRenderedScreen)
+        ) {
+            const appendedScreen = screen.slice(lastRenderedScreen.length);
+            lastRenderedScreen = screen;
+            if (appendedScreen.length > 0) {
+                terminal.write(normalizeScreen(appendedScreen));
+            }
             return;
         }
 

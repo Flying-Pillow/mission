@@ -10,7 +10,7 @@
     import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
     import RocketIcon from "@tabler/icons-svelte/icons/rocket";
     import type { Icon } from "@tabler/icons-svelte";
-    import type { EntityCommandDescriptor } from "@flying-pillow/mission-core/schemas";
+    import type { EntityCommandDescriptor } from "@flying-pillow/mission-core/entities";
     import type { ActionableEntity } from "./ActionableEntity";
 
     let {
@@ -33,43 +33,16 @@
         showEmptyState?: boolean;
     } = $props();
 
-    let commands = $state<EntityCommandDescriptor[]>([]);
-    let actionLoading = $state(false);
     let actionPending = $state<string | null>(null);
     let actionError = $state<string | null>(null);
     let confirmationAction = $state<EntityCommandDescriptor | null>(null);
     let confirmationOpen = $state(false);
-    let loadedEntityKey = $state<string | null>(null);
-    let lastRefreshNonce = $state<number | null>(null);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
 
-    const entityKey = $derived(
-        entity ? `${entity.entityName}:${entity.entityId}` : null,
-    );
+    const commands = $derived(entity?.commands ?? []);
     const availableCommands = $derived(
         commands.filter((command) => !command.disabled),
     );
-
-    $effect(() => {
-        if (lastRefreshNonce !== refreshNonce) {
-            loadedEntityKey = null;
-            lastRefreshNonce = refreshNonce;
-        }
-
-        if (!entity || !entityKey) {
-            commands = [];
-            actionLoading = false;
-            actionError = null;
-            loadedEntityKey = null;
-            return;
-        }
-
-        if (loadedEntityKey === entityKey) {
-            return;
-        }
-
-        void loadCommands(entity, entityKey);
-    });
 
     $effect(() => {
         if (!confirmationOpen && confirmationResolver && confirmationAction) {
@@ -126,27 +99,6 @@
         return CircleCheckIcon;
     }
 
-    async function loadCommands(
-        commandEntity: ActionableEntity,
-        key: string,
-    ): Promise<void> {
-        actionLoading = true;
-        actionError = null;
-        try {
-            commands = await commandEntity.listCommands({
-                executionContext: "render",
-            });
-            loadedEntityKey = key;
-        } catch (loadError) {
-            actionError =
-                loadError instanceof Error
-                    ? loadError.message
-                    : String(loadError);
-        } finally {
-            actionLoading = false;
-        }
-    }
-
     async function executeAction(
         action: EntityCommandDescriptor,
     ): Promise<void> {
@@ -195,7 +147,6 @@
         actionError = null;
         try {
             await commandEntity.executeCommand(action.commandId);
-            loadedEntityKey = null;
             await onActionExecuted();
             return true;
         } catch (executeError) {
@@ -246,11 +197,7 @@
             <Button variant="secondary" size="sm" disabled>{label}</Button>
         {/if}
 
-        {#if actionLoading && availableCommands.length === 0 && showEmptyState}
-            <Button variant="outline" size="sm" disabled
-                >Loading actions...</Button
-            >
-        {:else if availableCommands.length === 0 && showEmptyState}
+        {#if availableCommands.length === 0 && showEmptyState}
             <Button variant="outline" size="sm" disabled
                 >No actions available</Button
             >

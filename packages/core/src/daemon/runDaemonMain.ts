@@ -7,31 +7,92 @@ import {
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
 import {
+	type EventSubscription,
+	type AddressedNotification,
+	type Notification,
+	type MissionTerminalInput,
+	type MissionTerminalStateRequest,
+	type SessionTerminalInput,
+	type SessionTerminalState
+} from './protocol/contracts.js';
+import {
 	PROTOCOL_VERSION,
 	type Manifest,
 	type Ping,
 	type Request,
 	type Response
-} from './protocol/contracts.js';
+} from './protocol/transport.js';
+import {
+	createEntityChannel,
+	createEntityId,
+	matchesEntityChannel,
+	type EntityId
+} from '../entities/Entity/Entity.js';
+import { DaemonLogger } from './runtime/DaemonLogger.js';
+import { MissionDaemonService } from './runtime/mission/MissionDaemonService.js';
+
+type NotificationAddress = {
+	entityId: EntityId;
+	eventName: string;
+	missionEntityId?: EntityId;
+};
+
+type DaemonServices = {
+	missionService: MissionDaemonService;
+};
 import {
 	executeEntityCommandInDaemon,
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
+import {
+	ensureMissionTerminalState,
+	readMissionTerminalState,
+	sendMissionTerminalInput,
+	observeMissionTerminalUpdates
+} from './runtime/mission/MissionTerminalService.js';
+import {
+	readAgentSessionTerminalState,
+	sendAgentSessionTerminalInput,
+	observeAgentSessionTerminalUpdates
+} from './runtime/mission/AgentSessionTerminalService.js';
 
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const socketPath = resolveDaemonSocketPath(readSocketOverride(argv));
 	const manifestPath = getDaemonManifestPath();
 	const startedAt = new Date().toISOString();
+	const logger = new DaemonLogger();
+	const missionService = new MissionDaemonService({ logger });
 	const sockets = new Set<net.Socket>();
+	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
 	let shuttingDown = false;
+	const missionTerminalUpdates = observeMissionTerminalUpdates((event) => {
+		broadcastEvent({
+			type: 'mission.terminal',
+			workspaceRoot: event.workspaceRoot,
+			missionId: event.missionId,
+			state: event.state,
+		});
+	});
+	const sessionTerminalUpdates = observeAgentSessionTerminalUpdates((event) => {
+		broadcastEvent({
+			type: 'session.terminal',
+			missionId: event.missionId,
+			sessionId: event.sessionId,
+			state: event.state,
+		});
+	});
 
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
+	logger.info('Mission daemon starting.', { pid: process.pid, socketPath });
+	await missionService.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(undefined) });
+	logger.info('Mission daemon hydration completed.');
 	if (!isNamedPipePath(socketPath)) {
 		await fs.rm(socketPath, { force: true }).catch(() => undefined);
 	}
 
 	const server = net.createServer((socket) => {
 		sockets.add(socket);
+		subscriptionsBySocket.set(socket, []);
 		socket.setEncoding('utf8');
 		let buffer = '';
 
@@ -49,14 +110,38 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 					continue;
 				}
 
-				void handleRequestLine(socket, line, startedAt);
+				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionService });
 			}
 		});
 
 		socket.once('close', () => {
 			sockets.delete(socket);
+			subscriptionsBySocket.delete(socket);
+		});
+
+		socket.on('error', () => {
+			sockets.delete(socket);
+			subscriptionsBySocket.delete(socket);
 		});
 	});
+
+	const broadcastEvent = (event: Notification): void => {
+		const addressedEvent = addressNotification(event);
+		for (const socket of sockets) {
+			if (socket.destroyed) {
+				continue;
+			}
+			const subscriptions = subscriptionsBySocket.get(socket) ?? [];
+			if (!subscriptions.some((subscription) => matchesSubscription(subscription, addressedEvent))) {
+				continue;
+			}
+			try {
+				socket.write(`${JSON.stringify({ type: 'event', event: addressedEvent })}\n`);
+			} catch {
+				socket.destroy();
+			}
+		}
+	};
 
 	await new Promise<void>((resolve, reject) => {
 		server.once('error', reject);
@@ -76,12 +161,21 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 		},
 	};
 	await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+	logger.info('Mission daemon started.', {
+		pid: process.pid,
+		protocolVersion: PROTOCOL_VERSION,
+		socketPath
+	});
 
 	const shutdown = async (): Promise<void> => {
 		if (shuttingDown) {
 			return;
 		}
 		shuttingDown = true;
+		logger.info('Mission daemon shutting down.');
+		missionService.dispose();
+		missionTerminalUpdates.dispose();
+		sessionTerminalUpdates.dispose();
 		for (const socket of sockets) {
 			socket.destroy();
 		}
@@ -92,6 +186,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 			}
 			server.close(() => resolve());
 		});
+		await logger.flush();
 	};
 
 	const handleTerminationSignal = () => {
@@ -115,7 +210,13 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 	}
 }
 
-async function handleRequestLine(socket: net.Socket, line: string, startedAt: string): Promise<void> {
+async function handleRequestLine(
+	socket: net.Socket,
+	line: string,
+	startedAt: string,
+	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>,
+	services: DaemonServices
+): Promise<void> {
 	let request: Request;
 	try {
 		request = JSON.parse(line) as Request;
@@ -127,13 +228,143 @@ async function handleRequestLine(socket: net.Socket, line: string, startedAt: st
 		return;
 	}
 
-	const response = await createResponse(request, startedAt);
+	const response = await createResponse(request, startedAt, services);
 	if (!socket.destroyed) {
-		socket.write(`${JSON.stringify(response)}\n`);
+		try {
+			socket.write(`${JSON.stringify(response)}\n`);
+			registerSubscription(socket, request, subscriptionsBySocket);
+		} catch {
+			socket.destroy();
+		}
 	}
 }
 
-export async function createResponse(request: Request, startedAt: string): Promise<Response> {
+function registerSubscription(
+	socket: net.Socket,
+	request: Request,
+	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>
+): void {
+	if (request.method !== 'event.subscribe') {
+		return;
+	}
+	const params = (request.params ?? {}) as EventSubscription;
+	const subscriptions = subscriptionsBySocket.get(socket);
+	if (!subscriptions) {
+		return;
+	}
+	subscriptions.push({
+		...(params.channels ? { channels: params.channels } : {})
+	});
+}
+
+function matchesSubscription(subscription: EventSubscription, event: AddressedNotification): boolean {
+	return subscription.channels?.some((channel) => matchesEntityChannel(event.channel, channel)) ?? false;
+}
+
+function addressNotification(event: Notification): AddressedNotification {
+	const address = resolveNotificationAddress(event);
+	return {
+		...event,
+		...address,
+		channel: createEntityChannel(address.entityId, address.eventName),
+		occurredAt: resolveNotificationOccurredAt(event)
+	};
+}
+
+function resolveNotificationAddress(event: Notification): NotificationAddress {
+	switch (event.type) {
+		case 'airport.state':
+			return {
+				entityId: createEntityId('airport', 'state'),
+				eventName: 'changed'
+			};
+		case 'mission.actions.changed':
+			return missionAddress(event.missionId, 'actions.changed');
+		case 'mission.snapshot.changed':
+			return missionAddress(event.missionId, 'snapshot.changed');
+		case 'mission.status':
+			return missionAddress(event.missionId, 'status');
+		case 'mission.terminal':
+			return missionAddress(event.missionId, 'terminal');
+		case 'stage.snapshot.changed':
+			return childAddress('stage', event.missionId, event.reference.stageId, 'snapshot.changed');
+		case 'task.snapshot.changed':
+			return childAddress('task', event.missionId, event.reference.taskId, 'snapshot.changed');
+		case 'artifact.snapshot.changed':
+			return childAddress('artifact', event.missionId, event.reference.artifactId, 'snapshot.changed');
+		case 'agentSession.snapshot.changed':
+			return childAddress('agent_session', event.missionId, event.reference.sessionId, 'snapshot.changed');
+		case 'session.console':
+			return childAddress('agent_session', event.missionId, event.sessionId, 'console');
+		case 'session.terminal':
+			return childAddress('agent_session', event.missionId, event.sessionId, 'terminal');
+		case 'session.event':
+			return childAddress('agent_session', event.missionId, event.sessionId, 'event');
+		case 'session.lifecycle':
+			return childAddress('agent_session', event.missionId, event.sessionId, 'lifecycle');
+		case 'control.workflow.settings.updated':
+			return {
+				entityId: createEntityId('control', 'workflow-settings'),
+				eventName: 'updated'
+			};
+	}
+}
+
+function missionAddress(missionId: string, eventName: string): NotificationAddress {
+	const entityId = createEntityId('mission', missionId);
+	return {
+		entityId,
+		eventName,
+		missionEntityId: entityId
+	};
+}
+
+function childAddress(
+	table: string,
+	missionId: string,
+	childId: string,
+	eventName: string
+): NotificationAddress {
+	return {
+		entityId: createEntityId(table, `${missionId}/${childId}`),
+		eventName,
+		missionEntityId: createEntityId('mission', missionId)
+	};
+}
+
+function resolveNotificationOccurredAt(event: Notification): string {
+	switch (event.type) {
+		case 'airport.state':
+			return event.snapshot.state.airport.substrate.lastObservedAt
+				?? event.snapshot.state.airport.substrate.lastAppliedAt
+				?? new Date().toISOString();
+		case 'mission.snapshot.changed':
+			return event.snapshot.workflow?.updatedAt
+				?? event.snapshot.status?.workflow?.updatedAt
+				?? new Date().toISOString();
+		case 'mission.status':
+			return event.status.updatedAt ?? new Date().toISOString();
+		case 'session.event':
+			return event.event.state.lastUpdatedAt;
+		case 'mission.actions.changed':
+		case 'stage.snapshot.changed':
+		case 'task.snapshot.changed':
+		case 'artifact.snapshot.changed':
+		case 'agentSession.snapshot.changed':
+		case 'session.console':
+		case 'mission.terminal':
+		case 'session.terminal':
+		case 'session.lifecycle':
+		case 'control.workflow.settings.updated':
+			return new Date().toISOString();
+	}
+}
+
+export async function createResponse(
+	request: Request,
+	startedAt: string,
+	services: Partial<DaemonServices> = {}
+): Promise<Response> {
 	try {
 		switch (request.method) {
 			case 'ping': {
@@ -158,15 +389,67 @@ export async function createResponse(request: Request, startedAt: string): Promi
 					result: null,
 				};
 			}
-			case 'mission.terminal.state':
-			case 'mission.terminal.input':
-			case 'session.terminal.state':
-			case 'session.terminal.input': {
+			case 'session.terminal.state': {
+				const params = (request.params ?? {}) as SessionTerminalState;
 				return {
 					type: 'response',
 					id: request.id,
 					ok: true,
-					result: null,
+					result: await readAgentSessionTerminalState({
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(params.selector ? { selector: params.selector } : {}),
+						sessionId: params.sessionId
+					}),
+				};
+			}
+			case 'session.terminal.input': {
+				const params = (request.params ?? {}) as SessionTerminalInput;
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: await sendAgentSessionTerminalInput({
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(params.selector ? { selector: params.selector } : {}),
+						terminalInput: params
+					}),
+				};
+			}
+			case 'mission.terminal.state': {
+				const params = (request.params ?? {}) as MissionTerminalStateRequest;
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: await readMissionTerminalState({
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(params.selector ? { selector: params.selector } : {})
+					})
+				};
+			}
+			case 'mission.terminal.ensure': {
+				const params = (request.params ?? {}) as MissionTerminalStateRequest;
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: await ensureMissionTerminalState({
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(params.selector ? { selector: params.selector } : {})
+					})
+				};
+			}
+			case 'mission.terminal.input': {
+				const params = (request.params ?? {}) as MissionTerminalInput;
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: await sendMissionTerminalInput({
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(params.selector ? { selector: params.selector } : {}),
+						terminalInput: params
+					})
 				};
 			}
 			case 'system.status': {
@@ -182,7 +465,7 @@ export async function createResponse(request: Request, startedAt: string): Promi
 				};
 			}
 			case 'entity.query': {
-				const { entityQueryInvocationSchema } = await import('../schemas/EntityRemote.js');
+				const { entityQueryInvocationSchema } = await import('./protocol/entityRemote.js');
 				const authToken = request.authToken?.trim();
 				return {
 					type: 'response',
@@ -192,6 +475,7 @@ export async function createResponse(request: Request, startedAt: string): Promi
 						entityQueryInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
+							...(services.missionService ? { missionService: services.missionService } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)
@@ -201,7 +485,7 @@ export async function createResponse(request: Request, startedAt: string): Promi
 				const {
 					entityCommandInvocationSchema,
 					entityFormInvocationSchema
-				} = await import('../schemas/EntityRemote.js');
+				} = await import('./protocol/entityRemote.js');
 				const commandInvocation = entityCommandInvocationSchema.safeParse(request.params);
 				const authToken = request.authToken?.trim();
 				return {
@@ -214,6 +498,7 @@ export async function createResponse(request: Request, startedAt: string): Promi
 							: entityFormInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
+							...(services.missionService ? { missionService: services.missionService } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)

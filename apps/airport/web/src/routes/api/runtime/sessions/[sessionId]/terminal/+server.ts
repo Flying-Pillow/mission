@@ -1,10 +1,10 @@
 // /apps/airport/web/src/routes/api/runtime/sessions/[sessionId]/terminal/+server.ts: Session terminal snapshot/input relay for xterm.js over Airport web runtime routes.
 import { json } from '@sveltejs/kit';
 import {
-    missionSessionTerminalInputSchema,
-    missionSessionTerminalQuerySchema,
-    missionSessionTerminalRouteParamsSchema
-} from '@flying-pillow/mission-core/schemas';
+    agentSessionTerminalInputSchema as missionSessionTerminalInputSchema,
+    agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema,
+    agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema
+} from '@flying-pillow/mission-core/entities';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 
@@ -12,16 +12,13 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     const { sessionId } = missionSessionTerminalRouteParamsSchema.parse(params);
     const query = missionSessionTerminalQueryWithRepositorySchema.parse({
         missionId: url.searchParams.get('missionId'),
-        repositoryId: url.searchParams.get('repositoryId') ?? undefined,
-        repositoryRootPath: url.searchParams.get('repositoryRootPath') ?? undefined
+        repositoryId: url.searchParams.get('repositoryId') ?? undefined
     });
 
     const gateway = new DaemonGateway(locals);
-    const repository = query.repositoryRootPath
-        ? { repositoryRootPath: query.repositoryRootPath }
-        : query.repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
-            : undefined;
+    const repository = query.repositoryId
+        ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
+        : undefined;
     const snapshot = await gateway.getMissionSessionTerminalSnapshot({
         missionId: query.missionId,
         sessionId,
@@ -40,17 +37,14 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const requestUrl = new URL(request.url);
     const query = missionSessionTerminalQueryWithRepositorySchema.parse({
         missionId: requestUrl.searchParams.get('missionId'),
-        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
-        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
     });
     const body = missionSessionTerminalInputSchema.parse(await request.json());
 
     const gateway = new DaemonGateway(locals);
-    const repository = query.repositoryRootPath
-        ? { repositoryRootPath: query.repositoryRootPath }
-        : query.repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
-            : undefined;
+    const repository = query.repositoryId
+        ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
+        : undefined;
     const snapshot = await gateway.sendMissionSessionTerminalInput({
         missionId: body.missionId,
         sessionId,
@@ -69,6 +63,5 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 };
 
 const missionSessionTerminalQueryWithRepositorySchema = missionSessionTerminalQuerySchema.extend({
-    repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional(),
-    repositoryRootPath: missionSessionTerminalQuerySchema.shape.missionId.optional()
+    repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional()
 });

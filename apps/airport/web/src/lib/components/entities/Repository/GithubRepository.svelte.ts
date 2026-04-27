@@ -2,11 +2,11 @@ import { z } from 'zod/v4';
 import {
 	githubVisibleRepositorySchema,
 	type GitHubVisibleRepository
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import {
 	repositorySnapshotSchema,
 	type RepositorySnapshot
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 

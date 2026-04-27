@@ -3,7 +3,6 @@ import { DaemonGateway } from './daemon-gateway';
 
 type ProjectionGateway = {
     toRuntimeEventEnvelope(event: unknown): unknown;
-    shouldForwardRuntimeEvent(event: unknown): boolean;
 };
 
 describe('DaemonGateway runtime projection forwarding', () => {
@@ -12,6 +11,11 @@ describe('DaemonGateway runtime projection forwarding', () => {
 
         const envelope = gateway.toRuntimeEventEnvelope({
             type: 'task.snapshot.changed',
+            entityId: 'task:mission-29/task-1',
+            channel: 'task:mission-29/task-1.snapshot.changed',
+            eventName: 'snapshot.changed',
+            occurredAt: '2026-04-26T18:00:00.000Z',
+            missionEntityId: 'mission:mission-29',
             workspaceRoot: '/repo/root',
             missionId: 'mission-29',
             reference: {
@@ -36,6 +40,9 @@ describe('DaemonGateway runtime projection forwarding', () => {
 
         expect(envelope).toMatchObject({
             type: 'task.snapshot.changed',
+            entityId: 'task:mission-29/task-1',
+            channel: 'task:mission-29/task-1.snapshot.changed',
+            eventName: 'snapshot.changed',
             missionId: 'mission-29',
             payload: {
                 reference: {
@@ -51,20 +58,29 @@ describe('DaemonGateway runtime projection forwarding', () => {
         });
     });
 
-    it('keeps terminal stream notifications out of projection forwarding', () => {
+    it('carries daemon-owned entity channel metadata into runtime envelopes', () => {
         const gateway = new DaemonGateway() as unknown as ProjectionGateway;
 
-        expect(gateway.shouldForwardRuntimeEvent({
-            type: 'session.terminal',
+        const envelope = gateway.toRuntimeEventEnvelope({
+            type: 'mission.status',
+            entityId: 'mission:mission-29',
+            channel: 'mission:mission-29.status',
+            eventName: 'status',
+            occurredAt: '2026-04-26T18:00:00.000Z',
+            missionEntityId: 'mission:mission-29',
+            workspaceRoot: '/repo/root',
             missionId: 'mission-29',
-            sessionId: 'session-1',
-            state: {
-                sessionId: 'session-1',
-                connected: true,
-                dead: false,
-                exitCode: null,
-                screen: 'stream data'
+            status: {
+                missionId: 'mission-29',
+                artifacts: [],
+                stages: []
             }
-        })).toBe(false);
+        });
+
+        expect(envelope).toMatchObject({
+            entityId: 'mission:mission-29',
+            channel: 'mission:mission-29.status',
+            eventName: 'status'
+        });
     });
 });

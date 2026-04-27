@@ -81,8 +81,8 @@ export function getMissionWorkflowEventValidationErrors(
             }
             break;
         case 'mission.panic.cleared':
-            if (runtime.lifecycle !== 'panicked') {
-                errors.push(`mission.panic.cleared requires lifecycle panicked, received '${runtime.lifecycle}'.`);
+            if (runtime.lifecycle !== 'panicked' && !(runtime.lifecycle === 'paused' && runtime.pause.reason === 'panic' && !runtime.panic.active)) {
+                errors.push(`mission.panic.cleared requires lifecycle panicked or paused after panic clear, received '${runtime.lifecycle}'.`);
             }
             break;
         case 'mission.launch-queue.restarted':
@@ -210,8 +210,8 @@ export function getMissionWorkflowEventValidationErrors(
             if (task && task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
                 errors.push(`session.launch-failed requires task '${event.taskId}' to be ready, queued or running, received '${task.lifecycle}'.`);
             }
-            if (runtime.sessions.some((session) => session.taskId === event.taskId)) {
-                errors.push(`session.launch-failed is not allowed after a session record already exists for task '${event.taskId}'.`);
+            if (runtime.sessions.some((session) => session.taskId === event.taskId && isActiveSessionLifecycle(session.lifecycle))) {
+                errors.push(`session.launch-failed is not allowed while task '${event.taskId}' already has an active session.`);
             }
             break;
         }
@@ -221,7 +221,7 @@ export function getMissionWorkflowEventValidationErrors(
         case 'session.terminated': {
             const session = requireSession(findSession(event.sessionId), event.sessionId, errors, event.type);
             requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (session && !isActiveSessionLifecycle(session.lifecycle)) {
+            if (session && !isActiveSessionLifecycle(session.lifecycle) && session.lifecycle !== lifecycleForSessionEvent(event.type)) {
                 errors.push(`${event.type} requires session '${event.sessionId}' to be starting or running, received '${session.lifecycle}'.`);
             }
             break;
@@ -229,6 +229,21 @@ export function getMissionWorkflowEventValidationErrors(
     }
 
     return errors;
+}
+
+function lifecycleForSessionEvent(
+    eventType: 'session.completed' | 'session.failed' | 'session.cancelled' | 'session.terminated'
+): MissionAgentSessionRuntimeState['lifecycle'] {
+    switch (eventType) {
+        case 'session.completed':
+            return 'completed';
+        case 'session.failed':
+            return 'failed';
+        case 'session.cancelled':
+            return 'cancelled';
+        case 'session.terminated':
+            return 'terminated';
+    }
 }
 
 function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; dependsOn: string[]; agentRunner?: string }): boolean {

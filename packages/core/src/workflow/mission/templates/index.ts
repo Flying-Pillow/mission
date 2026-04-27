@@ -5,7 +5,7 @@ import { readTemplateFile } from '../../engine/templates/templateRepository.js';
 import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../../../agent/runtimes/AgentRuntimeIds.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { getMissionWorkflowTemplatesPath } from '../../../lib/repositoryPaths.js';
 import type {
     MissionProductTemplate,

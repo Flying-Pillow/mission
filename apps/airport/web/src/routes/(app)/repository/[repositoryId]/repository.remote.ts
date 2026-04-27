@@ -1,10 +1,13 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { repositoryRuntimeRouteParamsSchema } from '@flying-pillow/mission-core/schemas';
 
 const repositoryDataQuerySchema = z.object({
     repositoryId: z.string().trim().min(1)
 });
+
+const repositoryRuntimeRouteParamsSchema = z.object({
+    repositoryId: z.string().trim().min(1)
+}).strict();
 
 export const getRepositoryData = query(
     repositoryDataQuerySchema,

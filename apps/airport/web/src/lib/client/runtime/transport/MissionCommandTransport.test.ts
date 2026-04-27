@@ -8,7 +8,6 @@ describe('MissionCommandTransport', () => {
         const transport = new MissionCommandTransport();
 
         expect('pauseMission' in transport).toBe(true);
-        expect('listTaskCommands' in transport).toBe(false);
         expect('executeTaskCommand' in transport).toBe(false);
         expect('readArtifactDocument' in transport).toBe(false);
         expect('sendAgentSessionPrompt' in transport).toBe(false);
@@ -16,30 +15,10 @@ describe('MissionCommandTransport', () => {
 });
 
 describe('ChildEntityCommandTransport', () => {
-    it('routes child entity command discovery and execution through child entity remotes', async () => {
-        const queryCalls: unknown[] = [];
+    it('routes child entity command execution through child entity remotes', async () => {
         const commandCalls: unknown[] = [];
         const transport = new ChildEntityCommandTransport({
             repositoryRootPath: '/repo/root',
-            queryRemote: async (input) => {
-                const payload = input.payload as Record<string, unknown>;
-                queryCalls.push(input);
-                return {
-                    entity: input.entity,
-                    entityId: typeof payload.taskId === 'string'
-                        ? payload.taskId
-                        : 'entity-1',
-                    missionId: 'mission-29',
-                    ...(typeof payload.taskId === 'string' ? { taskId: payload.taskId } : {}),
-                    commands: [
-                        {
-                            commandId: 'task.start',
-                            label: 'Start Task',
-                            disabled: false
-                        }
-                    ]
-                };
-            },
             commandRemote: async (input) => {
                 const payload = input.payload as Record<string, unknown>;
                 commandCalls.push(input);
@@ -57,14 +36,6 @@ describe('ChildEntityCommandTransport', () => {
             }
         });
 
-        await expect(transport.listTaskCommands({
-            missionId: 'mission-29',
-            taskId: 'task-1'
-        })).resolves.toMatchObject({
-            entity: 'Task',
-            taskId: 'task-1',
-            commands: [{ commandId: 'task.start' }]
-        });
         await expect(transport.executeTaskCommand({
             missionId: 'mission-29',
             taskId: 'task-1',
@@ -77,17 +48,6 @@ describe('ChildEntityCommandTransport', () => {
             commandId: 'task.start'
         });
 
-        expect(queryCalls).toEqual([
-            {
-                entity: 'Task',
-                method: 'listCommands',
-                payload: {
-                    missionId: 'mission-29',
-                    repositoryRootPath: '/repo/root',
-                    taskId: 'task-1'
-                }
-            }
-        ]);
         expect(commandCalls).toEqual([
             {
                 entity: 'Task',

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
     import type { AgentSession } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -85,7 +86,8 @@
             "",
     );
     const isPersistedTranscriptSnapshot = $derived(
-        Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
+        Boolean(session && !session.isRunning()) ||
+            Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
     );
     const persistedTranscriptHtml = $derived.by(() =>
         renderPersistedTranscriptHtml(terminalSnapshot?.screen ?? ""),
@@ -182,7 +184,6 @@
             {
                 missionId,
                 repositoryId,
-                repositoryRootPath,
                 sessionId: terminalSessionId,
             },
             (state) => {
@@ -513,6 +514,12 @@
                     <p class="mt-1">{session.lifecycleState}</p>
                 {/if}
             </div>
+
+            <AgentSessionActionbar
+                {refreshNonce}
+                {session}
+                {onActionExecuted}
+            />
         </div>
         {#if error}
             <p class="text-sm text-rose-600">{error}</p>

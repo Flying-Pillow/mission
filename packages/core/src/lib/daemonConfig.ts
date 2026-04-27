@@ -4,14 +4,14 @@ import * as path from 'node:path';
 import {
     COPILOT_CLI_AGENT_RUNNER_ID,
     PI_AGENT_RUNNER_ID
-} from '../agent/runtimes/AgentRuntimeIds.js';
+} from '../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { getMissionDirectoryPath } from './repositoryPaths.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
 import {
     createDefaultRepositorySettings,
     RepositorySettingsSchema,
     type RepositorySettings
-} from '../schemas/RepositorySettings.js';
+} from '../entities/Repository/RepositorySettings.js';
 import type { RepositoryPlatformKind } from '../entities/Repository/PlatformAdapter.js';
 
 export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, PI_AGENT_RUNNER_ID] as const;

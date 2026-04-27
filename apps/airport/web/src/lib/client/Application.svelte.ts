@@ -1,10 +1,10 @@
 import type {
-    AirportRuntimeEventEnvelope,
     GitHubVisibleRepository,
     MissionSnapshot,
     RepositorySnapshot
-} from '@flying-pillow/mission-core/schemas';
-import { repositorySnapshotSchema } from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
+import { repositorySnapshotSchema } from '@flying-pillow/mission-core/entities';
+import type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
 import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
 import { GithubRepository } from '$lib/components/entities/Repository/GithubRepository.svelte.js';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
@@ -233,7 +233,7 @@ export class AirportApplication {
             const repository = input.githubRepository
                 ? this.hydrateRepositoryData(await GithubRepository.clone({
                     githubRepository: input.githubRepository,
-                    destinationPath: `${input.repositoryPath.replace(/\/+$/u, '') || '/'}/${input.githubRepository}`
+                    destinationPath: input.repositoryPath
                 }))
                 : await Repository.add(input.repositoryPath);
 

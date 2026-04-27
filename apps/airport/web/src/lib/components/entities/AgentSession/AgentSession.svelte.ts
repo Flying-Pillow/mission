@@ -4,11 +4,10 @@ import type {
     MissionAgentCommand as AgentCommand,
     MissionAgentPrompt as AgentPrompt,
     MissionAgentSessionSnapshot as AgentSessionSnapshot
-} from '@flying-pillow/mission-core/schemas';
+} from '@flying-pillow/mission-core/entities';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentSessionCommandOwner = {
-    listSessionCommands(sessionId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
     executeSessionCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
     sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
     sendSessionCommand(sessionId: string, command: AgentCommand): Promise<void>;
@@ -103,14 +102,13 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return typeof this.sessionLogPath === 'string' && this.sessionLogPath.trim().length > 0;
     }
 
+    public get commands(): EntityCommandDescriptor[] {
+        return structuredClone(this.data.commands ?? []);
+    }
+
     public async sendPrompt(prompt: AgentPrompt): Promise<this> {
         await this.owner.sendSessionPrompt(this.sessionId, prompt);
         return this;
-    }
-
-    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
-        const snapshot = await this.owner.listSessionCommands(this.sessionId, input);
-        return structuredClone(snapshot.commands);
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
