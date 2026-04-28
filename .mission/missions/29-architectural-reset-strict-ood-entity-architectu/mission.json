@@ -498,10 +498,13 @@
     }
   },
   "runtime": {
-    "lifecycle": "running",
+    "lifecycle": "paused",
     "activeStageId": "audit",
     "pause": {
-      "paused": false
+      "paused": true,
+      "reason": "human-requested",
+      "targetType": "mission",
+      "requestedAt": "2026-04-27T15:13:04.659Z"
     },
     "panic": {
       "active": false,
@@ -1740,7 +1743,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T21:31:53.780Z"
+        "updatedAt": "2026-04-27T15:13:04.659Z"
       },
       {
         "gateId": "verify",
@@ -1748,7 +1751,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T21:31:53.780Z"
+        "updatedAt": "2026-04-27T15:13:04.659Z"
       },
       {
         "gateId": "audit",
@@ -1758,7 +1761,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-04-26T21:31:53.780Z"
+        "updatedAt": "2026-04-27T15:13:04.659Z"
       },
       {
         "gateId": "deliver",
@@ -1768,10 +1771,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-26T21:31:53.780Z"
+        "updatedAt": "2026-04-27T15:13:04.659Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-26T21:31:53.780Z"
+    "updatedAt": "2026-04-27T15:13:04.659Z"
   }
 }

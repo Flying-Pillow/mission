@@ -35,4 +35,3 @@ export type {
     Repository as RepositoryData
 } from '@flying-pillow/mission-core/entities';
 export type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
-export type { AirportHomeSnapshot } from '$lib/contracts/airport-home';

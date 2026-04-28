@@ -1,1 +1,1 @@
-export * from './GitHubRepositoryContract.js';
+export * from './GitHubRepositorySchema.js';

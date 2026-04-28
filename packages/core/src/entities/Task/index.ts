@@ -1,2 +1,1 @@
-export * from './Task.js';
-export * from './TaskContract.js';
+export * from './TaskSchema.js';

@@ -4,7 +4,14 @@ import { TerminalAgentTransport, type TerminalSessionHandle } from '../agent/Ter
 import { MissionAgentEventEmitter } from '../agent/events.js';
 import type { MissionSelector } from '../../../types.js';
 import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import type { MissionAgentTerminalState, MissionTerminalInput } from '../../protocol/contracts.js';
+import type { MissionAgentTerminalState } from '../../protocol/contracts.js';
+
+type MissionTerminalInput = {
+    data?: string;
+    literal?: boolean;
+    cols?: number;
+    rows?: number;
+};
 
 type MissionTerminalRecord = {
     key: string;
@@ -92,10 +99,6 @@ export async function sendMissionTerminalInput(input: {
             input.terminalInput.cols,
             input.terminalInput.rows
         );
-    }
-
-    if (input.terminalInput.respondWithState === false && !(input.terminalInput.cols && input.terminalInput.rows)) {
-        return null;
     }
 
     return createMissionTerminalState(resolved);

@@ -41,7 +41,7 @@ import {
 	repositoryRegistrationInputSchema,
 	repositoryStartMissionFromBriefPayloadSchema,
 	repositoryStartMissionFromIssuePayloadSchema
-} from './RepositoryContract.js';
+} from './RepositorySchema.js';
 import {
 	RepositorySettingsSchema,
 	type RepositorySettings

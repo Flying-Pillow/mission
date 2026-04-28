@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getDaemonRuntimeState = vi.fn();
 const readCachedDaemonSystemStatus = vi.fn();
 const readGithubAuthToken = vi.fn();
+const readGithubSessionContext = vi.fn();
 const resolveSurfacePath = vi.fn();
 
 vi.mock("$lib/server/daemon/health.server", () => ({
@@ -13,6 +14,7 @@ vi.mock("$lib/server/daemon/health.server", () => ({
 
 vi.mock("$lib/server/github-auth.server", () => ({
 	readGithubAuthToken,
+	readGithubSessionContext,
 }));
 
 vi.mock("$lib/server/daemon/context.server", () => ({
@@ -32,6 +34,7 @@ describe("handle", () => {
 		getDaemonRuntimeState.mockResolvedValue(daemonUnavailableState);
 		readCachedDaemonSystemStatus.mockResolvedValue(undefined);
 		readGithubAuthToken.mockResolvedValue(undefined);
+		readGithubSessionContext.mockResolvedValue({ authenticated: false });
 		resolveSurfacePath.mockReturnValue("/workspace");
 	});
 
@@ -97,5 +100,5 @@ function createEvent(url: string) {
 		setHeaders: () => {},
 		isDataRequest: false,
 		isSubRequest: false,
-	} satisfies RequestEvent;
+	} as unknown as RequestEvent;
 }

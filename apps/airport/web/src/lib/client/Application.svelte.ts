@@ -53,8 +53,6 @@ export class AirportApplication {
             return;
         }
 
-        await Repository.find();
-        await this.loadGitHubRepositories().catch(() => undefined);
         this.#isInitialized = true;
     }
 
@@ -151,34 +149,6 @@ export class AirportApplication {
             this.repositories.set(repositoryId, repository);
         }
         this.repositoryVersion += 1;
-    }
-
-    public syncAirportRouteData(input: {
-        airportHome: {
-            selectedRepositoryRoot?: string;
-            repositories: SidebarRepositorySummary[];
-        };
-        githubRepositories?: GitHubVisibleRepository[];
-        githubRepositoriesError?: string;
-    }): void {
-        this.setRepositories(input.airportHome.repositories);
-
-        const selectedRepository = input.airportHome.repositories.find(
-            (repository) =>
-                repository.repositoryRootPath === input.airportHome.selectedRepositoryRoot
-        );
-        this.setActiveRepositorySelection(selectedRepository
-            ? {
-                repositoryId: selectedRepository.repositoryId,
-                repositoryRootPath: selectedRepository.repositoryRootPath
-            }
-            : undefined);
-
-        if (input.githubRepositories) {
-            this.githubRepositoriesState = structuredClone(input.githubRepositories);
-        }
-        this.githubRepositoriesError = input.githubRepositoriesError;
-        this.githubRepositoriesLoading = false;
     }
 
     public async loadGitHubRepositories(input: {

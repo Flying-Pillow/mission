@@ -16,6 +16,7 @@
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
+    import type { MissionSummary } from "$lib/components/entities/types";
 
     const logo = asset("/logo.png");
     const appContext = getAppContext();
@@ -65,6 +66,7 @@
             : undefined,
     );
     const activeMissionId = $derived(appContext.airport.activeMissionId);
+    const showRepositoryNavigation = $derived(routeSegments[0] !== "airport");
 
     const sidebarRepositories = $derived.by(() => {
         return (appContext?.airport.repositories ?? []).map((repository) => {
@@ -74,12 +76,14 @@
                 ...repository,
                 icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
                 href: `/repository/${encodeURIComponent(repository.repositoryId)}`,
-                missions: (repository.missions ?? []).map((mission) => ({
-                    ...mission,
-                    href: `/repository/${encodeURIComponent(repository.repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`,
-                    isActive:
-                        isSelected && mission.missionId === activeMissionId,
-                })),
+                missions: (repository.missions ?? []).map(
+                    (mission: MissionSummary) => ({
+                        ...mission,
+                        href: `/repository/${encodeURIComponent(repository.repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`,
+                        isActive:
+                            isSelected && mission.missionId === activeMissionId,
+                    }),
+                ),
             };
         });
     });
@@ -93,7 +97,7 @@
                     class="data-[slot=sidebar-menu-button]:!p-1.5"
                 >
                     {#snippet child({ props })}
-                                        <a href="/airport" {...props}>
+                        <a href="/airport" {...props}>
                             <img
                                 src={logo}
                                 alt="Flying-Pillow logo"
@@ -135,76 +139,83 @@
             </Sidebar.GroupContent>
         </Sidebar.Group>
 
-        <Sidebar.Group>
-            <Sidebar.GroupLabel>Repositories</Sidebar.GroupLabel>
-            <Sidebar.GroupContent>
-                <Sidebar.Menu>
-                    {#if sidebarRepositories.length === 0}
-                        <Sidebar.MenuItem>
-                            <div
-                                class="text-muted-foreground px-2 py-1.5 text-xs"
-                            >
-                                No repositories available
-                            </div>
-                        </Sidebar.MenuItem>
-                    {:else}
-                        {#each sidebarRepositories as repository (repository.repositoryId)}
+        {#if showRepositoryNavigation}
+            <Sidebar.Group>
+                <Sidebar.GroupLabel>Repositories</Sidebar.GroupLabel>
+                <Sidebar.GroupContent>
+                    <Sidebar.Menu>
+                        {#if sidebarRepositories.length === 0}
                             <Sidebar.MenuItem>
-                                <Sidebar.MenuButton
-                                    class="h-auto py-2"
-                                    isActive={repository.repositoryId ===
-                                        activeRepositoryId}
+                                <div
+                                    class="text-muted-foreground px-2 py-1.5 text-xs"
                                 >
-                                    {#snippet child({ props })}
-                                        <a href={repository.href} {...props}>
-                                            <repository.icon />
-                                            <span
-                                                class="grid min-w-0 flex-1 text-left leading-tight"
-                                            >
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    >{repository.label}</span
-                                                >
-                                                <span
-                                                    class="text-muted-foreground truncate text-xs"
-                                                >
-                                                    {repository.description}
-                                                </span>
-                                            </span>
-                                        </a>
-                                    {/snippet}
-                                </Sidebar.MenuButton>
-
-                                {#if repository.missions.length > 0}
-                                    <Sidebar.MenuSub>
-                                        {#each repository.missions as mission (mission.missionId)}
-                                            <Sidebar.MenuSubItem>
-                                                <Sidebar.MenuSubButton
-                                                    isActive={mission.isActive}
-                                                >
-                                                    {#snippet child({ props })}
-                                                        <a
-                                                            href={mission.href}
-                                                            {...props}
-                                                        >
-                                                            <CalendarIcon />
-                                                            <span>
-                                                                {mission.title?.trim() ||
-                                                                    mission.missionId}
-                                                            </span>
-                                                        </a>
-                                                    {/snippet}
-                                                </Sidebar.MenuSubButton>
-                                            </Sidebar.MenuSubItem>
-                                        {/each}
-                                    </Sidebar.MenuSub>
-                                {/if}
+                                    No repositories available
+                                </div>
                             </Sidebar.MenuItem>
-                        {/each}
-                    {/if}
-                </Sidebar.Menu>
-            </Sidebar.GroupContent>
-        </Sidebar.Group>
+                        {:else}
+                            {#each sidebarRepositories as repository (repository.repositoryId)}
+                                <Sidebar.MenuItem>
+                                    <Sidebar.MenuButton
+                                        class="h-auto py-2"
+                                        isActive={repository.repositoryId ===
+                                            activeRepositoryId}
+                                    >
+                                        {#snippet child({ props })}
+                                            <a
+                                                href={repository.href}
+                                                {...props}
+                                            >
+                                                <repository.icon />
+                                                <span
+                                                    class="grid min-w-0 flex-1 text-left leading-tight"
+                                                >
+                                                    <span
+                                                        class="truncate text-sm font-medium"
+                                                        >{repository.label}</span
+                                                    >
+                                                    <span
+                                                        class="text-muted-foreground truncate text-xs"
+                                                    >
+                                                        {repository.description}
+                                                    </span>
+                                                </span>
+                                            </a>
+                                        {/snippet}
+                                    </Sidebar.MenuButton>
+
+                                    {#if repository.missions.length > 0}
+                                        <Sidebar.MenuSub>
+                                            {#each repository.missions as mission (mission.missionId)}
+                                                <Sidebar.MenuSubItem>
+                                                    <Sidebar.MenuSubButton
+                                                        isActive={mission.isActive}
+                                                    >
+                                                        {#snippet child({
+                                                            props,
+                                                        })}
+                                                            <a
+                                                                href={mission.href}
+                                                                {...props}
+                                                            >
+                                                                <CalendarIcon />
+                                                                <span>
+                                                                    {mission.title?.trim() ||
+                                                                        mission.missionId}
+                                                                </span>
+                                                            </a>
+                                                        {/snippet}
+                                                    </Sidebar.MenuSubButton>
+                                                </Sidebar.MenuSubItem>
+                                            {/each}
+                                        </Sidebar.MenuSub>
+                                    {/if}
+                                </Sidebar.MenuItem>
+                            {/each}
+                        {/if}
+                    </Sidebar.Menu>
+                </Sidebar.GroupContent>
+            </Sidebar.Group>
+        {/if}
 
         <NavSecondary items={bottomMenu} class="mt-auto" />
     </Sidebar.Content>

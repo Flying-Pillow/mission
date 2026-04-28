@@ -2,11 +2,7 @@ import { json } from '@sveltejs/kit';
 import { missionTerminalInputSchema } from '@flying-pillow/mission-core/entities';
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
-import {
-    isStaleMissionTerminalDaemonError,
-    resolveMissionTerminalRuntimeError,
-    restartMissionTerminalDaemon
-} from '$lib/server/mission-terminal-errors';
+import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
 import type { RequestHandler } from './$types';
 
 const missionRuntimeRouteParamsSchema = z.object({
@@ -81,22 +77,10 @@ async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string
     const repository = repositoryId
         ? await gateway.resolveRepositoryCandidate({ repositoryId })
         : undefined;
-    try {
-        return await gateway.getMissionTerminalSnapshot({
-            missionId,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    } catch (error) {
-        if (!isStaleMissionTerminalDaemonError(error)) {
-            throw error;
-        }
-
-        await restartMissionTerminalDaemon({ locals });
-        return await new DaemonGateway(locals).getMissionTerminalSnapshot({
-            missionId,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    }
+    return await gateway.getMissionTerminalSnapshot({
+        missionId,
+        ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
+    });
 }
 
 async function sendMissionTerminalInput(
@@ -114,20 +98,8 @@ async function sendMissionTerminalInput(
     const repository = input.repositoryId
         ? await gateway.resolveRepositoryCandidate({ repositoryId: input.repositoryId })
         : undefined;
-    try {
-        return await gateway.sendMissionTerminalInput({
-            ...input,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    } catch (error) {
-        if (!isStaleMissionTerminalDaemonError(error)) {
-            throw error;
-        }
-
-        await restartMissionTerminalDaemon({ locals });
-        return await new DaemonGateway(locals).sendMissionTerminalInput({
-            ...input,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    }
+    return await gateway.sendMissionTerminalInput({
+        ...input,
+        ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
+    });
 }

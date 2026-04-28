@@ -1,11 +1,9 @@
-export * from './Repository.js';
 export {
     githubIssueDetailSchema,
     missionFromBriefInputSchema,
     missionFromIssueInputSchema,
     missionReferenceSchema,
     repositoryAddPayloadSchema,
-    repositoryEntityContract,
     repositoryEntityName,
     repositoryFindPayloadSchema,
     repositoryGetIssuePayloadSchema,
@@ -27,7 +25,7 @@ export {
     repositoryWorkflowConfigurationSchema,
     trackedIssueSummarySchema,
     createDefaultRepositoryConfiguration
-} from './RepositoryContract.js';
+} from './RepositorySchema.js';
 export type {
     GitHubIssueDetail,
     MissionReference,
@@ -43,4 +41,4 @@ export type {
     RepositoryStartMissionFromBriefPayload,
     RepositoryStartMissionFromIssuePayload,
     TrackedIssueSummary
-} from './RepositoryContract.js';
+} from './RepositorySchema.js';

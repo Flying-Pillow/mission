@@ -79,7 +79,7 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public get commands(): EntityCommandDescriptor[] {
-        return structuredClone(this.snapshot.task.commands ?? []);
+        return structuredClone($state.snapshot(this.snapshot.task.commands ?? []));
     }
 
     public async start(options: TaskStartOptions = {}): Promise<this> {

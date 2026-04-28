@@ -5,7 +5,7 @@
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
-    import sanitizeHtml from "sanitize-html";
+    import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
     import type { MissionSessionTerminalSnapshotData as MissionSessionTerminalSnapshot } from "../types";
     import {
         subscribeMissionSessionTerminalTransport,
@@ -400,27 +400,23 @@
             .replace(/\n{3,}/g, "\n\n")
             .trim();
 
-        return sanitizeHtml(
+        return sanitizeBrowserHtml(
             Anser.ansiToHtml(Anser.escapeForHtml(normalizedTranscript), {
                 use_classes: false,
             }),
             {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-                    "span",
-                    "br",
-                ]),
+                allowedTags: ["br", "span"],
                 allowedAttributes: {
-                    ...sanitizeHtml.defaults.allowedAttributes,
                     span: ["style"],
                 },
                 allowedStyles: {
-                    span: {
-                        color: [/^.*$/],
-                        "background-color": [/^.*$/],
-                        "font-weight": [/^.*$/],
-                        "font-style": [/^.*$/],
-                        "text-decoration": [/^.*$/],
-                    },
+                    span: [
+                        "background-color",
+                        "color",
+                        "font-style",
+                        "font-weight",
+                        "text-decoration",
+                    ],
                 },
             },
         );

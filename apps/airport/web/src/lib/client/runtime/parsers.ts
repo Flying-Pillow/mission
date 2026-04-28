@@ -32,7 +32,7 @@ export function parseRepositorySnapshot(value: unknown): RepositorySnapshot {
 }
 
 export function parseAirportRuntimeEventEnvelope(value: unknown): AirportRuntimeEventEnvelope {
-    return airportRuntimeEventEnvelopeSchema.parse(value);
+    return airportRuntimeEventEnvelopeSchema.parse(value) as AirportRuntimeEventEnvelope;
 }
 
 export function parseTrackedIssueSummaryList(value: unknown): TrackedIssueSummary[] {

@@ -4,13 +4,13 @@ import type { AgentCommand, AgentPrompt } from '../agent/AgentRuntimeTypes.js';
 import { createConfiguredAgentRunners } from '../agent/runtimes/AgentRuntimeFactory.js';
 import { listRegisteredRepositories } from '../../../lib/config.js';
 import type { EntityContractContext } from '../../../entities/Entity/EntityContract.js';
-import type { EntityCommandDescriptor } from '../../../entities/Entity/EntityContract.js';
+import type { EntityCommandDescriptor } from '../../../entities/Entity/EntitySchema.js';
 import type {
     MissionAgentCommand,
     MissionAgentPrompt,
     MissionAgentSessionSnapshot
-} from '../../../entities/AgentSession/AgentSessionContract.js';
-import type { MissionArtifactSnapshot } from '../../../entities/Artifact/ArtifactContract.js';
+} from '../../../entities/AgentSession/AgentSessionSchema.js';
+import type { MissionArtifactSnapshot } from '../../../entities/Artifact/ArtifactSchema.js';
 import {
     missionActionListSnapshotSchema,
     missionIdentityPayloadSchema,
@@ -20,10 +20,10 @@ import {
     type MissionIdentityPayload,
     type MissionSnapshot,
     type MissionWorktreeNodeData
-} from '../../../entities/Mission/MissionContract.js';
+} from '../../../entities/Mission/MissionSchema.js';
 import type { Mission as MissionEntity } from '../../../entities/Mission/Mission.js';
-import type { MissionStageSnapshot } from '../../../entities/Stage/StageContract.js';
-import type { MissionTaskSnapshot } from '../../../entities/Task/TaskContract.js';
+import type { MissionStageSnapshot } from '../../../entities/Stage/StageSchema.js';
+import type { MissionTaskSnapshot } from '../../../entities/Task/TaskSchema.js';
 import { createDefaultRepositorySettings } from '../../../entities/Repository/RepositorySettings.js';
 import { readRepositorySettingsDocument } from '../../../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';

@@ -1,7 +1,7 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import { onMount, type Component } from "svelte";
+    import { onMount } from "svelte";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
@@ -14,7 +14,10 @@
     const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
     const repository = $derived.by(() => {
         const activeRepository = appContext.airport.activeRepository;
-        if (!activeRepository || activeRepository.repositoryId !== repositoryId) {
+        if (
+            !activeRepository ||
+            activeRepository.repositoryId !== repositoryId
+        ) {
             return null;
         }
 
@@ -29,7 +32,6 @@
     let selectedIssue = $state<SelectedIssueSummary | null>(null);
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
-    let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
 
     $effect(() => {
         if (!repositoryId || loadedRepositoryId === repositoryId) {
@@ -46,17 +48,12 @@
             try {
                 await appContext.application.openRepositoryRoute(repositoryId);
             } catch (error) {
-                pageLoadError = error instanceof Error ? error.message : String(error);
+                pageLoadError =
+                    error instanceof Error ? error.message : String(error);
             } finally {
                 pageLoading = false;
             }
         })();
-    });
-
-    onMount(async () => {
-        MarkdownViewer = (
-            await import("$lib/components/viewers/markdown.svelte")
-        ).default;
     });
 
     function closeIssuePreview(): void {
@@ -106,7 +103,6 @@
                     {#if selectedIssue}
                         <IssuePreview
                             {selectedIssue}
-                            {MarkdownViewer}
                             onClose={closeIssuePreview}
                         />
                     {:else}

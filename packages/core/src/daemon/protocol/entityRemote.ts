@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { entityMethodSchema, entityNameSchema } from '../../entities/Entity/EntityContract.js';
+import { entityMethodSchema, entityNameSchema } from '../../entities/Entity/EntitySchema.js';
 
 export const entityQueryInvocationSchema = z.object({
     entity: entityNameSchema,

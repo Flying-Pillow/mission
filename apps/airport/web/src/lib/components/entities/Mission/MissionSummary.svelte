@@ -9,9 +9,13 @@
     const missionScope = maybeGetScopedMissionContext();
     const repositoryScope = maybeGetScopedRepositoryContext();
     const mission = $derived.by(() => {
-        const resolvedMission = missionScope?.mission ?? repositoryScope?.repository?.selectedMission;
+        const resolvedMission =
+            missionScope?.mission ??
+            repositoryScope?.repository?.selectedMission;
         if (!resolvedMission) {
-            throw new Error("Mission summary requires a scoped mission or repository context.");
+            throw new Error(
+                "Mission summary requires a scoped mission or repository context.",
+            );
         }
 
         return resolvedMission;
@@ -92,12 +96,10 @@
             <header class="rounded-xl border bg-background/70 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <p class="text-sm font-semibold text-foreground">
-                        Lifecycle: {mission.workflowLifecycle ??
-                            "unknown"}
+                        Lifecycle: {mission.workflowLifecycle ?? "unknown"}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Updated: {mission.workflowUpdatedAt ??
-                            "Unknown"}
+                        Updated: {mission.workflowUpdatedAt ?? "Unknown"}
                     </p>
                 </div>
                 <div class="mt-3 h-2 rounded-full bg-muted">
@@ -120,9 +122,7 @@
                         variant="outline"
                         disabled={missionActionPending !== null}
                         onclick={() =>
-                            runMissionAction("pause", () =>
-                                mission.pause(),
-                            )}
+                            runMissionAction("pause", () => mission.pause())}
                     >
                         {missionActionPending === "pause"
                             ? "Pausing..."
@@ -133,9 +133,7 @@
                         variant="outline"
                         disabled={missionActionPending !== null}
                         onclick={() =>
-                            runMissionAction("resume", () =>
-                                mission.resume(),
-                            )}
+                            runMissionAction("resume", () => mission.resume())}
                     >
                         {missionActionPending === "resume"
                             ? "Resuming..."
@@ -146,9 +144,7 @@
                         variant="outline"
                         disabled={missionActionPending !== null}
                         onclick={() =>
-                            runMissionAction("panic", () =>
-                                mission.panic(),
-                            )}
+                            runMissionAction("panic", () => mission.panic())}
                     >
                         {missionActionPending === "panic"
                             ? "Stopping..."
@@ -359,13 +355,13 @@
                 >
                     Agent sessions
                 </p>
-                {#if selectedMission.listSessions().length === 0}
+                {#if mission.listSessions().length === 0}
                     <p class="mt-2 text-sm text-muted-foreground">
                         No live agent sessions are attached to this mission yet.
                     </p>
                 {:else}
                     <div class="mt-3 grid gap-2">
-                        {#each selectedMission.listSessions() as session (session.sessionId)}
+                        {#each mission.listSessions() as session (session.sessionId)}
                             <div
                                 class="rounded-lg border bg-background px-3 py-2"
                             >

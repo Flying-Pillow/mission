@@ -69,7 +69,7 @@ export class Stage implements EntityModel<StageSnapshot> {
     }
 
     public get commands(): EntityCommandDescriptor[] {
-        return structuredClone(this.snapshot.commands ?? []);
+        return structuredClone($state.snapshot(this.snapshot.commands ?? []));
     }
 
     public listTasks(): Task[] {

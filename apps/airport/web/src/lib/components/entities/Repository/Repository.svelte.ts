@@ -157,12 +157,13 @@ export class Repository implements EntityModel<RepositorySnapshot> {
             return this;
         }
 
-        if (this.selectedMissionModel?.missionId === snapshot.selectedMission.missionId) {
-            this.selectedMissionModel.updateFromSnapshot(snapshot.selectedMission);
+        const selectedMission = snapshot.selectedMission;
+        if (this.selectedMissionModel?.missionId === selectedMission.mission.missionId) {
+            this.selectedMissionModel.updateFromSnapshot(selectedMission);
             return this;
         }
 
-        this.selectedMissionModel = this.createSelectedMission(snapshot.selectedMission);
+        this.selectedMissionModel = this.createSelectedMission(selectedMission);
         return this;
     }
 

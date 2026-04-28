@@ -35,13 +35,16 @@
     const repositoryError = $derived(repositoryScope.error);
     const selectedMission = $derived(activeRepository?.selectedMission);
     const repositorySummary = $derived(activeRepository?.summary);
-    const repositoryOperationalMode = $derived(activeRepository?.operationalMode);
+    const repositoryOperationalMode = $derived(
+        activeRepository?.operationalMode,
+    );
     const repositoryControlRoot = $derived(
         activeRepository?.controlRoot ?? repositorySummary?.repositoryRootPath,
     );
     const repositoryCurrentBranch = $derived(activeRepository?.currentBranch);
     const repositoryGithubRepository = $derived(
-        activeRepository?.githubRepository ?? repositorySummary?.githubRepository,
+        activeRepository?.githubRepository ??
+            repositorySummary?.githubRepository,
     );
     const repositorySettingsComplete = $derived(
         activeRepository?.settingsComplete,
@@ -57,7 +60,9 @@
 
         if (initialSummary) {
             repositoryScope.repository =
-                appContext.application.seedRepositoryFromSummary(initialSummary);
+                appContext.application.seedRepositoryFromSummary(
+                    initialSummary,
+                );
             repositoryScope.error = null;
         }
 
@@ -67,14 +72,16 @@
 
     async function loadRepositorySurface(): Promise<void> {
         try {
-            const repository = await appContext.application.openRepositoryRoute(repositoryId);
+            const repository =
+                await appContext.application.openRepositoryRoute(repositoryId);
             repositoryScope.repository = repository;
             repositoryScope.error = null;
         } catch (error) {
             if (!repositoryScope.repository) {
                 repositoryScope.repository = undefined;
             }
-            repositoryScope.error = error instanceof Error ? error.message : String(error);
+            repositoryScope.error =
+                error instanceof Error ? error.message : String(error);
         } finally {
             repositoryScope.loading = false;
         }
@@ -109,7 +116,9 @@
             </p>
         </section>
     {:else}
-        <section class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm">
+        <section
+            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+        >
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p
@@ -128,9 +137,13 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap justify-end gap-2">
-                    <Badge variant="secondary">{resolvedMissionCountLabel}</Badge>
+                    <Badge variant="secondary"
+                        >{resolvedMissionCountLabel}</Badge
+                    >
                     {#if repositoryOperationalMode}
-                        <Badge variant="outline">{repositoryOperationalMode}</Badge>
+                        <Badge variant="outline"
+                            >{repositoryOperationalMode}</Badge
+                        >
                     {/if}
                 </div>
             </div>
@@ -173,7 +186,9 @@
                         Setup
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositorySettingsComplete === false ? "Incomplete" : "Ready"}
+                        {repositorySettingsComplete === false
+                            ? "Incomplete"
+                            : "Ready"}
                     </p>
                 </div>
             </div>
@@ -201,7 +216,6 @@
                     {#if selectedIssue}
                         <IssuePreview
                             {selectedIssue}
-                            {MarkdownViewer}
                             onClose={closeIssuePreview}
                         />
                     {:else}

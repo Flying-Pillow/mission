@@ -3,7 +3,15 @@ import { TerminalAgentTransport, type TerminalSessionHandle, type TerminalSessio
 import { MissionAgentEventEmitter } from '../agent/events.js';
 import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
 import type { MissionSelector } from '../../../types.js';
-import type { MissionAgentTerminalState, SessionTerminalInput } from '../../protocol/contracts.js';
+import type { MissionAgentTerminalState } from '../../protocol/contracts.js';
+
+type AgentSessionTerminalInput = {
+    sessionId?: string;
+    data?: string;
+    literal?: boolean;
+    cols?: number;
+    rows?: number;
+};
 
 type AgentSessionTerminalRecord = {
     workspaceRoot: string;
@@ -60,7 +68,7 @@ export async function readAgentSessionTerminalState(input: {
 export async function sendAgentSessionTerminalInput(input: {
     surfacePath: string;
     selector?: MissionSelector;
-    terminalInput: SessionTerminalInput;
+    terminalInput: AgentSessionTerminalInput;
 }): Promise<MissionAgentTerminalState | null> {
     const resolved = await resolveAgentSessionTerminalRecord({
         surfacePath: input.surfacePath,
@@ -78,10 +86,6 @@ export async function sendAgentSessionTerminalInput(input: {
     }
     if (input.terminalInput.cols && input.terminalInput.rows) {
         await agentSessionTerminalTransport.resizeSession(resolved.handle, input.terminalInput.cols, input.terminalInput.rows);
-    }
-
-    if (input.terminalInput.respondWithState === false && !(input.terminalInput.cols && input.terminalInput.rows)) {
-        return null;
     }
 
     return createAgentSessionTerminalState(resolved);

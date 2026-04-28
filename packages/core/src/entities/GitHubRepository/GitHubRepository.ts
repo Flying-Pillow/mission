@@ -9,7 +9,7 @@ import {
 	type GitHubRepositoryFindPayload,
 	gitHubRepositoryClonePayloadSchema,
 	gitHubRepositoryFindPayloadSchema
-} from './GitHubRepositoryContract.js';
+} from './GitHubRepositorySchema.js';
 
 export class GitHubRepository {
 	public static async find(

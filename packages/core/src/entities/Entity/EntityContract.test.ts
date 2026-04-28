@@ -8,7 +8,7 @@ import {
     agentSessionRemoteQueryPayloadSchemas,
     missionAgentPromptSchema,
     missionAgentSessionSnapshotSchema
-} from '../AgentSession/AgentSessionContract.js';
+} from '../AgentSession/AgentSessionSchema.js';
 import {
     artifactEntityReferenceSchema,
     artifactExecuteCommandPayloadSchema,
@@ -16,14 +16,14 @@ import {
     artifactRemoteCommandPayloadSchemas,
     artifactRemoteQueryPayloadSchemas,
     missionArtifactSnapshotSchema
-} from '../Artifact/ArtifactContract.js';
+} from '../Artifact/ArtifactSchema.js';
 import {
     stageEntityReferenceSchema,
     stageExecuteCommandPayloadSchema,
     stageRemoteCommandPayloadSchemas,
     stageRemoteQueryPayloadSchemas,
     missionStageSnapshotSchema
-} from '../Stage/StageContract.js';
+} from '../Stage/StageSchema.js';
 import {
     taskCommandAcknowledgementSchema,
     taskEntityReferenceSchema,
@@ -32,12 +32,12 @@ import {
     taskRemoteCommandPayloadSchemas,
     taskRemoteQueryPayloadSchemas,
     missionTaskSnapshotSchema
-} from '../Task/TaskContract.js';
-import { missionChildEntityReferenceSchema } from '../Mission/MissionContract.js';
+} from '../Task/TaskSchema.js';
+import { missionChildEntityReferenceSchema } from '../Mission/MissionSchema.js';
 import {
     entityCommandDescriptorSchema,
     entityEventEnvelopeSchema
-} from './EntityContract.js';
+} from './EntitySchema.js';
 
 describe('child entity command contract schemas', () => {
     it('validates strict command descriptors with input and confirmation metadata', () => {
@@ -260,8 +260,9 @@ describe('child entity command contract schemas', () => {
         expect(taskRemoteCommandPayloadSchemas).toHaveProperty('executeCommand');
         expect(Object.keys(artifactRemoteQueryPayloadSchemas)).toEqual(['read', 'readDocument']);
         expect(artifactRemoteCommandPayloadSchemas).toHaveProperty('writeDocument');
-        expect(Object.keys(agentSessionRemoteQueryPayloadSchemas)).toEqual(['read']);
+        expect(Object.keys(agentSessionRemoteQueryPayloadSchemas)).toEqual(['read', 'readTerminal']);
         expect(agentSessionRemoteCommandPayloadSchemas).toHaveProperty('sendPrompt');
+        expect(agentSessionRemoteCommandPayloadSchemas).toHaveProperty('sendTerminalInput');
 
         expect(stageExecuteCommandPayloadSchema.parse({
             missionId: 'mission-29',

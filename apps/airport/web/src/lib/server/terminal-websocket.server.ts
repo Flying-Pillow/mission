@@ -1,17 +1,18 @@
 import {
-    DaemonApi,
     type Notification as DaemonNotification,
     type MissionAgentTerminalState
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/node';
 import {
     missionTerminalOutputSchema,
     missionTerminalSnapshotSchema,
+    type MissionTerminalSnapshot,
     missionTerminalSocketClientMessageSchema,
     missionTerminalSocketServerMessageSchema,
 } from '@flying-pillow/mission-core/entities';
 import {
     agentSessionTerminalOutputSchema as missionSessionTerminalOutputSchema,
     agentSessionTerminalSnapshotSchema as missionSessionTerminalSnapshotSchema,
+    type AgentSessionTerminalSnapshot,
     agentSessionTerminalSocketClientMessageSchema as missionSessionTerminalSocketClientMessageSchema,
     agentSessionTerminalSocketServerMessageSchema as missionSessionTerminalSocketServerMessageSchema,
     agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema,
@@ -100,7 +101,6 @@ async function handleTerminalConnection(
     });
 
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
-    let api: DaemonApi | undefined;
     let closed = false;
     let subscription: { dispose(): void } | undefined;
     let terminalReady = false;
@@ -122,17 +122,17 @@ async function handleTerminalConnection(
         webSocket.send(JSON.stringify(payload));
     };
 
-    const sendSnapshot = (state: MissionAgentTerminalState | null, type: 'snapshot' | 'disconnected' = 'snapshot') => {
-        const terminalScreen = clipMissionSessionTerminalScreen(state);
+    const sendSnapshot = (state: AgentSessionTerminalSnapshot, type: 'snapshot' | 'disconnected' = 'snapshot') => {
+        const terminalScreen = clipTerminalScreen(state.screen);
         const snapshot = missionSessionTerminalSnapshotSchema.parse({
             missionId: query.missionId,
             sessionId,
-            connected: state?.connected ?? false,
-            dead: state?.dead ?? true,
-            exitCode: state?.dead ? state.exitCode : null,
+            connected: state.connected,
+            dead: state.dead,
+            exitCode: state.dead ? state.exitCode : null,
             screen: terminalScreen.screen,
-            ...(state?.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-            ...(state?.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+            ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
         send(missionSessionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
     };
@@ -160,35 +160,24 @@ async function handleTerminalConnection(
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
             const message = missionSessionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
-            const inputParams = {
-                selector: { missionId: query.missionId },
-                sessionId,
-                respondWithState: false,
-                ...(message.type === 'input'
-                    ? {
-                        data: message.data,
-                        ...(message.literal !== undefined ? { literal: message.literal } : {})
-                    }
-                    : {
-                        cols: message.cols,
-                        rows: message.rows
-                    })
-            };
-            const nextState = await daemon?.client.request<MissionAgentTerminalState | null>('session.terminal.input', inputParams);
-            if (message.type === 'input') {
-                return;
-            }
-            if (message.type === 'resize' && nextState === null) {
-                const currentState = await api?.mission.getSessionTerminalState({ missionId: query.missionId }, sessionId);
-                if (!currentState) {
-                    sendError(`Mission session '${sessionId}' is not available as a terminal-backed session.`);
-                    return;
+            const nextState = missionSessionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+                entity: 'AgentSession',
+                method: 'sendTerminalInput',
+                payload: {
+                    missionId: query.missionId,
+                    sessionId,
+                    ...(message.type === 'input'
+                        ? {
+                            data: message.data,
+                            ...(message.literal !== undefined ? { literal: message.literal } : {})
+                        }
+                        : {
+                            cols: message.cols,
+                            rows: message.rows
+                        })
                 }
-                sendSnapshot(currentState, currentState.dead || !currentState.connected ? 'disconnected' : 'snapshot');
-                return;
-            }
-            if (!nextState) {
-                sendError(`Mission session '${sessionId}' is not available as a terminal-backed session.`);
+            }));
+            if (message.type === 'input') {
                 return;
             }
             if (message.type === 'resize' || nextState.dead || !nextState.connected) {
@@ -215,14 +204,20 @@ async function handleTerminalConnection(
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
-        api = new DaemonApi(daemon.client);
         await daemon.client.request<null>('event.subscribe', {
             channels: [`agent_session:${query.missionId}/${sessionId}.terminal`]
         });
 
-        const initialState = await api.mission.getSessionTerminalState({ missionId: query.missionId }, sessionId);
+        const initialState = missionSessionTerminalSnapshotSchema.parse(await daemon.client.request('entity.query', {
+            entity: 'AgentSession',
+            method: 'readTerminal',
+            payload: {
+                missionId: query.missionId,
+                sessionId
+            }
+        }));
         sendSnapshot(initialState);
-        if (!initialState?.connected || initialState.dead) {
+        if (!initialState.connected || initialState.dead) {
             sendSnapshot(initialState, 'disconnected');
             dispose();
             webSocket.close();
@@ -235,8 +230,19 @@ async function handleTerminalConnection(
             }
 
             const state = event.state;
+            const snapshot = missionSessionTerminalSnapshotSchema.parse({
+                missionId: query.missionId,
+                sessionId,
+                connected: state.connected,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                screen: state.screen,
+                ...(state.chunk ? { chunk: state.chunk } : {}),
+                ...(state.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            });
             if (!state.connected || state.dead) {
-                sendSnapshot(state, 'disconnected');
+                sendSnapshot(snapshot, 'disconnected');
                 dispose();
                 webSocket.close();
                 return;
@@ -247,7 +253,7 @@ async function handleTerminalConnection(
                 return;
             }
 
-            sendSnapshot(state);
+            sendSnapshot(snapshot);
         });
 
         terminalReady = true;
@@ -272,7 +278,6 @@ async function handleMissionTerminalConnection(
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const repositoryId = requestUrl.searchParams.get('repositoryId')?.trim();
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
-    let api: DaemonApi | undefined;
     let closed = false;
     let subscription: { dispose(): void } | undefined;
     let terminalReady = false;
@@ -297,21 +302,21 @@ async function handleMissionTerminalConnection(
         webSocket.send(JSON.stringify(payload));
     };
 
-    const sendSnapshot = (state: MissionAgentTerminalState | null, type: 'snapshot' | 'disconnected' = 'snapshot') => {
-        const terminalScreen = clipTerminalScreen(state?.screen ?? '');
+    const sendSnapshot = (state: MissionTerminalSnapshot, type: 'snapshot' | 'disconnected' = 'snapshot') => {
+        const terminalScreen = clipTerminalScreen(state.screen);
         const snapshot = missionTerminalSnapshotSchema.parse({
             missionId,
-            connected: state?.connected ?? false,
-            dead: state?.dead ?? true,
-            exitCode: state?.dead ? state.exitCode : null,
+            connected: state.connected,
+            dead: state.dead,
+            exitCode: state.dead ? state.exitCode : null,
             screen: terminalScreen.screen,
-            ...(state?.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-            ...(state?.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+            ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
+            ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
         send(missionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
     };
 
-    const sendOutput = (state: MissionAgentTerminalState) => {
+    const sendOutput = (state: MissionTerminalSnapshot & { chunk?: string }) => {
         const output = missionTerminalOutputSchema.parse({
             missionId,
             chunk: state.chunk ?? '',
@@ -330,7 +335,7 @@ async function handleMissionTerminalConnection(
         }));
     };
 
-    const sendMissionState = (state: MissionAgentTerminalState) => {
+    const sendMissionState = (state: MissionTerminalSnapshot) => {
         const appendedChunk = state.screen.startsWith(lastScreen)
             ? state.screen.slice(lastScreen.length)
             : undefined;
@@ -352,39 +357,26 @@ async function handleMissionTerminalConnection(
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
             const message = missionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
-            const nextState = await daemon?.client.request<MissionAgentTerminalState | null>('mission.terminal.input', {
-                selector: { missionId },
-                respondWithState: message.type !== 'input',
-                ...(message.type === 'input'
-                    ? {
-                        data: message.data,
-                        ...(message.literal !== undefined ? { literal: message.literal } : {})
-                    }
-                    : {
-                        cols: message.cols,
-                        rows: message.rows
-                    })
-            });
-            if (!nextState) {
-                if (message.type === 'input') {
-                    return;
+            const nextState = missionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+                entity: 'Mission',
+                method: 'sendTerminalInput',
+                payload: {
+                    missionId,
+                    ...(message.type === 'input'
+                        ? {
+                            data: message.data,
+                            ...(message.literal !== undefined ? { literal: message.literal } : {})
+                        }
+                        : {
+                            cols: message.cols,
+                            rows: message.rows
+                        })
                 }
-                sendError(`Mission terminal for '${missionId}' is not available.`);
-                return;
-            }
+            }));
             if (message.type === 'input') {
                 return;
             }
             sendMissionState(nextState);
-            if (message.type === 'resize' && nextState === null) {
-                const currentState = await api?.mission.getMissionTerminalState({ missionId });
-                if (!currentState) {
-                    sendError(`Mission terminal for '${missionId}' is not available.`);
-                    return;
-                }
-                sendSnapshot(currentState, currentState.dead || !currentState.connected ? 'disconnected' : 'snapshot');
-                return;
-            }
         } catch (error) {
             sendError(error instanceof Error ? error.message : String(error));
         }
@@ -406,18 +398,14 @@ async function handleMissionTerminalConnection(
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
-        api = new DaemonApi(daemon.client);
         await daemon.client.request<null>('event.subscribe', {
             channels: [`mission:${missionId}.terminal`]
         });
-        const initialState = await api.mission.ensureMissionTerminalState({ missionId });
-        if (!initialState) {
-            sendSnapshot(initialState);
-            sendSnapshot(initialState, 'disconnected');
-            dispose();
-            webSocket.close();
-            return;
-        }
+        const initialState = missionTerminalSnapshotSchema.parse(await daemon.client.request('entity.command', {
+            entity: 'Mission',
+            method: 'ensureTerminal',
+            payload: { missionId }
+        }));
 
         sendSnapshot(initialState);
         lastScreen = initialState.screen;
@@ -437,7 +425,16 @@ async function handleMissionTerminalConnection(
                 return;
             }
 
-            sendMissionState(event.state);
+            sendMissionState(missionTerminalSnapshotSchema.parse({
+                missionId,
+                connected: event.state.connected,
+                dead: event.state.dead,
+                exitCode: event.state.dead ? event.state.exitCode : null,
+                screen: event.state.screen,
+                ...(event.state.chunk ? { chunk: event.state.chunk } : {}),
+                ...(event.state.truncated ? { truncated: true } : {}),
+                ...(event.state.terminalHandle ? { terminalHandle: event.state.terminalHandle } : {})
+            }));
             if (!event.state.connected || event.state.dead) {
                 dispose();
                 webSocket.close();

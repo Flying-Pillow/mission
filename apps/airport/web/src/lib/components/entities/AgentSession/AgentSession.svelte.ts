@@ -103,7 +103,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
     }
 
     public get commands(): EntityCommandDescriptor[] {
-        return structuredClone(this.data.commands ?? []);
+        return structuredClone($state.snapshot(this.data.commands ?? []));
     }
 
     public async sendPrompt(prompt: AgentPrompt): Promise<this> {

@@ -20,7 +20,9 @@
     };
 
     const appContext = getAppContext();
-    const systemState = $derived(page.data.systemState as SystemState | undefined);
+    const systemState = $derived(
+        page.data.systemState as SystemState | undefined,
+    );
     const daemonStatusTone = $derived(
         appContext.daemon.running ? "connected" : "disconnected",
     );
@@ -52,10 +54,14 @@
             <div class="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">Airport</Badge>
                 <Badge variant="secondary">
-                    {appContext.daemon.running ? "Daemon connected" : "Daemon unavailable"}
+                    {appContext.daemon.running
+                        ? "Daemon connected"
+                        : "Daemon unavailable"}
                 </Badge>
                 <Badge variant="outline">
-                    {systemState ? "System schema loaded" : "System schema pending"}
+                    {systemState
+                        ? "System schema loaded"
+                        : "System schema pending"}
                 </Badge>
             </div>
 

@@ -7,7 +7,6 @@ import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/browser";
 import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 import type { SidebarRepositorySummary } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/transport/EntityRuntimeTransport";
-import type { AirportRouteData } from "../../../routes/api/airport/airport.remote";
 
 export type GithubStatus = "connected" | "disconnected" | "unknown";
 
@@ -79,14 +78,9 @@ export { getAppContext, setAppContext };
 
 export function createAppContext(
     initial: AppContextServerValue | (() => AppContextServerValue),
-    airportRouteData?: AirportRouteData,
 ): AppContextValue {
     const initialValue =
         typeof initial === "function" ? initial() : initial;
-
-    if (airportRouteData) {
-        app.syncAirportRouteData(airportRouteData);
-    }
 
     const state = $state({
         application: app,

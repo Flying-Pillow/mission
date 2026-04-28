@@ -77,7 +77,7 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
     }
 
     public get commands(): EntityCommandDescriptor[] {
-        return structuredClone(this.snapshot.commands ?? []);
+        return structuredClone($state.snapshot(this.snapshot.commands ?? []));
     }
 
     public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentPayload> {

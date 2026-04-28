@@ -9,11 +9,7 @@ import {
 import {
 	type EventSubscription,
 	type AddressedNotification,
-	type Notification,
-	type MissionTerminalInput,
-	type MissionTerminalStateRequest,
-	type SessionTerminalInput,
-	type SessionTerminalState
+	type Notification
 } from './protocol/contracts.js';
 import {
 	PROTOCOL_VERSION,
@@ -45,14 +41,9 @@ import {
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
 import {
-	ensureMissionTerminalState,
-	readMissionTerminalState,
-	sendMissionTerminalInput,
 	observeMissionTerminalUpdates
 } from './runtime/mission/MissionTerminalService.js';
 import {
-	readAgentSessionTerminalState,
-	sendAgentSessionTerminalInput,
 	observeAgentSessionTerminalUpdates
 } from './runtime/mission/AgentSessionTerminalService.js';
 
@@ -387,69 +378,6 @@ export async function createResponse(
 					id: request.id,
 					ok: true,
 					result: null,
-				};
-			}
-			case 'session.terminal.state': {
-				const params = (request.params ?? {}) as SessionTerminalState;
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await readAgentSessionTerminalState({
-						surfacePath: resolveSurfacePath(request.surfacePath),
-						...(params.selector ? { selector: params.selector } : {}),
-						sessionId: params.sessionId
-					}),
-				};
-			}
-			case 'session.terminal.input': {
-				const params = (request.params ?? {}) as SessionTerminalInput;
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await sendAgentSessionTerminalInput({
-						surfacePath: resolveSurfacePath(request.surfacePath),
-						...(params.selector ? { selector: params.selector } : {}),
-						terminalInput: params
-					}),
-				};
-			}
-			case 'mission.terminal.state': {
-				const params = (request.params ?? {}) as MissionTerminalStateRequest;
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await readMissionTerminalState({
-						surfacePath: resolveSurfacePath(request.surfacePath),
-						...(params.selector ? { selector: params.selector } : {})
-					})
-				};
-			}
-			case 'mission.terminal.ensure': {
-				const params = (request.params ?? {}) as MissionTerminalStateRequest;
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await ensureMissionTerminalState({
-						surfacePath: resolveSurfacePath(request.surfacePath),
-						...(params.selector ? { selector: params.selector } : {})
-					})
-				};
-			}
-			case 'mission.terminal.input': {
-				const params = (request.params ?? {}) as MissionTerminalInput;
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await sendMissionTerminalInput({
-						surfacePath: resolveSurfacePath(request.surfacePath),
-						...(params.selector ? { selector: params.selector } : {}),
-						terminalInput: params
-					})
 				};
 			}
 			case 'system.status': {

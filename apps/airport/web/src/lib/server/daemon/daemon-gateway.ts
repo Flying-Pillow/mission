@@ -1,15 +1,9 @@
-// /apps/airport/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for Airport, mission, runtime, and terminal operations.
-import fs from 'node:fs';
-import path from 'node:path';
+// /apps/airport/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for mission runtime, terminal, and document operations.
 import { randomUUID } from 'node:crypto';
 import {
-    type ControlDocumentResponse,
     DaemonApi,
     type Notification,
     type MissionAgentSessionState,
-    type MissionAgentTerminalState,
-    deriveRepositoryIdentity,
-    resolveGitWorkspaceRoot,
     type MissionEntity,
 } from '@flying-pillow/mission-core/node';
 import {
@@ -20,6 +14,7 @@ import {
     agentSessionSnapshotSchema,
     agentSessionTerminalSnapshotSchema,
     missionTerminalSnapshotSchema,
+    repositorySnapshotSchema,
     repositorySchema
 } from '@flying-pillow/mission-core/entities';
 import {
@@ -27,15 +22,10 @@ import {
     type AirportRuntimeEventEnvelope
 } from '../../contracts/runtime-events';
 import {
-    airportHomeSnapshotSchema,
-    type AirportHomeSnapshot
-} from '../../contracts/airport-home';
-import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
 } from './connections.server';
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
-const AIRPORT_HOME_STATUS_TIMEOUT_MS = 8_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 
 type AddressedNotification = Notification & {
@@ -48,131 +38,6 @@ type AddressedNotification = Notification & {
 
 export class DaemonGateway {
     public constructor(private readonly locals?: App.Locals) { }
-
-    public readonly airport = {
-        getHomeSnapshot: () => this.getAirportHomeSnapshot(),
-        inspectRepositoryPath: (repositoryPath: string) => this.inspectRepositoryPath(repositoryPath),
-        addRepository: (repositoryPath: string) => this.addRepository(repositoryPath)
-    };
-
-    public async readControlDocument(filePath: string, surfacePath?: string): Promise<ControlDocumentResponse> {
-        const normalizedPath = filePath.trim();
-        if (!normalizedPath) {
-            throw new Error('Document read requires a filePath.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return await withTimeout(
-                api.control.readDocument(normalizedPath),
-                2500,
-                `Document read timed out for '${normalizedPath}'.`
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async writeControlDocument(input: {
-        filePath: string;
-        content: string;
-        surfacePath?: string;
-    }): Promise<ControlDocumentResponse> {
-        const normalizedPath = input.filePath.trim();
-        if (!normalizedPath) {
-            throw new Error('Document write requires a filePath.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return await withTimeout(
-                api.control.writeDocument(normalizedPath, input.content),
-                2500,
-                `Document write timed out for '${normalizedPath}'.`
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async getAirportHomeSnapshot(): Promise<AirportHomeSnapshot> {
-        const daemon = await this.connectSharedDaemonClient();
-        try {
-            const api = new DaemonApi(daemon.client);
-            const status = await withTimeout(
-                api.control.getStatus({ includeMissions: false }),
-                AIRPORT_HOME_STATUS_TIMEOUT_MS,
-                'Airport home status request timed out.'
-            );
-            const repositories = await withTimeout(
-                api.control.listRegisteredRepositories(),
-                AIRPORT_HOME_STATUS_TIMEOUT_MS,
-                'Airport repository list request timed out.'
-            );
-
-            return airportHomeSnapshotSchema.parse({
-                ...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
-                ...(status.control?.controlRoot ? { controlRoot: status.control.controlRoot } : {}),
-                ...(status.control?.currentBranch ? { currentBranch: status.control.currentBranch } : {}),
-                ...(typeof status.control?.settingsComplete === 'boolean'
-                    ? { settingsComplete: status.control.settingsComplete }
-                    : {}),
-                repositories: repositories.map((repository) => this.toRepositorySnapshot(repository))
-            });
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async addRepository(repositoryPath: string): Promise<Repository> {
-        const normalizedRepositoryPath = repositoryPath.trim();
-        if (!normalizedRepositoryPath) {
-            throw new Error('Repository registration requires a repositoryPath.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient();
-        try {
-            const api = new DaemonApi(daemon.client);
-            return this.toRepositorySnapshot(
-                await withTimeout(
-                    api.control.addRepository(normalizedRepositoryPath),
-                    2500,
-                    'Repository registration timed out.'
-                )
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async inspectRepositoryPath(repositoryPath: string): Promise<Repository> {
-        const normalizedRepositoryPath = repositoryPath.trim();
-        if (!normalizedRepositoryPath) {
-            throw new Error('Repository registration requires a repositoryPath.');
-        }
-
-        const resolvedRepositoryPath = path.resolve(normalizedRepositoryPath);
-        if (!fs.existsSync(resolvedRepositoryPath)) {
-            throw new Error(`Local checkout path '${normalizedRepositoryPath}' does not exist on the daemon host.`);
-        }
-
-        const repositoryRootPath = resolveGitWorkspaceRoot(resolvedRepositoryPath);
-        if (!repositoryRootPath) {
-            throw new Error(`Mission could not resolve a Git repository from '${normalizedRepositoryPath}'. Select the local checkout root on disk.`);
-        }
-
-        const repositoryIdentity = deriveRepositoryIdentity(repositoryRootPath);
-        return repositorySchema.parse({
-            repositoryId: repositoryIdentity.repositoryId,
-            repositoryRootPath: repositoryIdentity.repositoryRootPath,
-            label: repositoryIdentity.githubRepository?.split('/').pop()
-                ?? (path.basename(repositoryIdentity.repositoryRootPath) || repositoryIdentity.repositoryRootPath),
-            description: repositoryIdentity.githubRepository ?? repositoryIdentity.repositoryRootPath,
-            ...(repositoryIdentity.githubRepository ? { githubRepository: repositoryIdentity.githubRepository } : {})
-        });
-    }
 
     public async openEventSubscription(input: {
         missionId?: string;
@@ -201,39 +66,21 @@ export class DaemonGateway {
         sessionId: string;
         surfacePath?: string;
     }): Promise<MissionSessionTerminalSnapshot> {
-        const missionId = input.missionId.trim();
-        const sessionId = input.sessionId.trim();
-        if (!missionId || !sessionId) {
-            return agentSessionTerminalSnapshotSchema.parse({
-                missionId,
-                sessionId,
-                connected: false,
-                dead: true,
-                exitCode: null,
-                screen: ''
-            });
-        }
-
         const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const state = await withTimeout(
-                api.mission.getSessionTerminalState({ missionId }, sessionId),
+            return agentSessionTerminalSnapshotSchema.parse(await withTimeout(
+                api.entity.query({
+                    entity: 'AgentSession',
+                    method: 'readTerminal',
+                    payload: {
+                        missionId: input.missionId,
+                        sessionId: input.sessionId
+                    }
+                }),
                 2500,
                 'Mission terminal snapshot request timed out.'
-            );
-            if (!state) {
-                return agentSessionTerminalSnapshotSchema.parse({
-                    missionId,
-                    sessionId,
-                    connected: false,
-                    dead: true,
-                    exitCode: null,
-                    screen: ''
-                });
-            }
-
-            return toMissionSessionTerminalSnapshot(missionId, sessionId, state);
+            ));
         } finally {
             daemon.dispose();
         }
@@ -248,29 +95,25 @@ export class DaemonGateway {
         rows?: number;
         surfacePath?: string;
     }): Promise<MissionSessionTerminalSnapshot> {
-        const missionId = input.missionId.trim();
-        const sessionId = input.sessionId.trim();
         const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const state = await withTimeout(
-                api.mission.sendSessionTerminalInput(
-                    { missionId },
-                    sessionId,
-                    {
+            return agentSessionTerminalSnapshotSchema.parse(await withTimeout(
+                api.entity.command({
+                    entity: 'AgentSession',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId: input.missionId,
+                        sessionId: input.sessionId,
                         ...(input.data !== undefined ? { data: input.data } : {}),
                         ...(input.literal !== undefined ? { literal: input.literal } : {}),
                         ...(input.cols !== undefined ? { cols: input.cols } : {}),
                         ...(input.rows !== undefined ? { rows: input.rows } : {})
                     }
-                ),
+                }),
                 2500,
                 'Mission terminal input request timed out.'
-            );
-            if (!state) {
-                throw new Error(`Mission session '${sessionId}' is not available as a terminal-backed session.`);
-            }
-            return toMissionSessionTerminalSnapshot(missionId, sessionId, state);
+            ));
         } finally {
             daemon.dispose();
         }
@@ -280,36 +123,18 @@ export class DaemonGateway {
         missionId: string;
         surfacePath?: string;
     }): Promise<MissionTerminalSnapshot> {
-        const missionId = input.missionId.trim();
-        if (!missionId) {
-            return missionTerminalSnapshotSchema.parse({
-                missionId,
-                connected: false,
-                dead: true,
-                exitCode: null,
-                screen: ''
-            });
-        }
-
         const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const state = await withTimeout(
-                api.mission.getMissionTerminalState({ missionId }),
+            return missionTerminalSnapshotSchema.parse(await withTimeout(
+                api.entity.command({
+                    entity: 'Mission',
+                    method: 'ensureTerminal',
+                    payload: { missionId: input.missionId }
+                }),
                 2500,
                 'Mission terminal snapshot request timed out.'
-            );
-            if (!state) {
-                return missionTerminalSnapshotSchema.parse({
-                    missionId,
-                    connected: false,
-                    dead: true,
-                    exitCode: null,
-                    screen: ''
-                });
-            }
-
-            return toMissionTerminalSnapshot(missionId, state);
+            ));
         } finally {
             daemon.dispose();
         }
@@ -323,27 +148,24 @@ export class DaemonGateway {
         rows?: number;
         surfacePath?: string;
     }): Promise<MissionTerminalSnapshot> {
-        const missionId = input.missionId.trim();
         const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const state = await withTimeout(
-                api.mission.sendMissionTerminalInput(
-                    { missionId },
-                    {
+            return missionTerminalSnapshotSchema.parse(await withTimeout(
+                api.entity.command({
+                    entity: 'Mission',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId: input.missionId,
                         ...(input.data !== undefined ? { data: input.data } : {}),
                         ...(input.literal !== undefined ? { literal: input.literal } : {}),
                         ...(input.cols !== undefined ? { cols: input.cols } : {}),
                         ...(input.rows !== undefined ? { rows: input.rows } : {})
                     }
-                ),
+                }),
                 2500,
                 'Mission terminal input request timed out.'
-            );
-            if (!state) {
-                throw new Error(`Mission terminal for '${missionId}' is not available.`);
-            }
-            return toMissionTerminalSnapshot(missionId, state);
+            ));
         } finally {
             daemon.dispose();
         }
@@ -359,7 +181,7 @@ export class DaemonGateway {
             occurredAt: event.occurredAt,
             ...(notificationMissionId(event) ? { missionId: notificationMissionId(event) } : {}),
             payload: this.toRuntimeEventPayload(event)
-        });
+        }) as AirportRuntimeEventEnvelope;
     }
 
     private toRuntimeEventPayload(event: AddressedNotification): unknown {
@@ -465,13 +287,30 @@ export class DaemonGateway {
             throw new Error('Repository access requires a repositoryId.');
         }
 
-        const airportHome = await this.getAirportHomeSnapshot();
-        const repository = airportHome.repositories.find((candidate) => candidate.repositoryId === repositoryId);
-        if (!repository) {
-            throw new Error(`Repository '${repositoryId}' is not registered in Airport.`);
-        }
+        const daemon = await this.connectSharedDaemonClient();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const snapshot = repositorySnapshotSchema.parse(
+                await withTimeout(
+                    api.entity.query({
+                        entity: 'Repository',
+                        method: 'read',
+                        payload: { repositoryId }
+                    }),
+                    2500,
+                    `Repository '${repositoryId}' read timed out.`
+                )
+            );
 
-        return repository;
+            return this.toRepositorySnapshot(snapshot.repository);
+        } catch (error) {
+            if (error instanceof Error && /not found/i.test(error.message)) {
+                throw new Error(`Repository '${repositoryId}' is not registered in Airport.`);
+            }
+            throw error;
+        } finally {
+            daemon.dispose();
+        }
     }
 
     private toRepositorySnapshot(repository: Repository): Repository {
@@ -559,52 +398,6 @@ function hasAddressMetadata(event: Notification): event is AddressedNotification
         && typeof candidate.channel === 'string' && candidate.channel.trim().length > 0
         && typeof candidate.eventName === 'string' && candidate.eventName.trim().length > 0
         && typeof candidate.occurredAt === 'string' && candidate.occurredAt.trim().length > 0;
-}
-
-function toMissionTerminalSnapshot(
-    missionId: string,
-    state: MissionAgentTerminalState
-): MissionTerminalSnapshot {
-    const terminalScreen = clipTerminalScreen(state.screen);
-    return missionTerminalSnapshotSchema.parse({
-        missionId,
-        connected: state.connected,
-        dead: state.dead,
-        exitCode: state.dead ? state.exitCode : null,
-        screen: terminalScreen.screen,
-        ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-        ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-    });
-}
-
-function toMissionSessionTerminalSnapshot(
-    missionId: string,
-    sessionId: string,
-    state: MissionAgentTerminalState
-): MissionSessionTerminalSnapshot {
-    const terminalScreen = clipMissionSessionTerminalScreen(state);
-    return agentSessionTerminalSnapshotSchema.parse({
-        missionId,
-        sessionId,
-        connected: state.connected,
-        dead: state.dead,
-        exitCode: state.dead ? state.exitCode : null,
-        screen: terminalScreen.screen,
-        ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
-        ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-    });
-}
-
-function clipMissionSessionTerminalScreen(state: {
-    connected: boolean;
-    dead: boolean;
-    screen: string;
-}): { screen: string; truncated: boolean } {
-    if (!state.connected && state.dead) {
-        return { screen: state.screen, truncated: false };
-    }
-
-    return clipTerminalScreen(state.screen);
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

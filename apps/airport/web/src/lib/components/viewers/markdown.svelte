@@ -2,7 +2,8 @@
 <script lang="ts">
     import { mode } from "mode-watcher";
     import { marked } from "marked";
-    import sanitizeHtml from "sanitize-html";
+    import { browser } from "$app/environment";
+    import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
     import { renderMermaidDiagrams } from "../../utils/mermaid.ts";
     import { tick } from "svelte";
 
@@ -16,37 +17,56 @@
 
     const markdownDocument = $derived.by(() => splitFrontmatter(source ?? ""));
 
-    const rendered = $derived.by(() =>
-        sanitizeHtml(
-            marked.parse(markdownDocument.body, {
-                breaks: true,
-                gfm: true,
-            }) as string,
-            {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-                    "h1",
-                    "h2",
-                    "h3",
-                    "h4",
-                    "h5",
-                    "h6",
-                    "img",
-                    "table",
-                    "thead",
-                    "tbody",
-                    "tr",
-                    "th",
-                    "td",
-                ]),
-                allowedAttributes: {
-                    ...sanitizeHtml.defaults.allowedAttributes,
-                    a: ["href", "name", "target", "rel"],
-                    img: ["src", "alt", "title"],
-                },
-                allowedSchemes: ["http", "https", "mailto"],
-            },
-        ),
-    );
+    const rendered = $derived.by(() => {
+        const html = marked.parse(markdownDocument.body, {
+            breaks: true,
+            gfm: true,
+        }) as string;
+
+        return browser
+            ? sanitizeBrowserHtml(html, {
+                  allowedTags: [
+                      "a",
+                      "blockquote",
+                      "br",
+                      "code",
+                      "dd",
+                      "del",
+                      "div",
+                      "dl",
+                      "dt",
+                      "em",
+                      "h1",
+                      "h2",
+                      "h3",
+                      "h4",
+                      "h5",
+                      "h6",
+                      "hr",
+                      "img",
+                      "li",
+                      "ol",
+                      "p",
+                      "pre",
+                      "span",
+                      "strong",
+                      "table",
+                      "tbody",
+                      "td",
+                      "th",
+                      "thead",
+                      "tr",
+                      "ul",
+                  ],
+                  allowedAttributes: {
+                      "*": ["class"],
+                      a: ["href", "name", "target", "rel"],
+                      img: ["src", "alt", "title"],
+                  },
+                  allowedSchemes: ["http", "https", "mailto"],
+              })
+            : "";
+    });
 
     function splitFrontmatter(content: string): MarkdownDocument {
         const normalized = content.replace(/\r\n/g, "\n");

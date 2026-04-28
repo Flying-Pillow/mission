@@ -3,7 +3,7 @@
     import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
     import XIcon from "@tabler/icons-svelte/icons/x";
     import { enhance } from "$app/forms";
-    import type { Component } from "svelte";
+    import { onMount, type Component } from "svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -11,13 +11,19 @@
 
     let {
         selectedIssue,
-        MarkdownViewer,
         onClose,
     }: {
         selectedIssue: SelectedIssueSummary;
-        MarkdownViewer: Component<{ source: string }> | null;
         onClose: () => void;
     } = $props();
+
+    let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
+
+    onMount(async () => {
+        MarkdownViewer = (
+            await import("$lib/components/viewers/markdown.svelte")
+        ).default;
+    });
 </script>
 
 <section

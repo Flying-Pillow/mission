@@ -1,23 +1,8 @@
 import type {
 	SystemSnapshot,
-	GateIntent,
-	OperatorActionExecutionStep,
-	OperatorActionQueryContext,
-	MissionBrief,
-	MissionSelector,
-	OperatorStatus
 } from '../../types.js';
 import type { Mission } from '../../entities/Mission/Mission.js';
-import type {
-	AgentCommand,
-	AgentPrompt
-} from '../runtime/agent/AgentRuntimeTypes.js';
-import type {
-	WorkflowSettingsInitializeRequest,
-	WorkflowSettingsInitializeResult,
-	WorkflowSettingsUpdateRequest,
-	WorkflowSettingsUpdateResult
-} from '../../settings/types.js';
+import type { WorkflowSettingsUpdateRequest } from '../../settings/types.js';
 import type {
 	EntityCommandInvocation,
 	EntityFormInvocation,
@@ -31,24 +16,24 @@ import type {
 import type {
 	AgentSessionEntityReference,
 	MissionAgentSessionSnapshot
-} from '../../entities/AgentSession/AgentSessionContract.js';
+} from '../../entities/AgentSession/AgentSessionSchema.js';
 import type {
 	ArtifactEntityReference,
 	MissionArtifactSnapshot
-} from '../../entities/Artifact/ArtifactContract.js';
+} from '../../entities/Artifact/ArtifactSchema.js';
 import type {
 	MissionActionListSnapshot,
 	MissionEntityReference,
 	MissionSnapshot
-} from '../../entities/Mission/MissionContract.js';
+} from '../../entities/Mission/MissionSchema.js';
 import type {
 	MissionStageSnapshot,
 	StageEntityReference
-} from '../../entities/Stage/StageContract.js';
+} from '../../entities/Stage/StageSchema.js';
 import type {
 	MissionTaskSnapshot,
 	TaskEntityReference
-} from '../../entities/Task/TaskContract.js';
+} from '../../entities/Task/TaskSchema.js';
 
 export {
 	METHOD_METADATA,
@@ -347,177 +332,10 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export type MissionSelect = {
-	selector?: MissionSelector;
-};
-
-export type MissionFromBriefRequest = {
-	brief: MissionBrief;
-	branchRef?: string;
-};
-
-export type MissionFromIssueRequest = {
-	issueNumber: number;
-};
-
-export type ControlSettingsUpdate = {
-	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'missionWorkspaceRoot' | 'instructionsPath' | 'skillsPath';
-	value: string;
-};
-
-export type ControlDocumentRead = {
-	filePath: string;
-};
-
-export type ControlDocumentWrite = {
-	filePath: string;
-	content: string;
-};
-
-export type SessionComplete = SessionSelect;
-
-export type ControlDocumentResponse = {
-	filePath: string;
-	content: string;
-	updatedAt?: string;
-};
-
-export type ControlWorkflowSettingsGet = Record<string, never>;
-
-export type ControlStatus = {
-	includeMissions?: boolean;
-};
-
 export type EntityQueryRequest = EntityQueryInvocation;
 export type EntityCommandRequest = EntityCommandInvocation | EntityFormInvocation;
 export type EntityQueryResponse = EntityRemoteResult;
 export type EntityCommandResponse = EntityRemoteResult;
-
-export type ControlWorkflowSettingsInitialize = WorkflowSettingsInitializeRequest;
-
-export type ControlWorkflowSettingsInitializeResponse = WorkflowSettingsInitializeResult & {
-	status: OperatorStatus;
-};
-
-export type ControlWorkflowSettingsUpdate = WorkflowSettingsUpdateRequest;
-
-export type ControlWorkflowSettingsUpdateResponse = WorkflowSettingsUpdateResult & {
-	status: OperatorStatus;
-};
-
-export type MissionGateEvaluate = MissionSelect & {
-	intent: GateIntent;
-};
-
-export type ControlActionList = {
-	context?: OperatorActionQueryContext;
-};
-
-export type ControlActionExecute = {
-	actionId: string;
-	steps?: OperatorActionExecutionStep[];
-};
-
-export type ControlActionDescribe = {
-	actionId: string;
-	steps?: OperatorActionExecutionStep[];
-};
-
-export type MissionActionList = MissionSelect & {
-	context?: OperatorActionQueryContext;
-};
-
-export type MissionActionExecute = MissionSelect & {
-	actionId: string;
-	steps?: OperatorActionExecutionStep[];
-	terminalSessionName?: string;
-};
-
-export type TaskSelect = MissionSelect & {
-	taskId: string;
-};
-
-export type SessionSelect = MissionSelect & {
-	sessionId: string;
-};
-
-export type SessionConsoleState = SessionSelect;
-
-export type SessionTerminalState = SessionSelect;
-
-export type MissionTerminalStateRequest = MissionSelect;
-
-export type SessionTerminalInput = SessionSelect & {
-	data?: string;
-	literal?: boolean;
-	cols?: number;
-	rows?: number;
-	respondWithState?: boolean;
-};
-
-export type MissionTerminalInput = MissionSelect & {
-	data?: string;
-	literal?: boolean;
-	cols?: number;
-	rows?: number;
-	respondWithState?: boolean;
-};
-
-export type SessionPrompt = SessionSelect & {
-	prompt: AgentPrompt;
-};
-
-export type SessionCommand = SessionSelect & {
-	command: AgentCommand;
-};
-
-export type SessionControl = SessionSelect & {
-	reason?: string;
-};
-
-export type MissionAgentSessionCommandRequest = {
-	kind: AgentCommand['type'];
-	metadata?: Record<string, MissionAgentPrimitiveValue>;
-};
-
-export type ControlRepositoriesList = Record<string, never>;
-
-export type ControlGitHubIssueDetail = {
-	issueNumber: number;
-};
-
-export type ControlRepositoriesAdd = {
-	repositoryPath: string;
-};
-
-export type ControlIssuesList = {
-	limit?: number;
-};
-
-export type AirportClientConnect = {
-	paneId: 'tower' | 'briefingRoom' | 'runway';
-	label?: string;
-	panelProcessId?: string;
-	terminalPaneId?: number;
-	terminalSessionName?: string;
-};
-
-export type AirportClientObserve = {
-	focusedPaneId?: 'tower' | 'briefingRoom' | 'runway';
-	intentPaneId?: 'tower' | 'briefingRoom' | 'runway';
-	repositoryId?: string;
-	terminalPaneId?: number;
-	terminalSessionName?: string;
-};
-
-export type AirportPaneBind = {
-	paneId: 'briefingRoom' | 'runway';
-	binding: {
-		targetKind: 'empty' | 'repository' | 'mission' | 'task' | 'artifact' | 'agentSession';
-		targetId?: string;
-		mode?: 'view' | 'control';
-	};
-};
 
 export type Notification =
 	| {
@@ -608,7 +426,7 @@ export type Notification =
 		type: 'control.workflow.settings.updated';
 		revision: string;
 		changedPaths: string[];
-		context: ControlWorkflowSettingsUpdate['context'];
+		context: WorkflowSettingsUpdateRequest['context'];
 	};
 
 export type AddressedNotification = Notification & EntityEventAddress & {

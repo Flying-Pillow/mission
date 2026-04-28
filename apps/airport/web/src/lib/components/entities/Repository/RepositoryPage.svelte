@@ -14,7 +14,10 @@
     const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
     const repository = $derived.by(() => {
         const activeRepository = appContext.airport.activeRepository;
-        if (!activeRepository || activeRepository.repositoryId !== repositoryId) {
+        if (
+            !activeRepository ||
+            activeRepository.repositoryId !== repositoryId
+        ) {
             return null;
         }
 
@@ -46,7 +49,8 @@
             try {
                 await appContext.application.openRepositoryRoute(repositoryId);
             } catch (error) {
-                pageLoadError = error instanceof Error ? error.message : String(error);
+                pageLoadError =
+                    error instanceof Error ? error.message : String(error);
             } finally {
                 pageLoading = false;
             }
@@ -106,7 +110,6 @@
                     {#if selectedIssue}
                         <IssuePreview
                             {selectedIssue}
-                            {MarkdownViewer}
                             onClose={closeIssuePreview}
                         />
                     {:else}

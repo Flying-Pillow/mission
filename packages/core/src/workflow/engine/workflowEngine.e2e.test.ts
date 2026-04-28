@@ -109,6 +109,15 @@ describe('workflow engine e2e', () => {
             'stop audit and relaunch',
             'audit/01'
         );
+        expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('ready');
+
+        document = await controller.applyEvent({
+            eventId: 'task.queued:audit/01:2026-04-14T10:05:30.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T10:05:30.000Z',
+            source: 'human',
+            taskId: 'audit/01'
+        });
         expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('running');
 
         document = await completeTask(controller, 'audit/01', executor.requireSessionId('audit/01'), '2026-04-14T10:06:00.000Z');
@@ -182,6 +191,15 @@ describe('workflow engine e2e', () => {
             'reset session',
             'prd/01'
         );
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
+
+        document = await controller.applyEvent({
+            eventId: 'task.queued:prd/01:2026-04-14T11:01:30.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T11:01:30.000Z',
+            source: 'human',
+            taskId: 'prd/01'
+        });
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
         document = await completeTask(controller, 'prd/01', executor.requireSessionId('prd/01'), '2026-04-14T11:02:00.000Z');

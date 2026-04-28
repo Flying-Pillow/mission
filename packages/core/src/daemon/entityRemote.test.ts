@@ -11,8 +11,8 @@ import { PROTOCOL_VERSION } from './protocol/transport.js';
 import type {
 	MissionCommandAcknowledgement,
 	MissionSnapshot,
-} from '../entities/Mission/MissionContract.js';
-import { repositoryMissionStartAcknowledgementSchema } from '../entities/Repository/RepositoryContract.js';
+} from '../entities/Mission/MissionSchema.js';
+import { repositoryMissionStartAcknowledgementSchema } from '../entities/Repository/RepositorySchema.js';
 
 describe('daemon entity dispatch', () => {
 	it('uses the bumped daemon protocol version', () => {

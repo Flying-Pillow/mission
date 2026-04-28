@@ -284,10 +284,13 @@ export class Mission implements EntityModel<MissionSnapshot> {
     public get commands(): EntityCommandDescriptor[] {
         const commands = this.snapshot.mission.commands;
         if (commands) {
-            return structuredClone(commands);
+            return structuredClone($state.snapshot(commands));
         }
 
-        const actions = this.projectionSnapshot?.actions ?? this.snapshot.actions;
+        const projectionSnapshot = this.projectionSnapshotState
+            ? $state.snapshot(this.projectionSnapshotState)
+            : undefined;
+        const actions = projectionSnapshot?.actions ?? this.snapshot.actions;
         return (actions?.actions ?? [])
             .filter(isMissionScopedAction)
             .map(toMissionCommandDescriptor);

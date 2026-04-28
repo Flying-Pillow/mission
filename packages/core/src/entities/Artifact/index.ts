@@ -1,2 +1,1 @@
-export * from './Artifact.js';
-export * from './ArtifactContract.js';
+export * from './ArtifactSchema.js';
