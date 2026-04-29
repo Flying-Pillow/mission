@@ -1,4 +1,4 @@
-import type { EntityContract } from '../Entity/EntityContract.js';
+import type { EntitySchema } from '../Entity/EntitySchema.js';
 import {
     missionStageEntityName,
     stageIdentityPayloadSchema,
@@ -7,15 +7,15 @@ import {
     stageCommandAcknowledgementSchema
 } from './StageSchema.js';
 
-export const stageEntityContract: EntityContract = {
+export const stageEntityContract: EntitySchema = {
     entity: missionStageEntityName,
     queries: {
         read: {
             payload: stageIdentityPayloadSchema,
             result: missionStageSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     return missionStageSnapshotSchema.parse(service.requireStage(await service.buildMissionSnapshot(mission, payload.missionId), payload.stageId));
                 } finally {
@@ -29,8 +29,8 @@ export const stageEntityContract: EntityContract = {
             payload: stageExecuteCommandPayloadSchema,
             result: stageCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     service.requireStage(await service.buildMissionSnapshot(mission, payload.missionId), payload.stageId);
                     await mission.executeAction(resolveStageActionId(payload.commandId, payload.stageId), []);
@@ -58,7 +58,7 @@ function resolveStageActionId(commandId: string, stageId: string): string {
     throw new Error(`Stage command '${commandId}' is not implemented in the daemon.`);
 }
 
-async function loadMissionDaemonService(context: Parameters<typeof import('../../daemon/runtime/mission/MissionDaemonService.js').requireMissionDaemonService>[0]) {
-    const { requireMissionDaemonService } = await import('../../daemon/runtime/mission/MissionDaemonService.js');
-    return requireMissionDaemonService(context);
+async function loadMissionDaemon(context: Parameters<typeof import('../../daemon/MissionDaemon.js').requireMissionDaemon>[0]) {
+    const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+    return requireMissionDaemon(context);
 }

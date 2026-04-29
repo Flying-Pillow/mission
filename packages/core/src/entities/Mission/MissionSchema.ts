@@ -22,7 +22,23 @@ import {
     missionTaskSnapshotSchema,
     taskEntityReferenceSchema
 } from '../Task/TaskSchema.js';
+import {
+    MissionStateDataSchema,
+    MissionWorkflowEventRecordSchema
+} from '../../workflow/engine/types.js';
+import type {
+    MissionLifecycleState,
+    MissionStageId,
+    MissionType
+} from '../../types.js';
+import type { AgentSessionData } from '../AgentSession/AgentSessionData.js';
+import type { Artifact } from '../Artifact/Artifact.js';
+import type { Stage } from '../Stage/Stage.js';
 export const missionEntityName = 'Mission' as const;
+
+export const missionStateDataSchema = MissionStateDataSchema;
+
+export const missionEventRecordSchema = MissionWorkflowEventRecordSchema;
 
 export const missionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
 
@@ -230,6 +246,42 @@ export const missionDescriptorSchema = z.object({
     recommendedAction: z.string().trim().min(1).optional(),
     commands: z.array(entityCommandDescriptorSchema).optional()
 }).strict();
+
+export type MissionData = {
+    missionId: string;
+    title?: string;
+    issueId?: number;
+    type?: MissionType;
+    operationalMode?: string;
+    branchRef?: string;
+    missionDir?: string;
+    missionRootDir?: string;
+    lifecycle?: MissionLifecycleState;
+    updatedAt?: string;
+    currentStageId?: MissionStageId;
+    artifacts: Artifact[];
+    stages: Stage[];
+    agentSessions: AgentSessionData[];
+    recommendedAction?: string;
+};
+
+export const missionDataSchema: z.ZodType<MissionData> = z.object({
+    missionId: z.string().trim().min(1),
+    title: z.string().trim().min(1).optional(),
+    issueId: z.number().int().positive().optional(),
+    type: missionEntityTypeSchema.optional(),
+    operationalMode: z.string().trim().min(1).optional(),
+    branchRef: z.string().trim().min(1).optional(),
+    missionDir: z.string().trim().min(1).optional(),
+    missionRootDir: z.string().trim().min(1).optional(),
+    lifecycle: z.string().trim().min(1).optional(),
+    updatedAt: z.string().trim().min(1).optional(),
+    currentStageId: z.string().trim().min(1).optional(),
+    artifacts: z.array(missionArtifactSnapshotSchema),
+    stages: z.array(missionStageSnapshotSchema),
+    agentSessions: z.array(missionAgentSessionSnapshotSchema),
+    recommendedAction: z.string().trim().min(1).optional()
+}).strict() as z.ZodType<MissionData>;
 
 export type MissionWorktreeNodeData = {
     name: string;

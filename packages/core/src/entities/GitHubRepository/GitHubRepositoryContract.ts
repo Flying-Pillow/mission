@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { EntityContract } from '../Entity/EntityContract.js';
+import type { EntitySchema } from '../Entity/EntitySchema.js';
 import {
     gitHubRepositoryClonePayloadSchema,
     gitHubRepositoryEntityName,
@@ -10,7 +10,7 @@ import { repositorySnapshotSchema } from '../Repository/RepositorySchema.js';
 
 type GitHubRepositoryEntity = typeof import('./GitHubRepository.js')['GitHubRepository'];
 
-export const gitHubRepositoryEntityContract: EntityContract = {
+export const gitHubRepositoryEntityContract: EntitySchema = {
     entity: gitHubRepositoryEntityName,
     queries: {
         find: {

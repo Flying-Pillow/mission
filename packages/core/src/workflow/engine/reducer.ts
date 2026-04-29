@@ -254,6 +254,7 @@ class MissionWorkflowTransitionEngine {
                         ? {
                             ...task,
                             lifecycle: 'running',
+                            startedAt: task.startedAt ?? event.occurredAt,
                             updatedAt: event.occurredAt
                         }
                         : task

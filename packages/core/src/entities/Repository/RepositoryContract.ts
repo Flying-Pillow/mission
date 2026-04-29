@@ -1,78 +1,109 @@
-import { z } from 'zod/v4';
-import type { EntityContract } from '../Entity/EntityContract.js';
+import type { EntitySchema } from '../Entity/EntitySchema.js';
+import { Repository } from './Repository.js';
 import {
     githubIssueDetailSchema,
     repositoryAddPayloadSchema,
+    repositoryDataSchema,
     repositoryEntityName,
     repositoryFindPayloadSchema,
     repositoryGetIssuePayloadSchema,
     repositoryListIssuesPayloadSchema,
     repositoryMissionStartAcknowledgementSchema,
+    repositoryRemoveAcknowledgementSchema,
+    repositoryRemovePayloadSchema,
     repositoryReadPayloadSchema,
     repositorySnapshotSchema,
     repositoryStartMissionFromBriefPayloadSchema,
     repositoryStartMissionFromIssuePayloadSchema,
-    trackedIssueSummarySchema,
-    type RepositoryReadPayload
+    trackedIssueSummarySchema
 } from './RepositorySchema.js';
 
-type RepositoryEntity = typeof import('./Repository.js')['Repository'];
-
-export const repositoryEntityContract: EntityContract = {
+export const repositoryContract: EntitySchema = {
     entity: repositoryEntityName,
-    queries: {
+    entityClass: Repository,
+    properties: Object.fromEntries(
+        Object.entries(repositoryDataSchema.shape).map(([name, schema]) => [
+            name,
+            {
+                schema,
+                readonly: true
+            }
+        ])
+    ),
+    methods: {
         find: {
+            kind: 'query',
             payload: repositoryFindPayloadSchema,
-            result: z.array(repositorySnapshotSchema),
-            execute: async (payload, context) => (await loadRepositoryEntity()).find(payload, context)
+            result: repositorySnapshotSchema.array(),
+            execution: 'class'
         },
         read: {
+            kind: 'query',
             payload: repositoryReadPayloadSchema,
             result: repositorySnapshotSchema,
-            execute: async (payload) => (await resolveRepository(payload, 'read')).read(payload)
+            execution: 'entity'
         },
         listIssues: {
+            kind: 'query',
             payload: repositoryListIssuesPayloadSchema,
-            result: z.array(trackedIssueSummarySchema),
-            execute: async (payload, context) => (await resolveRepository(payload, 'listIssues')).listIssues(payload, context)
+            result: trackedIssueSummarySchema.array(),
+            execution: 'entity'
         },
         getIssue: {
+            kind: 'query',
             payload: repositoryGetIssuePayloadSchema,
             result: githubIssueDetailSchema,
-            execute: async (payload, context) => (await resolveRepository(payload, 'getIssue')).getIssue(payload, context)
-        }
-    },
-    commands: {
+            execution: 'entity'
+        },
         add: {
+            kind: 'mutation',
             payload: repositoryAddPayloadSchema,
             result: repositorySnapshotSchema,
-            execute: async (payload, context) => (await loadRepositoryEntity()).add(payload, context)
+            execution: 'class',
+            ui: {
+                label: 'Add Repository',
+                iconHint: 'folder-plus',
+                presentationOrder: 0
+            }
+        },
+        remove: {
+            kind: 'mutation',
+            payload: repositoryRemovePayloadSchema,
+            result: repositoryRemoveAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Remove Repository',
+                variant: 'destructive',
+                iconHint: 'trash-2',
+                presentationOrder: 90
+            }
         },
         startMissionFromIssue: {
+            kind: 'mutation',
             payload: repositoryStartMissionFromIssuePayloadSchema,
             result: repositoryMissionStartAcknowledgementSchema,
-            execute: async (payload, context) => (await resolveRepository(payload, 'startMissionFromIssue')).startMissionFromIssue(payload, context)
+            execution: 'entity',
+            ui: {
+                label: 'Start Mission From Issue',
+                iconHint: 'circle-play',
+                presentationOrder: 10
+            }
         },
         startMissionFromBrief: {
+            kind: 'mutation',
             payload: repositoryStartMissionFromBriefPayloadSchema,
             result: repositoryMissionStartAcknowledgementSchema,
-            execute: async (payload, context) => (await resolveRepository(payload, 'startMissionFromBrief')).startMissionFromBrief(payload, context)
+            execution: 'entity',
+            ui: {
+                label: 'Start Mission From Brief',
+                iconHint: 'file-plus-2',
+                presentationOrder: 20
+            }
+        }
+    },
+    events: {
+        missionStarted: {
+            payload: repositoryMissionStartAcknowledgementSchema
         }
     }
 };
-
-async function resolveRepository(payload: RepositoryReadPayload, method: string): Promise<InstanceType<RepositoryEntity>> {
-    const RepositoryClass = await loadRepositoryEntity();
-    const repository = await RepositoryClass.resolve({
-        repositoryId: payload.repositoryId,
-        ...(payload.repositoryRootPath ? { repositoryRootPath: payload.repositoryRootPath } : {})
-    });
-    if (!repository) {
-        throw new Error(`Entity '${repositoryEntityName}' could not be resolved for method '${method}'.`);
-    }
-    return repository;
-}
-
-async function loadRepositoryEntity(): Promise<RepositoryEntity> {
-    return (await import('./Repository.js')).Repository;
-}

@@ -1,13 +1,13 @@
-import type { AgentRunner } from '../agent/AgentRunner.js';
-import type { AgentSessionSnapshot } from '../agent/AgentRuntimeTypes.js';
+import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
+import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
 	evaluateMissionTaskStatusIntent,
 	type MissionTaskState,
 	type MissionTaskStatusIntent
-} from '../../../types.js';
-import type { MissionAgentSessionLaunchRequest } from '../../protocol/contracts.js';
-import type { MissionTaskArtifactReference } from '../../../workflow/engine/types.js';
-import { MissionSession } from './MissionSession.js';
+} from '../../types.js';
+import type { MissionAgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
+import type { MissionTaskArtifactReference } from '../../workflow/engine/types.js';
+import { MissionSession } from '../AgentSession/MissionSession.js';
 
 export type MissionTaskLaunchPolicy = {
 	autostart: boolean;

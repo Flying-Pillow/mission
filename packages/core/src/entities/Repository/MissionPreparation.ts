@@ -1,10 +1,9 @@
 import * as path from 'node:path';
-import { MissionRuntime } from './MissionRuntime.js';
-import type { MissionWorkflowBindings } from './MissionRuntime.js';
-import { RepositoryScaffoldingService } from '../../../lib/RepositoryScaffoldingService.js';
-import { readRepositorySettingsDocument } from '../../../lib/daemonConfig.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../../../types.js';
+import { Mission, type MissionWorkflowBindings } from '../Mission/Mission.js';
+import { RepositoryScaffoldingService } from '../../lib/RepositoryScaffoldingService.js';
+import { readRepositorySettingsDocument } from '../../lib/daemonConfig.js';
+import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../../types.js';
 
 export class MissionPreparationService {
 	public constructor(
@@ -26,7 +25,7 @@ export class MissionPreparationService {
 		const baseBranch = this.store.getDefaultBranch();
 		const createdAt = new Date().toISOString();
 		const proposalWorktreePath = this.store.getMissionWorktreePath(missionId);
-		let preparedMission: MissionRuntime | undefined;
+		let preparedMission: Mission | undefined;
 
 		try {
 			await this.store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
@@ -59,7 +58,7 @@ export class MissionPreparationService {
 				createdAt
 			};
 
-			preparedMission = MissionRuntime.hydrate(
+			preparedMission = Mission.hydrate(
 				proposalStore,
 				missionRootDir,
 				descriptor,

@@ -3,14 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultWorkflowSettings } from '../../../workflow/mission/workflow.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../../../lib/repositoryPaths.js';
-import { FakeAgentRunner } from '../agent/testing/FakeAgentRunner.js';
-import type { MissionAgentSessionRecord } from '../../protocol/contracts.js';
-import type { MissionStageStatus, MissionTowerTreeNode } from '../../../types.js';
-import { MissionRuntimeFactory } from './MissionRuntimeFactory.js';
-import type { MissionWorkflowBindings } from './MissionRuntime.js';
+import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { getMissionWorktreesPath } from '../../lib/repositoryPaths.js';
+import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
+import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { MissionStageStatus, MissionTowerTreeNode } from '../../types.js';
+import { Mission } from './Mission.js';
+import type { MissionWorkflowBindings } from './Mission.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
 
@@ -31,7 +31,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(201, 'Mission session compatibility'),
                 branchRef: adapter.deriveMissionBranchName(201, 'Mission session compatibility')
             }, createWorkflowBindings(runner));
@@ -103,7 +103,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(202, 'Mission session cancel'),
                 branchRef: adapter.deriveMissionBranchName(202, 'Mission session cancel')
             }, createWorkflowBindings(runner));
@@ -140,7 +140,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(203, 'Mission stale session relaunch'),
                 branchRef: adapter.deriveMissionBranchName(203, 'Mission stale session relaunch')
             }, createWorkflowBindings(runner));
@@ -184,7 +184,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(204, 'Mission mismatched session workspace'),
                 branchRef: adapter.deriveMissionBranchName(204, 'Mission mismatched session workspace')
             }, createWorkflowBindings(runner));
@@ -228,7 +228,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(203, 'Mission session terminate'),
                 branchRef: adapter.deriveMissionBranchName(203, 'Mission session terminate')
             }, createWorkflowBindings(runner));
@@ -265,7 +265,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(204, 'Mission task launch action'),
                 branchRef: adapter.deriveMissionBranchName(204, 'Mission task launch action')
             }, createWorkflowBindings(runner));
@@ -325,7 +325,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(2041, 'Mission task rework action'),
                 branchRef: adapter.deriveMissionBranchName(2041, 'Mission task rework action')
             }, createWorkflowBindings(runner));
@@ -388,7 +388,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(2042, 'Mission verification-triggered rework action'),
                 branchRef: adapter.deriveMissionBranchName(2042, 'Mission verification-triggered rework action')
             }, createWorkflowBindings(runner));
@@ -414,9 +414,9 @@ describe('Mission', () => {
                     agent: 'copilot-cli'
                 });
 
-                const persisted = await adapter.readMissionRuntimeRecord(missionDir);
+                const persisted = await Mission.readRuntimeData(adapter, missionDir);
                 if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime record.');
+                    throw new Error('Expected a persisted mission runtime data.');
                 }
 
                 persisted.runtime.activeStageId = 'implementation';
@@ -475,12 +475,12 @@ describe('Mission', () => {
                             completedTaskIds: []
                         }
                 );
-                await adapter.writeMissionRuntimeRecord(missionDir, persisted);
+                await Mission.writeRuntimeData(adapter, missionDir, persisted);
             } finally {
                 mission.dispose();
             }
 
-            const reloaded = await MissionRuntimeFactory.load(adapter, { missionId }, createWorkflowBindings(runner));
+            const reloaded = await Mission.load(adapter, { missionId }, createWorkflowBindings(runner));
             if (!reloaded) {
                 throw new Error('Expected mission to reload.');
             }
@@ -532,7 +532,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(2043, 'Mission verification-triggered rework action from file metadata'),
                 branchRef: adapter.deriveMissionBranchName(2043, 'Mission verification-triggered rework action from file metadata')
             }, createWorkflowBindings(runner));
@@ -558,9 +558,9 @@ describe('Mission', () => {
                     agent: 'copilot-cli'
                 });
 
-                const persisted = await adapter.readMissionRuntimeRecord(missionDir);
+                const persisted = await Mission.readRuntimeData(adapter, missionDir);
                 if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime record.');
+                    throw new Error('Expected a persisted mission runtime data.');
                 }
 
                 persisted.runtime.activeStageId = 'implementation';
@@ -615,12 +615,12 @@ describe('Mission', () => {
                             completedTaskIds: []
                         }
                 );
-                await adapter.writeMissionRuntimeRecord(missionDir, persisted);
+                await Mission.writeRuntimeData(adapter, missionDir, persisted);
             } finally {
                 mission.dispose();
             }
 
-            const reloaded = await MissionRuntimeFactory.load(adapter, { missionId }, createWorkflowBindings(runner));
+            const reloaded = await Mission.load(adapter, { missionId }, createWorkflowBindings(runner));
             if (!reloaded) {
                 throw new Error('Expected mission to reload.');
             }
@@ -672,7 +672,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(206, 'Mission tree ordering'),
                 branchRef: adapter.deriveMissionBranchName(206, 'Mission tree ordering')
             }, createWorkflowBindings(runner));
@@ -705,7 +705,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(207, 'Mission empty launch prompt fallback'),
                 branchRef: adapter.deriveMissionBranchName(207, 'Mission empty launch prompt fallback')
             }, createWorkflowBindings(runner));
@@ -744,7 +744,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(205, 'Mission running task launch action'),
                 branchRef: adapter.deriveMissionBranchName(205, 'Mission running task launch action')
             }, createWorkflowBindings(runner));
@@ -782,7 +782,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(208, 'Mission implementation task visibility during planning'),
                 branchRef: adapter.deriveMissionBranchName(208, 'Mission implementation task visibility during planning')
             }, createWorkflowBindings(runner));
@@ -860,7 +860,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(209, 'Mission completes active session on task done'),
                 branchRef: adapter.deriveMissionBranchName(209, 'Mission completes active session on task done')
             }, createWorkflowBindings(runner));
@@ -894,13 +894,13 @@ describe('Mission', () => {
         }
     });
 
-    it('fills missing transport identity for persisted copilot-cli runtime sessions', async () => {
+    it('does not rewrite missing transport identity for persisted runtime sessions', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'terminal');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(206, 'Mission transport identity migration'),
                 branchRef: adapter.deriveMissionBranchName(206, 'Mission transport identity migration')
             }, createWorkflowBindings(runner));
@@ -924,9 +924,9 @@ describe('Mission', () => {
                 });
                 mission.dispose();
 
-                const persisted = await adapter.readMissionRuntimeRecord(missionDir);
+                const persisted = await Mission.readRuntimeData(adapter, missionDir);
                 if (!persisted) {
-                    throw new Error('Expected persisted mission runtime record.');
+                    throw new Error('Expected persisted mission runtime data.');
                 }
                 persisted.runtime.sessions = persisted.runtime.sessions.map((session) =>
                     session.sessionId === launched.sessionId
@@ -939,9 +939,9 @@ describe('Mission', () => {
                 for (const session of persisted.runtime.sessions) {
                     delete (session as { transportId?: string }).transportId;
                 }
-                await adapter.writeMissionRuntimeRecord(missionDir, persisted);
+                await Mission.writeRuntimeData(adapter, missionDir, persisted);
 
-                const reloaded = await MissionRuntimeFactory.load(adapter, { missionId }, createWorkflowBindings(runner));
+                const reloaded = await Mission.load(adapter, { missionId }, createWorkflowBindings(runner));
                 if (!reloaded) {
                     throw new Error('Expected mission to reload.');
                 }
@@ -954,11 +954,12 @@ describe('Mission', () => {
                         transportId: 'terminal'
                     });
 
-                    const migratedDocument = await adapter.readMissionRuntimeRecord(missionDir);
-                    expect(migratedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
-                        runnerId: 'copilot-cli',
-                        transportId: 'terminal'
+                    const persistedDocument = await Mission.readRuntimeData(adapter, missionDir);
+                    const persistedSession = persistedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId);
+                    expect(persistedSession).toMatchObject({
+                        runnerId: 'copilot-cli'
                     });
+                    expect(persistedSession).not.toHaveProperty('transportId');
                 } finally {
                     reloaded.dispose();
                 }
@@ -977,7 +978,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(207, 'Mission status fallback'),
                 branchRef: adapter.deriveMissionBranchName(207, 'Mission status fallback')
             }, createWorkflowBindings(runner));
@@ -1023,7 +1024,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(208, 'Mission live daemon cache'),
                 branchRef: adapter.deriveMissionBranchName(208, 'Mission live daemon cache')
             }, createWorkflowBindings(runner));
@@ -1035,9 +1036,9 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
                 if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime record.');
+                    throw new Error('Expected a persisted mission runtime data.');
                 }
 
                 persisted.runtime.tasks = persisted.runtime.tasks.map((task) =>
@@ -1050,7 +1051,7 @@ describe('Mission', () => {
                         }
                         : task
                 );
-                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
 
                 const status = await mission.status();
                 expect(status.readyTasks?.some((task: { taskId: string }) => task.taskId === taskId)).toBe(true);
@@ -1069,7 +1070,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(209, 'Mission action snapshot freshness'),
                 branchRef: adapter.deriveMissionBranchName(209, 'Mission action snapshot freshness')
             }, createWorkflowBindings(runner));
@@ -1104,7 +1105,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(210, 'Mission awaiting-input session actions'),
                 branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session actions')
             }, createWorkflowBindings(runner));
@@ -1147,7 +1148,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(210, 'Mission delivered action availability'),
                 branchRef: adapter.deriveMissionBranchName(210, 'Mission delivered action availability')
             }, createWorkflowBindings(runner));
@@ -1155,9 +1156,9 @@ describe('Mission', () => {
             try {
                 await mission.startWorkflow();
 
-                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
                 if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime record.');
+                    throw new Error('Expected a persisted mission runtime data.');
                 }
 
                 persisted.runtime = {
@@ -1175,9 +1176,9 @@ describe('Mission', () => {
                     })),
                     updatedAt: '2026-04-20T16:00:00.000Z'
                 };
-                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
 
-                const reloaded = await MissionRuntimeFactory.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
+                const reloaded = await Mission.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
                 if (!reloaded) {
                     throw new Error('Expected mission to reload.');
                 }
@@ -1202,7 +1203,7 @@ describe('Mission', () => {
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
-            const mission = await MissionRuntimeFactory.create(adapter, {
+            const mission = await Mission.create(adapter, {
                 brief: createBrief(211, 'Mission panic action availability'),
                 branchRef: adapter.deriveMissionBranchName(211, 'Mission panic action availability')
             }, createWorkflowBindings(runner));
@@ -1210,9 +1211,9 @@ describe('Mission', () => {
             try {
                 await mission.startWorkflow();
 
-                const persisted = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
                 if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime record.');
+                    throw new Error('Expected a persisted mission runtime data.');
                 }
 
                 persisted.runtime = {
@@ -1220,9 +1221,9 @@ describe('Mission', () => {
                     lifecycle: 'completed',
                     updatedAt: '2026-04-20T16:05:00.000Z'
                 };
-                await adapter.writeMissionRuntimeRecord(mission.getMissionDir(), persisted);
+                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
 
-                const reloaded = await MissionRuntimeFactory.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
+                const reloaded = await Mission.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
                 if (!reloaded) {
                     throw new Error('Expected mission to reload.');
                 }

@@ -10,4 +10,4 @@ Verification tasks must state paired task, focused checks, failure signals, igno
 
 Keep slices small and dependency ordered. Prefer one boundary or responsibility per task.
 
-Only create or update task markdown. The workflow engine owns structured runtime records.
+Only create or update task markdown. The workflow engine owns structured runtime data.

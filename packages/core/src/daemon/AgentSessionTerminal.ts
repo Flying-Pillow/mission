@@ -1,9 +1,10 @@
 import * as path from 'node:path';
-import { TerminalAgentTransport, type TerminalSessionHandle, type TerminalSessionSnapshot } from '../agent/TerminalAgentTransport.js';
-import { MissionAgentEventEmitter } from '../agent/events.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import type { MissionSelector } from '../../../types.js';
-import type { MissionAgentTerminalState } from '../../protocol/contracts.js';
+import { TerminalAgentTransport, type TerminalSessionHandle, type TerminalSessionSnapshot } from './runtime/agent/TerminalAgentTransport.js';
+import { MissionAgentEventEmitter } from './runtime/agent/events.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { Mission } from '../entities/Mission/Mission.js';
+import type { MissionSelector } from '../types.js';
+import type { MissionAgentTerminalState } from './protocol/contracts.js';
 
 type AgentSessionTerminalInput = {
     sessionId?: string;
@@ -115,7 +116,7 @@ async function resolveAgentSessionTerminalRecord(input: {
         return undefined;
     }
 
-    const eventLog = await adapter.readMissionRuntimeEventLog(mission.missionDir).catch(() => []);
+    const eventLog = await Mission.readEventLog(adapter, mission.missionDir).catch(() => []);
     const startedEvent = [...eventLog].reverse().find((event) => {
         const payload = event.payload as { sessionId?: unknown; terminalSessionName?: unknown } | undefined;
         return event.type === 'session.started'

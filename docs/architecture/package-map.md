@@ -23,6 +23,7 @@ Mission's architecture is split along package boundaries that mirror its runtime
 | Folder | Responsibility |
 | --- | --- |
 | `src/daemon` | IPC server, daemon protocol, system control-plane coordination, and daemon process/runtime entrypoints |
+| `src/daemon/runtime/mission` | MissionRuntime orchestration, Mission worktree/session runtime services, MissionDossier schema-aware dossier I/O, and per-Mission dossier-backed state-store checkpointing |
 | `src/workspace` | Repository discovery, workspace routing, and repository-scoped control facade (`WorkspaceManager`, `MissionWorkspace`) |
 | `src/mission` | Mission aggregate wrappers such as `Mission`, `MissionTask`, `MissionSession`, and `Artifact` |
 | `src/repository` | Repository initialization and bootstrap preparation services |
@@ -30,7 +31,7 @@ Mission's architecture is split along package boundaries that mirror its runtime
 | `src/workflow/engine` | Workflow document, reducer ingestion, request execution, generation, validation |
 | `src/client` | IPC client and namespaced API surfaces |
 | `src/settings` | Repository workflow settings initialization, patching, revision control, validation |
-| `src/lib` | Shared helpers (paths, config helpers, operator targeting, repo/workspace utilities) |
+| `src/lib` | Shared helpers and physical adapters (paths, config helpers, operator targeting, repo/workspace utilities, raw Mission dossier file I/O) |
 | `src/platforms` | External platform adapters (for example GitHub integration) |
 | `src/workflow/templates/mission` | Mission workflow template repository and rendering |
 

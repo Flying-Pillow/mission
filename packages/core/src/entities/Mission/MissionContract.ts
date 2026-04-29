@@ -1,4 +1,4 @@
-import type { EntityContract } from '../Entity/EntityContract.js';
+import type { EntitySchema } from '../Entity/EntitySchema.js';
 import {
     missionEntityName,
     missionActionListSnapshotSchema,
@@ -28,15 +28,15 @@ import type {
 } from './MissionSchema.js';
 import type { OperatorActionExecutionStep } from '../../types.js';
 
-export const missionEntityContract: EntityContract = {
+export const missionEntityContract: EntitySchema = {
     entity: missionEntityName,
     queries: {
         read: {
             payload: missionReadPayloadSchema,
             result: missionSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     return missionSnapshotSchema.parse(await service.buildMissionSnapshot(mission, payload.missionId));
                 } finally {
@@ -48,8 +48,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionReadProjectionPayloadSchema,
             result: missionProjectionSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     const snapshot = await service.buildMissionSnapshot(mission, payload.missionId);
                     return missionProjectionSnapshotSchema.parse({
@@ -68,8 +68,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionListActionsPayloadSchema,
             result: missionActionListSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     return missionActionListSnapshotSchema.parse({
                         ...(await service.buildMissionActionListSnapshot(mission, payload.missionId)),
@@ -84,8 +84,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionReadDocumentPayloadSchema,
             result: missionDocumentSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     await service.assertMissionDocumentPath(payload.path, 'read', service.resolveControlRoot(payload, context));
                     return missionDocumentSnapshotSchema.parse(await service.readMissionDocument(payload.path));
@@ -98,8 +98,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionReadWorktreePayloadSchema,
             result: missionWorktreeSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     const [path, { getMissionWorktreesPath }] = await Promise.all([
                         import('node:path'),
@@ -120,7 +120,7 @@ export const missionEntityContract: EntityContract = {
             payload: missionReadTerminalPayloadSchema,
             result: missionTerminalSnapshotSchema,
             execute: async (payload, context) => {
-                const { readMissionTerminalState } = await import('../../daemon/runtime/mission/MissionTerminalService.js');
+                const { readMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
                 const state = await readMissionTerminalState({
                     surfacePath: context.surfacePath,
                     selector: { missionId: payload.missionId }
@@ -146,8 +146,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     switch (payload.command.action) {
                         case 'pause':
@@ -179,11 +179,11 @@ export const missionEntityContract: EntityContract = {
             payload: missionTaskCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
+                const service = await loadMissionDaemon(context);
                 const terminalSessionName = payload.command.action === 'start'
                     ? payload.command.terminalSessionName
                     : undefined;
-                const mission = await service.loadRequiredMissionRuntime(payload, context, terminalSessionName);
+                const mission = await service.loadRequiredMission(payload, context, terminalSessionName);
                 try {
                     switch (payload.command.action) {
                         case 'start':
@@ -211,8 +211,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionAgentSessionCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     switch (payload.command.action) {
                         case 'complete':
@@ -241,8 +241,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionExecuteActionPayloadSchema,
             result: missionCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context, payload.terminalSessionName);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context, payload.terminalSessionName);
                 try {
                     await mission.executeAction(
                         payload.actionId,
@@ -261,8 +261,8 @@ export const missionEntityContract: EntityContract = {
             payload: missionWriteDocumentPayloadSchema,
             result: missionDocumentSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     await service.assertMissionDocumentPath(payload.path, 'write', service.resolveControlRoot(payload, context));
                     return missionDocumentSnapshotSchema.parse(await service.writeMissionDocument(payload.path, payload.content));
@@ -275,7 +275,7 @@ export const missionEntityContract: EntityContract = {
             payload: missionEnsureTerminalPayloadSchema,
             result: missionTerminalSnapshotSchema,
             execute: async (payload, context) => {
-                const { ensureMissionTerminalState } = await import('../../daemon/runtime/mission/MissionTerminalService.js');
+                const { ensureMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
                 const state = await ensureMissionTerminalState({
                     surfacePath: context.surfacePath,
                     selector: { missionId: payload.missionId }
@@ -299,7 +299,7 @@ export const missionEntityContract: EntityContract = {
             payload: missionSendTerminalInputPayloadSchema,
             result: missionTerminalSnapshotSchema,
             execute: async (payload, context) => {
-                const { sendMissionTerminalInput } = await import('../../daemon/runtime/mission/MissionTerminalService.js');
+                const { sendMissionTerminalInput } = await import('../../daemon/MissionTerminal.js');
                 const state = await sendMissionTerminalInput({
                     surfacePath: context.surfacePath,
                     selector: { missionId: payload.missionId },
@@ -347,7 +347,7 @@ function buildCommandAcknowledgement(
     });
 }
 
-async function loadMissionDaemonService(context: Parameters<typeof import('../../daemon/runtime/mission/MissionDaemonService.js').requireMissionDaemonService>[0]) {
-    const { requireMissionDaemonService } = await import('../../daemon/runtime/mission/MissionDaemonService.js');
-    return requireMissionDaemonService(context);
+async function loadMissionDaemon(context: Parameters<typeof import('../../daemon/MissionDaemon.js').requireMissionDaemon>[0]) {
+    const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+    return requireMissionDaemon(context);
 }

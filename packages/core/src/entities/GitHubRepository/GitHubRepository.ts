@@ -1,4 +1,4 @@
-import { getMissionGitHubCliBinary, listRegisteredRepositories, registerMissionRepo } from '../../lib/config.js';
+import { getMissionGitHubCliBinary } from '../../lib/config.js';
 import { Repository } from '../Repository/Repository.js';
 import {
 	createRepositoryPlatformAdapter,
@@ -32,25 +32,15 @@ export class GitHubRepository {
 			destinationPath: payload.destinationPath
 		});
 
-		await registerMissionRepo(repositoryRootPath);
-		const registeredRepository = (await listRegisteredRepositories()).find(
-			(candidate) => candidate.repositoryRootPath === repositoryRootPath
+		return Repository.add(
+			{ repositoryPath: repositoryRootPath },
+			context?.surfacePath
+				? {
+					surfacePath: context.surfacePath,
+					...(context.authToken ? { authToken: context.authToken } : {})
+				}
+				: undefined
 		);
-		if (!registeredRepository) {
-			throw new Error(`Mission could not register cloned repository '${payload.githubRepository}'.`);
-		}
-
-		const repository = Repository.open(registeredRepository.repositoryRootPath, {
-			label: registeredRepository.label,
-			description: registeredRepository.description,
-			...(registeredRepository.githubRepository
-				? { githubRepository: registeredRepository.githubRepository }
-				: {})
-		});
-		return await repository.read({
-			repositoryId: repository.repositoryId,
-			repositoryRootPath: repository.repositoryRootPath
-		});
 	}
 
 	private static createPlatformAdapter(context?: {

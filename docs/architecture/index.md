@@ -15,7 +15,7 @@ It documents the system as it exists in the repository today across:
 
 - the repository-owned control state under `.mission/`
 - the daemon-owned control plane and system snapshot
-- the mission-local workflow engine and runtime record
+- the mission-local workflow engine and runtime data
 - the provider-neutral agent runtime contract
 - the repository-scoped airport layout authority
 - the Airport terminal surfaces and their client relationship to the daemon

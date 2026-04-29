@@ -71,9 +71,10 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | --- | --- |
 | `configuration` | Frozen workflow settings snapshot used for the mission |
 | `runtime` | Current lifecycle, stage, task, session, gate, pause, and panic state |
-| `eventLog` | Append-only workflow event history |
 
-`mission.json` stores normalized workflow-facing session truth.
+The append-only workflow event history is persisted as the Mission runtime event log beside `mission.json`; it is not an inline `eventLog` field in Mission runtime data.
+
+`mission.json` stores schema-validated workflow-facing session truth.
 
 It does not store provider-native control protocol.
 

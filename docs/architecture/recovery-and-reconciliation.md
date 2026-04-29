@@ -26,7 +26,7 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 ### Mission Recovery
 
 1. `MissionWorkflowController.refresh()` reads `mission.json`.
-2. The document is normalized if persisted session identities need adjustment.
+2. The Mission runtime data must pass strict schema validation; invalid data is rejected instead of normalized.
 3. The controller ensures eligible generated tasks exist for the next incomplete stage.
 4. `reconcileSessions()` asks the runtime executor to compare live runtime sessions against mission runtime state.
 

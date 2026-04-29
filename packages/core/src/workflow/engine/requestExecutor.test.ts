@@ -657,8 +657,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		});
 
 		expect(events).toEqual([]);
@@ -700,8 +699,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		})).resolves.toEqual([]);
 	});
 
@@ -754,8 +752,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		});
 
 		expect(events).toContainEqual(expect.objectContaining({

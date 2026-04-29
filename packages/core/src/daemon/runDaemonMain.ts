@@ -25,7 +25,7 @@ import {
 	type EntityId
 } from '../entities/Entity/Entity.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
-import { MissionDaemonService } from './runtime/mission/MissionDaemonService.js';
+import { MissionDaemon } from './MissionDaemon.js';
 
 type NotificationAddress = {
 	entityId: EntityId;
@@ -34,7 +34,7 @@ type NotificationAddress = {
 };
 
 type DaemonServices = {
-	missionService: MissionDaemonService;
+	missionDaemon: MissionDaemon;
 };
 import {
 	executeEntityCommandInDaemon,
@@ -42,17 +42,17 @@ import {
 } from './entityRemote.js';
 import {
 	observeMissionTerminalUpdates
-} from './runtime/mission/MissionTerminalService.js';
+} from './MissionTerminal.js';
 import {
 	observeAgentSessionTerminalUpdates
-} from './runtime/mission/AgentSessionTerminalService.js';
+} from './AgentSessionTerminal.js';
 
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const socketPath = resolveDaemonSocketPath(readSocketOverride(argv));
 	const manifestPath = getDaemonManifestPath();
 	const startedAt = new Date().toISOString();
 	const logger = new DaemonLogger();
-	const missionService = new MissionDaemonService({ logger });
+	const missionDaemon = new MissionDaemon({ logger });
 	const sockets = new Set<net.Socket>();
 	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
 	let shuttingDown = false;
@@ -75,7 +75,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
 	logger.info('Mission daemon starting.', { pid: process.pid, socketPath });
-	await missionService.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(undefined) });
+	await missionDaemon.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(undefined) });
 	logger.info('Mission daemon hydration completed.');
 	if (!isNamedPipePath(socketPath)) {
 		await fs.rm(socketPath, { force: true }).catch(() => undefined);
@@ -101,7 +101,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 					continue;
 				}
 
-				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionService });
+				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionDaemon });
 			}
 		});
 
@@ -164,7 +164,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 		}
 		shuttingDown = true;
 		logger.info('Mission daemon shutting down.');
-		missionService.dispose();
+		missionDaemon.dispose();
 		missionTerminalUpdates.dispose();
 		sessionTerminalUpdates.dispose();
 		for (const socket of sockets) {
@@ -403,7 +403,7 @@ export async function createResponse(
 						entityQueryInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
-							...(services.missionService ? { missionService: services.missionService } : {}),
+							...(services.missionDaemon ? { missionDaemon: services.missionDaemon } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)
@@ -426,7 +426,7 @@ export async function createResponse(
 							: entityFormInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
-							...(services.missionService ? { missionService: services.missionService } : {}),
+							...(services.missionDaemon ? { missionDaemon: services.missionDaemon } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)

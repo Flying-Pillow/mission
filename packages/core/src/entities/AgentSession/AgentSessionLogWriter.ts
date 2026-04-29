@@ -1,6 +1,6 @@
-import { TerminalAgentTransport, type TerminalSessionSnapshot } from '../agent/TerminalAgentTransport.js';
-import type { MissionAgentSessionRecord } from '../../protocol/contracts.js';
-import type { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
+import { TerminalAgentTransport, type TerminalSessionSnapshot } from '../../daemon/runtime/agent/TerminalAgentTransport.js';
+import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 
 type SessionLogWriterState = {
     session: MissionAgentSessionRecord;
@@ -13,7 +13,7 @@ type SessionLogWriterState = {
 const SESSION_LOG_FLUSH_THRESHOLD_BYTES = 4096;
 const SESSION_LOG_FLUSH_DELAY_MS = 250;
 
-export class MissionSessionLogWriter {
+export class AgentSessionLogWriter {
     private readonly terminalSubscription: { dispose(): void };
     private readonly writers = new Map<string, SessionLogWriterState>();
     private readonly sessionIdsByTerminalName = new Map<string, string>();

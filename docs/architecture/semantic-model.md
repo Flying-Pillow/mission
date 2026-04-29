@@ -19,7 +19,7 @@ The architecture stays coherent only if those layers are not collapsed.
 | Entity | Primary representation | Purpose | Runtime authority |
 | --- | --- | --- | --- |
 | Repository | `RepositoryContext`, repository root path, `.mission/settings.json` | Repository-scoped control plane root | `WorkspaceManager`, `MissionWorkspace` |
-| Mission | `MissionDescriptor`, `MissionRuntimeRecord`, `MissionContext` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
+| Mission | `MissionDescriptor`, `MissionRuntimeData`, `MissionContext` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
 | Stage | `MissionStageId`, `MissionStageRuntimeProjection` | Structural phase boundary derived from task state | Workflow runtime |
 | Task | `MissionTaskRuntimeState`, `MissionTaskState`, `TaskContext` | Atomic unit of executable work | Workflow runtime |
 | Artifact | `MissionArtifactKey`, `ArtifactContext` | Mission output and operator-readable state | Workflow artifact materialization |
@@ -30,7 +30,7 @@ The architecture stays coherent only if those layers are not collapsed.
 | Record | Scope | Why it exists |
 | --- | --- | --- |
 | `MissionDescriptor` | Mission identity | Stable mission metadata such as `missionId`, brief, branch, and creation time |
-| `MissionRuntimeRecord` | Mission persistence | Snapshot of workflow configuration, runtime state, and event log |
+| `MissionRuntimeData` | Mission persistence | Snapshot of workflow configuration, runtime state, and event log |
 | `MissionRecord` | Operator-facing aggregate summary | Mission identity plus current stage and session records |
 | `ContextGraph` | Daemon projection state | Repository, mission, task, artifact, and session selection graph |
 | `OperatorStatus` | Surface-facing response | Aggregated mission status returned by daemon APIs |

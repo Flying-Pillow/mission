@@ -17,7 +17,8 @@ Mission uses a repository-owned control namespace rooted at `.mission/`. That na
 | `.mission/workflow/workflow.json` | Repository-owned workflow definition | `WorkflowSettingsStore` |
 | `.mission/workflow/templates/` | Repository-owned workflow template corpus | repository initialization and workflow preset scaffolding |
 | `.mission/missions/<mission-id>/` | Canonical tracked mission dossier | `Mission`, `FilesystemAdapter`, workflow materializers |
-| `.mission/missions/<mission-id>/mission.json` | Mission runtime record | `MissionWorkflowController` |
+| `.mission/missions/<mission-id>/mission.json` | Mission runtime data | Mission state store runtime dossier checkpointing |
+| `.mission/missions/<mission-id>/mission.events.jsonl` | Mission runtime event log | Mission state store runtime dossier checkpointing |
 | `.mission/missions/<mission-id>/<stage>/...` | Stage artifacts and generated task files | Workflow generation/materialization path |
 | `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` | Machine-local registered repositories and Mission-wide defaults | `config.ts` |
 | External mission worktree root | Local checkout for doing work | Worktree materialization logic, not dossier identity |
@@ -68,20 +69,23 @@ The implementation keeps the dossier root and the mission worktree distinct on p
 | File or folder | Purpose | Produced by |
 | --- | --- | --- |
 | `BRIEF.md` | Intake anchor for the mission | Mission creation flow |
-| `mission.json` | Persistent runtime record | Workflow controller |
+| `mission.json` | Persistent runtime data | Mission state store runtime dossier checkpointing |
+| `mission.events.jsonl` | Append-only runtime event log | Mission state store runtime dossier checkpointing |
 | `01-PRD/PRD.md` | Requirements artifact | Artifact materialization |
 | `02-SPEC/SPEC.md` | Technical specification artifact | Artifact materialization |
 | `03-IMPLEMENTATION/VERIFY.md` | Verification artifact for implementation stage | Artifact materialization |
 | `04-AUDIT/AUDIT.md` | Audit artifact | Artifact materialization |
 | `05-DELIVERY/DELIVERY.md` | Delivery artifact | Artifact materialization |
 | `*/tasks/*.md` | Generated or replayed task records | Workflow task generation path |
+| `session-logs/*.log` | Daemon-owned Agent session audit logs, not Mission artifacts by default | Agent session runtime |
 
 ## Ownership Rules
 
 1. `.mission/settings.json` and `.mission/workflow/` are repository policy, not mission execution history.
-2. `mission.json` is mission execution history, not daemon-wide live state.
+2. `mission.json` and `mission.events.jsonl` are mission execution history, not daemon-wide live state.
 3. Task markdown files are materialized mission artifacts, not the only runtime authority once `mission.json` exists.
-4. Machine-local config remembers repositories and local tool defaults; it is never the repository's source of truth.
+4. Raw Agent session logs are daemon-owned audit material. Curated summaries, extracted test output, patch notes, or implementation notes become Mission artifacts only when explicitly promoted.
+5. Machine-local config remembers repositories and local tool defaults; it is never the repository's source of truth.
 
 ## Relationship To Replay Anchors
 

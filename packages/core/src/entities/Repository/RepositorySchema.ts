@@ -25,7 +25,7 @@ export const repositoryInputSchema = z.object({
     isInitialized: z.boolean().optional()
 }).strict();
 
-export const repositorySchema = z.object({
+export const repositoryStorageSchema = z.object({
     repositoryId: z.string().trim().min(1),
     repositoryRootPath: z.string().trim().min(1),
     ownerId: z.string().trim().min(1),
@@ -37,6 +37,9 @@ export const repositorySchema = z.object({
     workflowConfiguration: repositoryWorkflowConfigurationSchema,
     isInitialized: z.boolean()
 }).strict();
+
+export const repositoryDataSchema = repositoryStorageSchema;
+export const repositorySchema = repositoryDataSchema;
 
 export const missionReferenceSchema = z.object({
     missionId: z.string().trim().min(1),
@@ -57,7 +60,17 @@ export const repositoryRegistrationInputSchema = z.object({
     repositoryPath: z.string().trim().min(1)
 }).strict();
 
-export const repositoryAddPayloadSchema = repositoryRegistrationInputSchema;
+export const repositoryGitHubCheckoutInputSchema = z.object({
+    githubRepository: z.string().trim().min(1),
+    destinationPath: z.string().trim().min(1)
+}).strict();
+
+export const repositoryAddPayloadSchema = z.union([
+    repositoryRegistrationInputSchema,
+    repositoryGitHubCheckoutInputSchema
+]);
+
+export const repositoryRemovePayloadSchema = repositoryIdentityPayloadSchema;
 
 export const repositoryReadPayloadSchema = repositoryIdentityPayloadSchema;
 
@@ -105,7 +118,7 @@ export const githubIssueDetailSchema = z.object({
 }).strict();
 
 export const repositorySnapshotSchema = z.object({
-    repository: repositorySchema,
+    repository: repositoryDataSchema,
     operationalMode: z.string().trim().min(1).optional(),
     controlRoot: z.string().trim().min(1).optional(),
     currentBranch: z.string().trim().min(1).optional(),
@@ -128,6 +141,12 @@ export const repositoryMissionStartAcknowledgementSchema = entityCommandAcknowle
     id: z.string().trim().min(1)
 }).strict();
 
+export const repositoryRemoveAcknowledgementSchema = entityCommandAcknowledgementSchema.extend({
+    entity: z.literal(repositoryEntityName),
+    method: z.literal('remove'),
+    id: z.string().trim().min(1)
+}).strict();
+
 export const repositoryRemoteQueryPayloadSchemas = {
     find: repositoryFindPayloadSchema,
     read: repositoryReadPayloadSchema,
@@ -137,6 +156,7 @@ export const repositoryRemoteQueryPayloadSchemas = {
 
 export const repositoryRemoteCommandPayloadSchemas = {
     add: repositoryAddPayloadSchema,
+    remove: repositoryRemovePayloadSchema,
     startMissionFromIssue: repositoryStartMissionFromIssuePayloadSchema,
     startMissionFromBrief: repositoryStartMissionFromBriefPayloadSchema
 } as const;
@@ -150,16 +170,19 @@ export const repositoryRemoteQueryResultSchemas = {
 
 export const repositoryRemoteCommandResultSchemas = {
     add: repositorySnapshotSchema,
+    remove: repositoryRemoveAcknowledgementSchema,
     startMissionFromIssue: repositoryMissionStartAcknowledgementSchema,
     startMissionFromBrief: repositoryMissionStartAcknowledgementSchema
 } as const;
 
 export type RepositoryInput = z.infer<typeof repositoryInputSchema>;
-export type RepositoryData = z.infer<typeof repositorySchema>;
+export type RepositoryStorage = z.infer<typeof repositoryStorageSchema>;
+export type RepositoryData = z.infer<typeof repositoryDataSchema>;
 export type Repository = RepositoryData;
 export type MissionReference = z.infer<typeof missionReferenceSchema>;
 export type RepositoryFindPayload = z.infer<typeof repositoryFindPayloadSchema>;
 export type RepositoryAddPayload = z.infer<typeof repositoryAddPayloadSchema>;
+export type RepositoryRemovePayload = z.infer<typeof repositoryRemovePayloadSchema>;
 export type RepositoryReadPayload = z.infer<typeof repositoryReadPayloadSchema>;
 export type RepositoryListIssuesPayload = z.infer<typeof repositoryListIssuesPayloadSchema>;
 export type RepositoryGetIssuePayload = z.infer<typeof repositoryGetIssuePayloadSchema>;
@@ -169,6 +192,7 @@ export type RepositorySnapshot = z.infer<typeof repositorySnapshotSchema>;
 export type GitHubIssueDetail = z.infer<typeof githubIssueDetailSchema>;
 export type TrackedIssueSummary = z.infer<typeof trackedIssueSummarySchema>;
 export type RepositoryMissionStartAcknowledgement = z.infer<typeof repositoryMissionStartAcknowledgementSchema>;
+export type RepositoryRemoveAcknowledgement = z.infer<typeof repositoryRemoveAcknowledgementSchema>;
 
 export function createDefaultRepositoryConfiguration(): Pick<RepositoryData, 'settings' | 'workflowConfiguration' | 'isInitialized'> {
     const settings = createDefaultRepositorySettings();

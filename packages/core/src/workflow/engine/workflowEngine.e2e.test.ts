@@ -4,11 +4,11 @@ import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import type { AgentCommand, AgentPrompt } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
-    createMissionRuntimeRecord,
+    createMissionStateData,
     ingestMissionWorkflowEvent,
     MissionWorkflowController,
     type MissionGeneratedTaskPayload,
-    type MissionRuntimeRecord,
+    type MissionStateData,
     type MissionWorkflowEvent,
     type MissionWorkflowRequest
 } from './index.js';
@@ -222,7 +222,7 @@ describe('workflow engine e2e', () => {
         });
         adapter.setPersistedDocument(
             ingestMissionWorkflowEvent(
-                createMissionRuntimeRecord({
+                createMissionStateData({
                     missionId: 'mission-e2e-refresh',
                     configuration,
                     createdAt: configuration.createdAt
@@ -319,7 +319,7 @@ describe('workflow engine e2e', () => {
         });
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('ready');
 
-        const staleDocument: MissionRuntimeRecord = {
+        const staleDocument: MissionStateData = {
             ...document,
             runtime: {
                 ...document.runtime,
@@ -389,27 +389,27 @@ function createDescriptor(missionId: string): MissionDescriptor {
 }
 
 function createAdapter() {
-    let persisted: MissionRuntimeRecord | undefined;
+    let persisted: MissionStateData | undefined;
     const eventLog: Array<{ type: string }> = [];
 
     return {
-        readMissionRuntimeRecord: async () => persisted,
-        readMissionRuntimeEventLog: async () => [...eventLog],
-        writeMissionRuntimeRecord: async (_missionDir: string, document: MissionRuntimeRecord) => {
+        readMissionStateDataFile: async () => persisted,
+        readMissionEventLogFile: async () => [...eventLog],
+        writeMissionStateDataFile: async (_missionDir: string, document: MissionStateData) => {
             persisted = document;
         },
-        appendMissionRuntimeEventRecord: async (_missionDir: string, eventRecord: { type: string }) => {
+        appendMissionEventRecordFile: async (_missionDir: string, eventRecord: { type: string }) => {
             eventLog.push(eventRecord);
         },
         getPersistedDocument: () => persisted,
         getPersistedEventLog: () => [...eventLog],
-        setPersistedDocument: (document: MissionRuntimeRecord | undefined) => {
+        setPersistedDocument: (document: MissionStateData | undefined) => {
             persisted = document;
         }
     } as unknown as FilesystemAdapter & {
-        getPersistedDocument(): MissionRuntimeRecord | undefined;
+        getPersistedDocument(): MissionStateData | undefined;
         getPersistedEventLog(): Array<{ type: string }>;
-        setPersistedDocument(document: MissionRuntimeRecord | undefined): void;
+        setPersistedDocument(document: MissionStateData | undefined): void;
     };
 }
 
@@ -427,7 +427,7 @@ async function completeTask(
     taskId: string,
     sessionId: string,
     occurredAt: string
-): Promise<MissionRuntimeRecord> {
+): Promise<MissionStateData> {
     const completedSessionDocument = await controller.applyEvent({
         eventId: `session.completed:${sessionId}:${occurredAt}`,
         type: 'session.completed',
@@ -556,7 +556,6 @@ function createScenarioExecutor(input: {
             }
             return events;
         },
-        normalizePersistedSessionIdentity: <T>(session: T) => session,
         reconcileSessions: async () => [],
         listRuntimeSessions: () => [],
         getRuntimeSession: () => undefined,

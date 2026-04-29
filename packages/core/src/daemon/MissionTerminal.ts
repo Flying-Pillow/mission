@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
-import { TerminalAgentTransport, type TerminalSessionHandle } from '../agent/TerminalAgentTransport.js';
-import { MissionAgentEventEmitter } from '../agent/events.js';
-import type { MissionSelector } from '../../../types.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import type { MissionAgentTerminalState } from '../../protocol/contracts.js';
+import { TerminalAgentTransport, type TerminalSessionHandle } from './runtime/agent/TerminalAgentTransport.js';
+import { MissionAgentEventEmitter } from './runtime/agent/events.js';
+import type { MissionSelector } from '../types.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import type { MissionAgentTerminalState } from './protocol/contracts.js';
 
 type MissionTerminalInput = {
     data?: string;

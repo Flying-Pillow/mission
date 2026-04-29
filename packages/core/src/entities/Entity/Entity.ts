@@ -1,111 +1,324 @@
-import { z } from 'zod/v4';
+import type {
+	EntityChannel,
+	EntityCommandDescriptor,
+	EntityId,
+	EntityMethod,
+	EntitySchema
+} from './EntitySchema.js';
+import {
+	entityChannelSchema,
+	entityIdSchema,
+	entityTableSchema,
+	entityEventAddressSchema
+} from './EntitySchema.js';
+import type {
+	EntityCommandInvocation,
+	EntityFormInvocation,
+	EntityQueryInvocation,
+	EntityRemoteResult
+} from '../../daemon/protocol/entityRemote.js';
+import type { MissionDaemon } from '../../daemon/MissionDaemon.js';
+import {
+	getDefaultEntityFactory,
+	type EntityFactory
+} from './EntityFactory.js';
 
-export type EntityStateSnapshot<TSnapshot extends object, TCommandSnapshot extends object> = {
-	data: TSnapshot;
-	commands?: TCommandSnapshot;
+export type {
+	EntityChannel,
+	EntityEventAddress,
+	EntityId
+} from './EntitySchema.js';
+
+export type EntityMethodAvailability = {
+	available: boolean;
+	reason?: string;
+};
+
+export type EntityMethodAvailabilityResult = boolean | EntityMethodAvailability | undefined;
+
+export type EntityExecutionContext = {
+	surfacePath: string;
+	authToken?: string;
+	missionDaemon?: MissionDaemon;
+	missionService?: unknown;
+	entityFactory?: EntityFactory;
 };
 
 export abstract class Entity<
-	TSnapshot extends object,
+	TData extends object,
 	TId extends string = string,
-	TCommandSnapshot extends object = never
+	TUi extends object = never
 > {
-	private snapshotState: TSnapshot;
-	private commandState: TCommandSnapshot | undefined;
+	public static readonly entityName: string;
 
-	protected constructor(snapshot: TSnapshot) {
-		this.snapshotState = structuredClone(snapshot);
+	public static async executeQuery(
+		contract: EntitySchema,
+		input: EntityQueryInvocation,
+		context: EntityExecutionContext
+	): Promise<EntityRemoteResult> {
+		return Entity.executeMethod('Query', contract, input, context);
+	}
+
+	public static async executeCommand(
+		contract: EntitySchema,
+		input: EntityCommandInvocation | EntityFormInvocation,
+		context: EntityExecutionContext
+	): Promise<EntityRemoteResult> {
+		return Entity.executeMethod('Command', contract, input, context);
+	}
+
+	public static async buildUiCommandDescriptors(
+		contract: EntitySchema,
+		entity: object,
+		context: EntityExecutionContext
+	): Promise<EntityCommandDescriptor[]> {
+		const methods = contract.methods ?? contract.commands ?? {};
+		const descriptors = await Promise.all(
+			Object.entries(methods)
+				.filter(([, method]) => method.ui)
+				.map(async ([methodName, method]) => {
+					const availability = await Entity.resolveMethodAvailability(entity, methodName, context);
+					return {
+						commandId: createEntityMethodCommandId(contract.entity, methodName),
+						label: method.ui!.label,
+						...(method.ui!.description ? { description: method.ui!.description } : {}),
+						disabled: !availability.available,
+						...(!availability.available && availability.reason ? { disabledReason: availability.reason } : {}),
+						...(method.ui!.variant ? { variant: method.ui!.variant } : {}),
+						...(method.ui!.iconHint ? { iconHint: method.ui!.iconHint } : {}),
+						...(method.ui!.confirmation ? { confirmation: method.ui!.confirmation } : {}),
+						...(method.ui!.input ? { input: method.ui!.input } : {}),
+						...(method.ui!.presentationOrder !== undefined ? { presentationOrder: method.ui!.presentationOrder } : {})
+					} satisfies EntityCommandDescriptor;
+				})
+		);
+
+		return descriptors.sort((left, right) =>
+			(left.presentationOrder ?? Number.MAX_SAFE_INTEGER) - (right.presentationOrder ?? Number.MAX_SAFE_INTEGER)
+			|| left.commandId.localeCompare(right.commandId)
+		);
+	}
+
+	protected static getEntityFactory(context?: EntityExecutionContext): EntityFactory {
+		return context?.entityFactory ?? getDefaultEntityFactory();
+	}
+
+	protected getEntityFactory(context?: EntityExecutionContext): EntityFactory {
+		return Entity.getEntityFactory(context);
+	}
+
+	private static async executeMethod(
+		kind: 'Query' | 'Command',
+		contract: EntitySchema,
+		input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
+		context: EntityExecutionContext
+	): Promise<EntityRemoteResult> {
+		const method = Entity.resolveContractMethod(kind, contract, input.method);
+
+		const payload = method.payload.parse(input.payload ?? {});
+		const result = method.execute
+			? await method.execute(payload, context)
+			: await Entity.executeClassMethod(contract, method, input.method, payload, context);
+
+		return method.result.parse(result);
+	}
+
+	private static resolveContractMethod(
+		kind: 'Query' | 'Command',
+		contract: EntitySchema,
+		methodName: string
+	): EntityMethod {
+		if (contract.methods) {
+			const method = contract.methods[methodName];
+			if (!method) {
+				throw new Error(`${kind} method '${contract.entity}.${methodName}' is not implemented in the daemon.`);
+			}
+
+			const expectedKind = kind === 'Query' ? 'query' : 'mutation';
+			if (method.kind !== expectedKind) {
+				throw new Error(`${kind} method '${contract.entity}.${methodName}' is declared as '${method.kind ?? 'unknown'}'.`);
+			}
+
+			return method;
+		}
+
+		const methods = kind === 'Query' ? contract.queries : contract.commands;
+		const method = methods?.[methodName];
+		if (!method) {
+			throw new Error(`${kind} method '${contract.entity}.${methodName}' is not implemented in the daemon.`);
+		}
+
+		return method;
+	}
+
+	private static async executeClassMethod(
+		contract: EntitySchema,
+		method: EntityMethod,
+		methodName: string,
+		payload: unknown,
+		context: EntityExecutionContext
+	): Promise<unknown> {
+		const entityClass = contract.entityClass;
+		if (!entityClass) {
+			throw new Error(`Entity '${contract.entity}' does not define an implementation class for method '${methodName}'.`);
+		}
+
+		if (method.execution === 'entity') {
+			return Entity.executeEntityInstanceMethod(contract.entity, entityClass, methodName, payload, context);
+		}
+
+		return Entity.executeEntityClassMethod(contract.entity, entityClass, methodName, payload, context);
+	}
+
+	private static async executeEntityClassMethod(
+		entity: string,
+		entityClass: EntitySchema['entityClass'],
+		methodName: string,
+		payload: unknown,
+		context: EntityExecutionContext
+	): Promise<unknown> {
+		const implementation = (entityClass as unknown as Record<string, unknown>)[methodName];
+		if (typeof implementation !== 'function') {
+			throw new Error(`Entity '${entity}' does not define class method '${methodName}'.`);
+		}
+
+		return implementation.call(entityClass, payload, context);
+	}
+
+	private static async executeEntityInstanceMethod(
+		entity: string,
+		entityClass: EntitySchema['entityClass'],
+		methodName: string,
+		payload: unknown,
+		context: EntityExecutionContext
+	): Promise<unknown> {
+		const resolver = (entityClass as { resolve?: (payload: unknown, context?: EntityExecutionContext) => Promise<unknown> | unknown }).resolve;
+		if (typeof resolver !== 'function') {
+			throw new Error(`Entity '${entity}' does not define resolve() for instance method '${methodName}'.`);
+		}
+
+		const instance = await resolver.call(entityClass, payload, context);
+		if (!instance || typeof instance !== 'object') {
+			throw new Error(`Entity '${entity}' could not be resolved for method '${methodName}'.`);
+		}
+
+		const implementation = (instance as Record<string, unknown>)[methodName];
+		if (typeof implementation !== 'function') {
+			throw new Error(`Entity '${entity}' does not define instance method '${methodName}'.`);
+		}
+
+		return implementation.call(instance, payload, context);
+	}
+
+	private static async resolveMethodAvailability(
+		entity: object,
+		methodName: string,
+		context: EntityExecutionContext
+	): Promise<{ available: boolean; reason?: string }> {
+		const availabilityMethodName = createEntityAvailabilityMethodName(methodName);
+		const availabilityMethod = (entity as Record<string, unknown>)[availabilityMethodName];
+		if (availabilityMethod === undefined) {
+			return { available: true };
+		}
+		if (typeof availabilityMethod !== 'function') {
+			throw new Error(`Entity availability member '${availabilityMethodName}' is not a method.`);
+		}
+
+		const result = await availabilityMethod.call(entity, context) as EntityMethodAvailabilityResult;
+		if (result === undefined) {
+			return { available: true };
+		}
+		if (typeof result === 'boolean') {
+			return { available: result };
+		}
+		return result.available
+			? { available: true }
+			: {
+				available: false,
+				...(result.reason ? { reason: result.reason } : {})
+			};
+	}
+
+	private dataValue: TData;
+	private uiValue: TUi | undefined;
+
+	protected constructor(data: TData) {
+		this.dataValue = structuredClone(data);
 	}
 
 	public abstract get id(): TId;
 
-	protected get data(): TSnapshot {
-		return this.snapshotState;
+	public get entityName(): string {
+		const entityName = (this.constructor as typeof Entity).entityName;
+		if (!entityName) {
+			throw new Error(`Entity class '${this.constructor.name}' does not define static entityName.`);
+		}
+		return entityName;
 	}
 
-	protected set data(snapshot: TSnapshot) {
-		this.snapshotState = structuredClone(snapshot);
+	public commandIdFor(methodName: string): string {
+		return createEntityMethodCommandId(this.entityName, methodName);
 	}
 
-	public updateFromSnapshot(snapshot: TSnapshot): this {
-		this.data = snapshot;
+	public availabilityMethodNameFor(methodName: string): string {
+		return createEntityAvailabilityMethodName(methodName);
+	}
+
+	protected available(): EntityMethodAvailability {
+		return { available: true };
+	}
+
+	protected unavailable(reason: string): EntityMethodAvailability {
+		return { available: false, reason };
+	}
+
+	protected get data(): TData {
+		return this.dataValue;
+	}
+
+	protected set data(data: TData) {
+		this.dataValue = structuredClone(data);
+	}
+
+	public updateFromData(data: TData): this {
+		this.data = data;
 		return this;
 	}
 
-	public toSnapshot(): TSnapshot {
+	public toData(): TData {
 		return structuredClone(this.data);
 	}
 
-	protected get commands(): TCommandSnapshot | undefined {
-		return this.commandState
-			? structuredClone(this.commandState)
+	protected get ui(): TUi | undefined {
+		return this.uiValue
+			? structuredClone(this.uiValue)
 			: undefined;
 	}
 
-	protected set commands(snapshot: TCommandSnapshot | undefined) {
-		this.commandState = snapshot
-			? structuredClone(snapshot)
+	protected set ui(ui: TUi | undefined) {
+		this.uiValue = ui
+			? structuredClone(ui)
 			: undefined;
 	}
 
-	public toStateSnapshot(): EntityStateSnapshot<TSnapshot, TCommandSnapshot> {
-		return {
-			data: this.toSnapshot(),
-			...(this.commands ? { commands: this.commands } : {})
-		};
+	public toJSON(): TData {
+		return this.toData();
 	}
 
-	public toJSON(): TSnapshot {
-		return this.toSnapshot();
+	public async remove(_input: unknown, _context?: EntityExecutionContext): Promise<unknown> {
+		throw new Error(`Entity '${this.entityName}' does not implement remove().`);
 	}
 }
 
-const entityTableSchema = z.string().trim().min(1).regex(/^[a-z][a-z0-9_]*$/);
-const nonEmptyStringSchema = z.string().trim().min(1);
-
-export const entityIdSchema = z.string().trim().min(1).refine((value) => {
-	const separatorIndex = value.indexOf(':');
-	if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
-		return false;
-	}
-	return entityTableSchema.safeParse(value.slice(0, separatorIndex)).success;
-}, {
-	message: 'Entity ids must use the table:uniqueId shape.'
-});
-
-export const entityChannelSchema = z.string().trim().min(1).refine((value) => {
-	const tableSeparatorIndex = value.indexOf(':');
-	const eventSeparatorIndex = value.lastIndexOf('.');
-	if (tableSeparatorIndex <= 0 || tableSeparatorIndex === value.length - 1) {
-		return false;
-	}
-	if (eventSeparatorIndex <= tableSeparatorIndex + 1 || eventSeparatorIndex === value.length - 1) {
-		return false;
-	}
-	return entityTableSchema.safeParse(value.slice(0, tableSeparatorIndex)).success;
-}, {
-	message: 'Entity channels must use the table:uniqueId.event shape.'
-});
-
-export const entityEventAddressSchema = z.object({
-	entityId: entityIdSchema,
-	channel: entityChannelSchema,
-	eventName: nonEmptyStringSchema
-}).strict();
-
-export type EntityId = z.infer<typeof entityIdSchema>;
-export type EntityChannel = z.infer<typeof entityChannelSchema>;
-export type EntityEventAddress = z.infer<typeof entityEventAddressSchema>;
-
 export function createEntityId(table: string, uniqueId: string): EntityId {
 	const normalizedTable = entityTableSchema.parse(table);
-	const normalizedUniqueId = nonEmptyStringSchema.parse(uniqueId);
+	const normalizedUniqueId = entityEventAddressSchema.shape.eventName.parse(uniqueId);
 	return entityIdSchema.parse(`${normalizedTable}:${normalizedUniqueId}`);
 }
 
 export function createEntityChannel(entityId: EntityId | string, eventName: string): EntityChannel {
 	const normalizedEntityId = entityIdSchema.parse(entityId);
-	const normalizedEventName = nonEmptyStringSchema.parse(eventName);
+	const normalizedEventName = entityEventAddressSchema.shape.eventName.parse(eventName);
 	return entityChannelSchema.parse(`${normalizedEntityId}.${normalizedEventName}`);
 }
 
@@ -114,9 +327,20 @@ export function getEntityTable(entityId: EntityId | string): string {
 	return normalizedEntityId.slice(0, normalizedEntityId.indexOf(':'));
 }
 
+export function createEntityMethodCommandId(entityName: string, methodName: string): string {
+	const normalizedEntityName = entityEventAddressSchema.shape.eventName.parse(entityName);
+	const normalizedMethodName = entityEventAddressSchema.shape.eventName.parse(methodName);
+	return `${normalizedEntityName.charAt(0).toLowerCase()}${normalizedEntityName.slice(1)}.${normalizedMethodName}`;
+}
+
+export function createEntityAvailabilityMethodName(methodName: string): string {
+	const normalizedMethodName = entityEventAddressSchema.shape.eventName.parse(methodName);
+	return `can${normalizedMethodName.charAt(0).toUpperCase()}${normalizedMethodName.slice(1)}`;
+}
+
 export function matchesEntityChannel(channel: string, pattern: string): boolean {
 	const normalizedChannel = entityChannelSchema.parse(channel);
-	const normalizedPattern = nonEmptyStringSchema.parse(pattern);
+	const normalizedPattern = entityEventAddressSchema.shape.eventName.parse(pattern);
 	if (normalizedPattern === '*') {
 		return true;
 	}

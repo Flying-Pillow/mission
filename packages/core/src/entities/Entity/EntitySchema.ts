@@ -1,11 +1,53 @@
 import { z } from 'zod/v4';
-import {
-    entityChannelSchema,
-    entityIdSchema
-} from './Entity.js';
 
-export const entityNameSchema = z.string().trim().min(1);
-export const entityMethodSchema = z.string().trim().min(1);
+const nonEmptyStringSchema = z.string().trim().min(1);
+
+export const entityTableSchema = z.string().trim().min(1).regex(/^[a-z][a-z0-9_]*$/);
+export const entityNameSchema = nonEmptyStringSchema;
+export const entityMethodNameSchema = nonEmptyStringSchema;
+export const entityObjectSchema = z.record(z.string(), z.unknown());
+
+export const entityIdSchema = nonEmptyStringSchema.refine((value) => {
+    const separatorIndex = value.indexOf(':');
+    if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+        return false;
+    }
+    return entityTableSchema.safeParse(value.slice(0, separatorIndex)).success;
+}, {
+    message: 'Entity ids must use the table:uniqueId shape.'
+});
+
+export const entityChannelSchema = nonEmptyStringSchema.refine((value) => {
+    const tableSeparatorIndex = value.indexOf(':');
+    const eventSeparatorIndex = value.lastIndexOf('.');
+    if (tableSeparatorIndex <= 0 || tableSeparatorIndex === value.length - 1) {
+        return false;
+    }
+    if (eventSeparatorIndex <= tableSeparatorIndex + 1 || eventSeparatorIndex === value.length - 1) {
+        return false;
+    }
+    return entityTableSchema.safeParse(value.slice(0, tableSeparatorIndex)).success;
+}, {
+    message: 'Entity channels must use the table:uniqueId.event shape.'
+});
+
+export const entityEventAddressSchema = z.object({
+    entityId: entityIdSchema,
+    channel: entityChannelSchema,
+    eventName: nonEmptyStringSchema
+}).strict();
+
+const zodSchema = z.custom<z.ZodType>();
+
+const entityClassSchema = z.custom<Function>((value) =>
+    typeof value === 'function'
+    && typeof (value as { prototype?: unknown }).prototype === 'object'
+);
+
+const entityMethodExecuteSchema = z.custom<(
+    payload: any,
+    context: any
+) => Promise<unknown> | unknown>((value) => typeof value === 'function');
 
 export const entityCommandInputOptionSchema = z.object({
     optionId: z.string().trim().min(1),
@@ -63,14 +105,53 @@ export const entityCommandDescriptorSchema = z.object({
     presentationOrder: z.number().int().optional()
 }).strict();
 
+export const entityMethodUiSchema = z.object({
+    label: z.string().trim().min(1),
+    description: z.string().trim().min(1).optional(),
+    variant: z.enum(['default', 'destructive']).optional(),
+    iconHint: z.string().trim().min(1).optional(),
+    confirmation: entityCommandConfirmationSchema.optional(),
+    input: entityCommandInputDescriptorSchema.optional(),
+    presentationOrder: z.number().int().optional()
+}).strict();
+
+export const entityMethodExecutionSchema = z.enum(['class', 'entity']);
+export const entityMethodKindSchema = z.enum(['query', 'mutation']);
+
+export const entityPropertySchema = z.object({
+    schema: zodSchema,
+    readonly: z.boolean().optional()
+}).strict();
+
+export const entityEventSchema = z.object({
+    payload: zodSchema
+}).strict();
+
+export const entityMethodSchema = z.object({
+    kind: entityMethodKindSchema.optional(),
+    payload: zodSchema,
+    result: zodSchema,
+    execution: entityMethodExecutionSchema.optional(),
+    ui: entityMethodUiSchema.optional(),
+    execute: entityMethodExecuteSchema.optional()
+}).strict();
+
+export const entitySchema = z.object({
+    entity: entityNameSchema,
+    entityClass: entityClassSchema.optional(),
+    properties: z.record(z.string(), entityPropertySchema).optional(),
+    methods: z.record(z.string(), entityMethodSchema).optional(),
+    queries: z.record(z.string(), entityMethodSchema).optional(),
+    commands: z.record(z.string(), entityMethodSchema).optional(),
+    events: z.record(z.string(), entityEventSchema).optional()
+}).strict();
+
 export const entityCommandAcknowledgementSchema = z.object({
     ok: z.literal(true),
     entity: entityNameSchema,
-    method: entityMethodSchema,
+    method: entityMethodNameSchema,
     id: z.string().trim().min(1).optional()
 }).strict();
-
-const nonEmptyStringSchema = z.string().trim().min(1);
 
 export const entityEventEnvelopeSchema = z.object({
     eventId: nonEmptyStringSchema,
@@ -83,9 +164,19 @@ export const entityEventEnvelopeSchema = z.object({
     payload: z.unknown()
 }).strict();
 
+export type EntityId = z.infer<typeof entityIdSchema>;
+export type EntityChannel = z.infer<typeof entityChannelSchema>;
+export type EntityEventAddress = z.infer<typeof entityEventAddressSchema>;
 export type EntityCommandInputOption = z.infer<typeof entityCommandInputOptionSchema>;
 export type EntityCommandInputDescriptor = z.infer<typeof entityCommandInputDescriptorSchema>;
 export type EntityCommandConfirmation = z.infer<typeof entityCommandConfirmationSchema>;
 export type EntityCommandDescriptor = z.infer<typeof entityCommandDescriptorSchema>;
+export type EntityMethodUi = z.infer<typeof entityMethodUiSchema>;
+export type EntityMethodExecution = z.infer<typeof entityMethodExecutionSchema>;
+export type EntityMethodKind = z.infer<typeof entityMethodKindSchema>;
+export type EntityProperty = z.infer<typeof entityPropertySchema>;
+export type EntityEvent = z.infer<typeof entityEventSchema>;
+export type EntityMethod = z.infer<typeof entityMethodSchema>;
+export type EntitySchema = z.infer<typeof entitySchema>;
 export type EntityCommandAcknowledgement = z.infer<typeof entityCommandAcknowledgementSchema>;
 export type EntityEventEnvelope = z.infer<typeof entityEventEnvelopeSchema>;

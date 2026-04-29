@@ -17,7 +17,7 @@ import {
 	type MissionWorkflowRuntimeState,
 	type MissionTaskRuntimeState,
 	type MissionAgentSessionRuntimeState,
-	type MissionRuntimeRecord
+	type MissionStateData
 } from './types.js';
 import {
 	generateMissionWorkflowTasks,
@@ -89,18 +89,6 @@ export class MissionWorkflowRequestExecutor {
 		this.runtimeSessions.clear();
 		this.runtimeListeners.clear();
 		this.runtimeEvents.length = 0;
-	}
-
-	public normalizePersistedSessionIdentity(
-		session: MissionAgentSessionRuntimeState
-	): MissionAgentSessionRuntimeState {
-		if (session.transportId || session.runnerId !== 'copilot-cli') {
-			return session;
-		}
-		return {
-			...session,
-			transportId: 'terminal'
-		};
 	}
 
 	public async executeRequests(input: {
@@ -291,7 +279,7 @@ export class MissionWorkflowRequestExecutor {
 		return events;
 	}
 
-	public async reconcileSessions(document?: MissionRuntimeRecord): Promise<MissionWorkflowEvent[]> {
+	public async reconcileSessions(document?: MissionStateData): Promise<MissionWorkflowEvent[]> {
 		if (document) {
 			for (const persistedSession of document.runtime.sessions) {
 				this.sessionTaskIds.set(persistedSession.sessionId, persistedSession.taskId);
@@ -776,7 +764,7 @@ function toTransportEventFields(snapshot: AgentSessionSnapshot): {
 	};
 }
 
-function hasMatchingTerminalLifecycle(document: MissionRuntimeRecord, snapshot: AgentSessionSnapshot): boolean {
+function hasMatchingTerminalLifecycle(document: MissionStateData, snapshot: AgentSessionSnapshot): boolean {
 	const runtimeSession = document.runtime.sessions.find((session) => session.sessionId === snapshot.sessionId);
 	if (!runtimeSession) {
 		return false;

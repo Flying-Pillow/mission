@@ -2,16 +2,16 @@ import type {
 	AgentCommand,
 	AgentPrompt,
 	AgentSessionSnapshot
-} from '../agent/AgentRuntimeTypes.js';
-import type { MissionTaskState } from '../../../types.js';
-import { toAgentSession, type AgentSession } from '../../../entities/AgentSession/AgentSession.js';
+} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type { MissionTaskState } from '../../types.js';
+import { toAgentSession, type AgentSession } from './AgentSession.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,
 	MissionAgentSessionRecord,
 	MissionAgentSessionState,
 	MissionAgentTelemetrySnapshot
-} from '../../protocol/contracts.js';
+} from '../../daemon/protocol/contracts.js';
 
 export type MissionSessionOwner = {
 	completeSessionRecord(sessionId: string): Promise<MissionAgentSessionRecord>;
@@ -21,13 +21,13 @@ export type MissionSessionOwner = {
 	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<MissionAgentSessionRecord>;
 };
 
-type MissionRuntimeSessionRecord = {
+type AgentSessionRuntimeRecord = {
 	sessionId: string;
 	runnerId: string;
-	transportId?: string;
-	sessionLogPath?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	transportId?: string | undefined;
+	sessionLogPath?: string | undefined;
+	terminalSessionName?: string | undefined;
+	terminalPaneId?: string | undefined;
 	taskId: string;
 	lifecycle: MissionAgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
 	launchedAt: string;
@@ -57,7 +57,7 @@ export class MissionSession {
 	}
 
 	public static createRecordFromRuntime(input: {
-		runtime: MissionRuntimeSessionRecord;
+		runtime: AgentSessionRuntimeRecord;
 		runnerLabel: string;
 		snapshot?: AgentSessionSnapshot;
 		task?: MissionTaskState;
@@ -192,7 +192,7 @@ export class MissionSession {
 	}
 
 	public static toLifecycleState(
-		status: MissionRuntimeSessionRecord['lifecycle']
+		status: AgentSessionRuntimeRecord['lifecycle']
 	): MissionAgentSessionRecord['lifecycleState'] {
 		switch (status) {
 			case 'awaiting-input':

@@ -1,6 +1,6 @@
-import type { MissionTaskState } from '../../../types.js';
+import type { MissionTaskState } from '../../types.js';
 
-export function buildMissionTaskLaunchPrompt(task: MissionTaskState, missionDir: string): string {
+export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string): string {
 	const instruction = task.instruction.trim();
 	const artifactName = task.fileName.trim();
 	const lines = [

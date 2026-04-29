@@ -5,7 +5,7 @@ import {
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
 import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
-import { MissionDaemonService, type MissionRuntimeHandle } from './runtime/mission/MissionDaemonService.js';
+import { MissionDaemon, type MissionHandle } from './MissionDaemon.js';
 import { Repository } from '../entities/Repository/Repository.js';
 import { PROTOCOL_VERSION } from './protocol/transport.js';
 import type {
@@ -234,11 +234,11 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('dispatches Mission source methods through explicit handlers', async () => {
-		const missionRuntime = createMissionRuntimeHandle(createMissionSnapshot().mission);
-		const loadRuntime = vi.fn(async () => missionRuntime);
+		const mission = createMissionHandle(createMissionSnapshot().mission);
+		const loadMission = vi.fn(async () => mission);
 		const context = {
 			surfacePath: '/repo/root',
-			missionService: new MissionDaemonService({ loadRuntime })
+			missionDaemon: new MissionDaemon({ loadMission })
 		};
 
 		await expect(executeEntityQueryInDaemon({
@@ -283,24 +283,24 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'mission-1', actionId: 'pause' }
 		}, context)).resolves.toEqual(createMissionAcknowledgement('executeAction', { actionId: 'pause' }));
 
-		expect(missionRuntime.pauseMission).toHaveBeenCalledOnce();
-		expect(missionRuntime.completeTask).toHaveBeenCalledWith('implementation/01-task');
-		expect(missionRuntime.completeAgentSession).toHaveBeenCalledWith('session-1');
-		expect(missionRuntime.executeAction).toHaveBeenCalledWith('pause', [], {});
-		expect(loadRuntime).toHaveBeenCalledTimes(1);
-		expect(missionRuntime.dispose).not.toHaveBeenCalled();
+		expect(mission.pauseMission).toHaveBeenCalledOnce();
+		expect(mission.completeTask).toHaveBeenCalledWith('implementation/01-task');
+		expect(mission.completeAgentSession).toHaveBeenCalledWith('session-1');
+		expect(mission.executeAction).toHaveBeenCalledWith('pause', [], {});
+		expect(loadMission).toHaveBeenCalledTimes(1);
+		expect(mission.dispose).not.toHaveBeenCalled();
 	});
 
 	it('dispatches child Mission entities through explicit handlers', async () => {
-		const missionRuntime = createMissionRuntimeHandle({
+		const mission = createMissionHandle({
 			...createMissionSnapshot().mission,
 			artifacts: [createMissionArtifactSnapshot()],
 			agentSessions: [createMissionAgentSessionSnapshot()]
 		});
-		const loadRuntime = vi.fn(async () => missionRuntime);
+		const loadMission = vi.fn(async () => mission);
 		const context = {
 			surfacePath: '/repo/root',
-			missionService: new MissionDaemonService({ loadRuntime })
+			missionDaemon: new MissionDaemon({ loadMission })
 		};
 
 		await expect(executeEntityQueryInDaemon({
@@ -363,16 +363,16 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'mission-1', sessionId: 'session-1', command: { type: 'nudge' } }
 		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendCommand'));
 
-		expect(missionRuntime.executeAction).toHaveBeenCalledWith('generation.tasks.implementation', []);
-		expect(missionRuntime.startTask).toHaveBeenCalledWith('implementation/01-task', {});
-		expect(missionRuntime.cancelAgentSession).toHaveBeenCalledWith('session-1', undefined);
-		expect(missionRuntime.sendAgentSessionPrompt).toHaveBeenCalledOnce();
-		expect(missionRuntime.sendAgentSessionCommand).toHaveBeenCalledOnce();
-		expect(loadRuntime).toHaveBeenCalledTimes(1);
-		expect(missionRuntime.dispose).not.toHaveBeenCalled();
+		expect(mission.executeAction).toHaveBeenCalledWith('generation.tasks.implementation', []);
+		expect(mission.startTask).toHaveBeenCalledWith('implementation/01-task', {});
+		expect(mission.cancelAgentSession).toHaveBeenCalledWith('session-1', undefined);
+		expect(mission.sendAgentSessionPrompt).toHaveBeenCalledOnce();
+		expect(mission.sendAgentSessionCommand).toHaveBeenCalledOnce();
+		expect(loadMission).toHaveBeenCalledTimes(1);
+		expect(mission.dispose).not.toHaveBeenCalled();
 	});
 
-	it('rejects invalid child entity payloads and unavailable runtime context', async () => {
+	it('rejects invalid child entity payloads and unavailable mission context', async () => {
 		await expect(executeEntityQueryInDaemon({
 			entity: 'Task',
 			method: 'read',
@@ -387,7 +387,7 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
 		}, {
 			surfacePath: process.cwd(),
-			missionService: new MissionDaemonService({ loadRuntime: async () => undefined })
+			missionDaemon: new MissionDaemon({ loadMission: async () => undefined })
 		})).rejects.toThrow("Mission 'mission-1' could not be resolved.");
 	});
 
@@ -398,10 +398,10 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'missing-mission', stageId: 'implementation' }
 		}, {
 			surfacePath: '/repo/root',
-			missionService: new MissionDaemonService({ loadRuntime: async () => undefined })
+			missionDaemon: new MissionDaemon({ loadMission: async () => undefined })
 		})).rejects.toThrow("Mission 'missing-mission' could not be resolved.");
 
-		const emptyRuntime = createMissionRuntimeHandle({
+		const emptyMission = createMissionHandle({
 			...createMissionSnapshot().mission,
 			stages: [],
 			artifacts: [],
@@ -409,7 +409,7 @@ describe('daemon entity dispatch', () => {
 		});
 		const context = {
 			surfacePath: '/repo/root',
-			missionService: new MissionDaemonService({ loadRuntime: async () => emptyRuntime })
+			missionDaemon: new MissionDaemon({ loadMission: async () => emptyMission })
 		};
 
 		await expect(executeEntityQueryInDaemon({
@@ -478,7 +478,7 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'mission-1' }
 		}, {
 			surfacePath: process.cwd(),
-			missionService: new MissionDaemonService({ loadRuntime: async () => createMissionRuntimeHandle({ bad: true } as never) })
+			missionDaemon: new MissionDaemon({ loadMission: async () => createMissionHandle({ bad: true } as never) })
 		})).rejects.toBeInstanceOf(ZodError);
 	});
 
@@ -566,7 +566,7 @@ function createMissionSnapshot(): MissionSnapshot {
 	};
 }
 
-function createMissionRuntimeHandle(snapshot: MissionSnapshot['mission']): MissionRuntimeHandle {
+function createMissionHandle(snapshot: MissionSnapshot['mission']): MissionHandle {
 	return {
 		clearMissionPanic: vi.fn(async () => undefined),
 		completeAgentSession: vi.fn(),
@@ -588,7 +588,7 @@ function createMissionRuntimeHandle(snapshot: MissionSnapshot['mission']): Missi
 		toEntity: vi.fn(async () => ({
 			toSnapshot: () => snapshot
 		}))
-	} as unknown as MissionRuntimeHandle;
+	} as unknown as MissionHandle;
 }
 
 function createMissionAcknowledgement(

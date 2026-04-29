@@ -4,18 +4,14 @@ import type {
     EntityQueryInvocation,
     EntityRemoteResult
 } from './protocol/entityRemote.js';
-import {
-    executeEntityContractCommand,
-    executeEntityContractQuery,
-    type EntityContract,
-    type EntityContractContext
-} from '../entities/Entity/EntityContract.js';
-import { MissionDaemonService } from './runtime/mission/MissionDaemonService.js';
+import { Entity, type EntityExecutionContext } from '../entities/Entity/Entity.js';
+import type { EntitySchema } from '../entities/Entity/EntitySchema.js';
+import { MissionDaemon } from './MissionDaemon.js';
 import { agentSessionEntityContract } from '../entities/AgentSession/AgentSessionContract.js';
 import { artifactEntityContract } from '../entities/Artifact/ArtifactContract.js';
 import { gitHubRepositoryEntityContract } from '../entities/GitHubRepository/GitHubRepositoryContract.js';
 import { missionEntityContract } from '../entities/Mission/MissionContract.js';
-import { repositoryEntityContract } from '../entities/Repository/RepositoryContract.js';
+import { repositoryContract } from '../entities/Repository/RepositoryContract.js';
 import { stageEntityContract } from '../entities/Stage/StageContract.js';
 import { taskEntityContract } from '../entities/Task/TaskContract.js';
 
@@ -25,47 +21,47 @@ const entityContracts = [
     taskEntityContract,
     artifactEntityContract,
     agentSessionEntityContract,
-    repositoryEntityContract,
+    repositoryContract,
     gitHubRepositoryEntityContract
-] as const satisfies readonly EntityContract[];
+] as const satisfies readonly EntitySchema[];
 
-const entityContractsByName = new Map<string, EntityContract>(
+const entityContractsByName = new Map<string, EntitySchema>(
     entityContracts.map((contract) => [contract.entity, contract])
 );
 
-const missionService = new MissionDaemonService();
+const missionDaemon = new MissionDaemon();
 const missionOwnedEntities = new Set(['Mission', 'Stage', 'Task', 'Artifact', 'AgentSession']);
 
 export async function executeEntityQueryInDaemon(
     input: EntityQueryInvocation,
-    context: EntityContractContext
+    context: EntityExecutionContext
 ): Promise<EntityRemoteResult> {
     assertDaemonContext(context);
-    return executeEntityContractQuery(resolveEntityContract(input.entity), input, withEntityServices(input.entity, context));
+    return Entity.executeQuery(resolveEntityContract(input.entity), input, withEntityServices(input.entity, context));
 }
 
 export async function executeEntityCommandInDaemon(
     input: EntityCommandInvocation | EntityFormInvocation,
-    context: EntityContractContext
+    context: EntityExecutionContext
 ): Promise<EntityRemoteResult> {
     assertDaemonContext(context);
-    const result = await executeEntityContractCommand(resolveEntityContract(input.entity), input, withEntityServices(input.entity, context));
+    const result = await Entity.executeCommand(resolveEntityContract(input.entity), input, withEntityServices(input.entity, context));
     await hydrateStartedRepositoryMission(input, context, result);
     return result;
 }
 
-function withMissionService(context: EntityContractContext): EntityContractContext {
+function withMissionService(context: EntityExecutionContext): EntityExecutionContext {
     return {
         ...context,
-        missionService: context.missionService ?? missionService
+        missionDaemon: context.missionDaemon ?? missionDaemon
     };
 }
 
-function withEntityServices(entity: string, context: EntityContractContext): EntityContractContext {
+function withEntityServices(entity: string, context: EntityExecutionContext): EntityExecutionContext {
     return missionOwnedEntities.has(entity) ? withMissionService(context) : context;
 }
 
-function resolveEntityContract(entity: string): EntityContract {
+function resolveEntityContract(entity: string): EntitySchema {
     const contract = entityContractsByName.get(entity);
     if (!contract) {
         throw new Error(`Entity '${entity}' is not implemented in the daemon.`);
@@ -75,10 +71,10 @@ function resolveEntityContract(entity: string): EntityContract {
 
 async function hydrateStartedRepositoryMission(
     input: EntityCommandInvocation | EntityFormInvocation,
-    context: EntityContractContext,
+    context: EntityExecutionContext,
     result: EntityRemoteResult
 ): Promise<void> {
-    if (!context.missionService || input.entity !== 'Repository') {
+    if (!context.missionDaemon || input.entity !== 'Repository') {
         return;
     }
     if (input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
@@ -92,7 +88,7 @@ async function hydrateStartedRepositoryMission(
     const repositoryRootPath = typeof payload['repositoryRootPath'] === 'string' && payload['repositoryRootPath'].trim()
         ? payload['repositoryRootPath'].trim()
         : context.surfacePath;
-    await context.missionService.loadRequiredMissionRuntime(
+    await context.missionDaemon.loadRequiredMission(
         {
             missionId: result['id'].trim(),
             repositoryRootPath

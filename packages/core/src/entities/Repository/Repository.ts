@@ -1,19 +1,18 @@
 import * as path from 'node:path';
-import {
-	findRegisteredRepositoryById,
-	listRegisteredRepositories,
-	registerMissionRepo
-} from '../../lib/config.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { getMissionGitHubCliBinary } from '../../lib/config.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import { readRepositorySettingsDocument } from '../../lib/daemonConfig.js';
-import { MissionPreparationService } from '../../daemon/runtime/mission/MissionPreparationService.js';
+import { MissionPreparationService } from './MissionPreparation.js';
 import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
-import type { MissionBrief, RepositoryCandidate } from '../../types.js';
+import type { MissionBrief } from '../../types.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
+import { resolveGitWorkspaceRoot } from '../../lib/workspacePaths.js';
 import {
 	repositorySnapshotSchema,
-	repositorySchema,
+	repositoryDataSchema,
 	repositoryInputSchema,
+	repositoryEntityName,
 	repositoryWorkflowConfigurationSchema,
 	createDefaultRepositoryConfiguration,
 	githubIssueDetailSchema,
@@ -29,6 +28,8 @@ import {
 	type RepositoryListIssuesPayload,
 	type RepositoryReadPayload,
 	type RepositoryAddPayload,
+	type RepositoryRemoveAcknowledgement,
+	type RepositoryRemovePayload,
 	type RepositoryStartMissionFromBriefPayload,
 	type RepositoryStartMissionFromIssuePayload,
 	repositoryFindPayloadSchema,
@@ -38,6 +39,8 @@ import {
 	repositoryMissionStartAcknowledgementSchema,
 	repositoryReadPayloadSchema,
 	repositoryAddPayloadSchema,
+	repositoryRemoveAcknowledgementSchema,
+	repositoryRemovePayloadSchema,
 	repositoryRegistrationInputSchema,
 	repositoryStartMissionFromBriefPayloadSchema,
 	repositoryStartMissionFromIssuePayloadSchema
@@ -51,18 +54,17 @@ import { createDefaultRepositorySettings } from './RepositorySettings.js';
 import { readMissionWorkflowDefinition } from '../../workflow/mission/preset.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { normalizeWorkflowSettings } from '../../settings/validation.js';
+import { createRepositoryPlatformAdapter } from './PlatformAdapter.js';
 
-export class Repository {
-	private snapshot: RepositoryData;
+export class Repository extends Entity<RepositoryData, string> {
+	public static override readonly entityName = repositoryEntityName;
 
 	public static async find(
 		input: RepositoryFindPayload = {},
-		_context?: { authToken?: string }
+		context?: EntityExecutionContext
 	): Promise<RepositorySnapshot[]> {
 		repositoryFindPayloadSchema.parse(input);
-		const repositories = (await listRegisteredRepositories()).map((candidate) =>
-			Repository.openRegisteredRepository(candidate)
-		);
+		const repositories = await Repository.getRepositoryFactory(context).find(Repository);
 
 		return await Promise.all(
 			repositories.map((repository) =>
@@ -76,21 +78,25 @@ export class Repository {
 
 	public static async add(
 		input: RepositoryAddPayload,
-		_context?: { authToken?: string }
+		context?: EntityExecutionContext
 	): Promise<RepositorySnapshot> {
 		const payload = repositoryAddPayloadSchema.parse(input);
-		const repository = await Repository.registerLocalRepository(payload.repositoryPath);
+		const repositoryRootPath = 'githubRepository' in payload
+			? await Repository.checkoutGitHubRepository(payload, context)
+			: payload.repositoryPath;
+		const repository = await Repository.registerLocalRepository(repositoryRootPath, context);
 		return await repository.read({
 			repositoryId: repository.repositoryId,
 			repositoryRootPath: repository.repositoryRootPath
 		});
 	}
 
-	public static async resolve(input: unknown): Promise<Repository | undefined> {
+	public static async resolve(input: unknown, context?: EntityExecutionContext): Promise<Repository | undefined> {
 		const payload = repositoryIdentityPayloadSchema.parse(input);
-		const candidate = await findRegisteredRepositoryById(payload.repositoryId);
-		if (candidate) {
-			return Repository.openRegisteredRepository(candidate);
+		const factory = Repository.getRepositoryFactory(context);
+		const storedRepository = await factory.read(Repository, payload.repositoryId);
+		if (storedRepository) {
+			return storedRepository;
 		}
 
 		return payload.repositoryRootPath?.trim()
@@ -99,7 +105,7 @@ export class Repository {
 	}
 
 	public static register(input: RepositoryInput): Repository {
-		return new Repository(createRepositoryData(repositoryInputSchema.parse(input)));
+		return new Repository(Repository.createRepositoryData(repositoryInputSchema.parse(input)));
 	}
 
 	public static open(
@@ -112,32 +118,37 @@ export class Repository {
 		});
 	}
 
-	private static openRegisteredRepository(candidate: RepositoryCandidate): Repository {
-		return Repository.open(candidate.repositoryRootPath, {
-			label: candidate.label,
-			description: candidate.description,
-			...(candidate.githubRepository ? { githubRepository: candidate.githubRepository } : {})
+	private static async registerLocalRepository(repositoryPath: string, context?: EntityExecutionContext): Promise<Repository> {
+		const { repositoryPath: trimmedRepositoryPath } = repositoryRegistrationInputSchema.parse({ repositoryPath });
+		const controlRoot = resolveGitWorkspaceRoot(trimmedRepositoryPath);
+		if (!controlRoot) {
+			throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
+		}
+
+		const repository = Repository.open(controlRoot);
+		return Repository.getRepositoryFactory(context).save(Repository, repository.toData());
+	}
+
+	private static async checkoutGitHubRepository(
+		input: Extract<RepositoryAddPayload, { githubRepository: string }>,
+		context?: EntityExecutionContext
+	): Promise<string> {
+		const ghBinary = getMissionGitHubCliBinary();
+		const adapter = createRepositoryPlatformAdapter({
+			platform: 'github',
+			workspaceRoot: context?.surfacePath?.trim() || process.cwd(),
+			...(context?.authToken ? { authToken: context.authToken } : {}),
+			...(ghBinary ? { ghBinary } : {})
+		});
+
+		return adapter.cloneRepository({
+			repository: input.githubRepository,
+			destinationPath: input.destinationPath
 		});
 	}
 
-	private static async registerLocalRepository(repositoryPath: string): Promise<Repository> {
-		const { repositoryPath: trimmedRepositoryPath } = repositoryRegistrationInputSchema.parse({ repositoryPath });
-
-		await registerMissionRepo(trimmedRepositoryPath);
-		const normalizedRepositoryRootPath = Repository.open(trimmedRepositoryPath).repositoryRootPath;
-		const registeredRepository = (await listRegisteredRepositories()).find(
-			(candidate) => Repository.open(candidate.repositoryRootPath).repositoryRootPath === normalizedRepositoryRootPath
-		);
-
-		if (!registeredRepository) {
-			throw new Error(`Mission could not register repository '${repositoryPath}'.`);
-		}
-
-		return Repository.openRegisteredRepository(registeredRepository);
-	}
-
-	public constructor(snapshot: RepositoryData) {
-		this.snapshot = repositorySchema.parse(snapshot);
+	public constructor(data: RepositoryData) {
+		super(repositoryDataSchema.parse(data));
 	}
 
 	public get id(): string {
@@ -145,71 +156,98 @@ export class Repository {
 	}
 
 	public get repositoryId(): string {
-		return this.snapshot.repositoryId;
+		return this.data.repositoryId;
 	}
 
 	public get repositoryRootPath(): string {
-		return this.snapshot.repositoryRootPath;
+		return this.data.repositoryRootPath;
 	}
 
 	public get ownerId(): string {
-		return this.snapshot.ownerId;
+		return this.data.ownerId;
 	}
 
 	public get repoName(): string {
-		return this.snapshot.repoName;
+		return this.data.repoName;
 	}
 
 	public get label(): string {
-		return this.snapshot.label;
+		return this.data.label;
 	}
 
 	public get description(): string {
-		return this.snapshot.description;
+		return this.data.description;
 	}
 
 	public get githubRepository(): string | undefined {
-		return this.snapshot.githubRepository;
+		return this.data.githubRepository;
 	}
 
 	public get settings(): RepositorySettings {
-		return structuredClone(this.snapshot.settings);
+		return structuredClone(this.data.settings);
 	}
 
 	public get workflowConfiguration(): WorkflowGlobalSettings {
-		return structuredClone(this.snapshot.workflowConfiguration);
+		return structuredClone(this.data.workflowConfiguration);
 	}
 
 	public get isInitialized(): boolean {
-		return this.snapshot.isInitialized;
+		return this.data.isInitialized;
 	}
 
 	public updateSettings(settings: RepositorySettings): this {
-		this.snapshot = repositorySchema.parse({
-			...this.snapshot,
+		this.data = repositoryDataSchema.parse({
+			...this.data,
 			settings: RepositorySettingsSchema.parse(settings)
 		});
 		return this;
 	}
 
 	public updateWorkflowConfiguration(workflowConfiguration: WorkflowGlobalSettings): this {
-		this.snapshot = repositorySchema.parse({
-			...this.snapshot,
+		this.data = repositoryDataSchema.parse({
+			...this.data,
 			workflowConfiguration: repositoryWorkflowConfigurationSchema.parse(workflowConfiguration)
 		});
 		return this;
 	}
 
 	public markInitialized(value = true): this {
-		this.snapshot = repositorySchema.parse({
-			...this.snapshot,
+		this.data = repositoryDataSchema.parse({
+			...this.data,
 			isInitialized: value
 		});
 		return this;
 	}
 
 	public toSchema(): RepositoryData {
-		return structuredClone(this.snapshot);
+		return this.toData();
+	}
+
+	public canStartMissionFromIssue(): boolean {
+		return this.githubRepository !== undefined;
+	}
+
+	public canStartMissionFromBrief(): boolean {
+		return true;
+	}
+
+	public canRemove(): boolean {
+		return true;
+	}
+
+	public override async remove(
+		input: RepositoryRemovePayload,
+		context?: EntityExecutionContext
+	): Promise<RepositoryRemoveAcknowledgement> {
+		const payload = repositoryRemovePayloadSchema.parse(input);
+		this.assertRepositoryIdentity(payload);
+		await this.getEntityFactory(context).remove(Repository, this.repositoryId);
+		return repositoryRemoveAcknowledgementSchema.parse({
+			ok: true,
+			entity: repositoryEntityName,
+			method: 'remove',
+			id: this.repositoryId
+		});
 	}
 
 	public async read(input: RepositoryReadPayload): Promise<RepositorySnapshot> {
@@ -303,10 +341,10 @@ export class Repository {
 			workflow,
 			taskRunners: new Map(),
 			...(settings.instructionsPath
-				? { instructionsPath: resolveRepositoryPath(this.repositoryRootPath, settings.instructionsPath) }
+				? { instructionsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.instructionsPath) }
 				: {}),
 			...(settings.skillsPath
-				? { skillsPath: resolveRepositoryPath(this.repositoryRootPath, settings.skillsPath) }
+				? { skillsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.skillsPath) }
 				: {}),
 			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
 			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
@@ -354,54 +392,68 @@ export class Repository {
 			throw new Error(`Repository payload root '${input.repositoryRootPath}' does not match '${this.repositoryRootPath}'.`);
 		}
 	}
-}
 
-function createRepositoryData(input: RepositoryInput): RepositoryData {
-	const normalizedRepositoryRootPath = path.resolve(input.repositoryRootPath);
-	const identity = deriveRepositoryIdentity(normalizedRepositoryRootPath);
-	const githubRepository = input.githubRepository?.trim() || identity.githubRepository;
-	const { ownerId, repoName } = deriveRepositoryNames(normalizedRepositoryRootPath, githubRepository);
-	const defaults = createDefaultRepositoryConfiguration();
+	private static createRepositoryData(input: RepositoryInput): RepositoryData {
+		const normalizedRepositoryRootPath = path.resolve(input.repositoryRootPath);
+		const identity = deriveRepositoryIdentity(normalizedRepositoryRootPath);
+		const githubRepository = input.githubRepository?.trim() || identity.githubRepository;
+		const { ownerId, repoName } = Repository.deriveRepositoryNames(normalizedRepositoryRootPath, githubRepository);
+		const defaults = createDefaultRepositoryConfiguration();
 
-	return repositorySchema.parse({
-		repositoryId: identity.repositoryId,
-		repositoryRootPath: normalizedRepositoryRootPath,
-		ownerId,
-		repoName,
-		label: input.label?.trim() || repoName,
-		description: input.description ?? githubRepository ?? normalizedRepositoryRootPath,
-		...(githubRepository ? { githubRepository } : {}),
-		settings: input.settings ?? defaults.settings,
-		workflowConfiguration: input.workflowConfiguration ?? defaults.workflowConfiguration,
-		isInitialized: input.isInitialized ?? defaults.isInitialized
-	});
-}
+		return repositoryDataSchema.parse({
+			repositoryId: identity.repositoryId,
+			repositoryRootPath: normalizedRepositoryRootPath,
+			ownerId,
+			repoName,
+			label: input.label?.trim() || repoName,
+			description: input.description ?? githubRepository ?? normalizedRepositoryRootPath,
+			...(githubRepository ? { githubRepository } : {}),
+			settings: input.settings ?? defaults.settings,
+			workflowConfiguration: input.workflowConfiguration ?? defaults.workflowConfiguration,
+			isInitialized: input.isInitialized ?? defaults.isInitialized
+		});
+	}
 
-function deriveRepositoryNames(
-	repositoryRootPath: string,
-	githubRepository?: string
-): { ownerId: string; repoName: string } {
-	const segments = githubRepository?.split('/').map((segment) => segment.trim()).filter(Boolean) ?? [];
-	if (segments.length === 2) {
+	private static deriveRepositoryNames(
+		repositoryRootPath: string,
+		githubRepository?: string
+	): { ownerId: string; repoName: string } {
+		const segments = githubRepository?.split('/').map((segment) => segment.trim()).filter(Boolean) ?? [];
+		if (segments.length === 2) {
+			return {
+				ownerId: segments[0]!,
+				repoName: segments[1]!
+			};
+		}
+
 		return {
-			ownerId: segments[0]!,
-			repoName: segments[1]!
+			ownerId: 'local',
+			repoName: path.basename(repositoryRootPath) || 'repository'
 		};
 	}
 
-	return {
-		ownerId: 'local',
-		repoName: path.basename(repositoryRootPath) || 'repository'
-	};
+	private static resolveRepositoryPath(repositoryRootPath: string, configuredPath: string): string {
+		return path.isAbsolute(configuredPath)
+			? configuredPath
+			: path.join(repositoryRootPath, configuredPath);
+	}
+
+	private static getRepositoryFactory(context?: EntityExecutionContext) {
+		const factory = Repository.getEntityFactory(context);
+		if (!factory.has(Repository)) {
+			factory.register({
+				entityName: repositoryEntityName,
+				table: 'repository',
+				entityClass: Repository,
+				storageSchema: repositoryDataSchema,
+				getId: (record) => record.repositoryId
+			});
+		}
+		return factory;
+	}
 }
 
 export type {
 	RepositoryData,
 	RepositoryInput
 };
-
-function resolveRepositoryPath(repositoryRootPath: string, configuredPath: string): string {
-	return path.isAbsolute(configuredPath)
-		? configuredPath
-		: path.join(repositoryRootPath, configuredPath);
-}

@@ -3,7 +3,7 @@ import type {
     MissionTaskRuntimeState,
     MissionWorkflowConfigurationSnapshot,
     MissionWorkflowEvent,
-    MissionRuntimeRecord,
+    MissionStateData,
     MissionWorkflowRuntimeState
 } from './types.js';
 import {
@@ -36,7 +36,7 @@ export function validateMissionWorkflowEvent(
 }
 
 export function ensureMissionWorkflowEventAccepted(
-    document: MissionRuntimeRecord,
+    document: MissionStateData,
     event: MissionWorkflowEvent
 ): void {
     validateMissionWorkflowEvent(document.runtime, event, document.configuration);

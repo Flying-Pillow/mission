@@ -2,9 +2,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import type { MissionDescriptor } from '../../../types.js';
-import { MissionDaemonService } from './MissionDaemonService.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../types.js';
+import { MissionDaemon } from './MissionDaemon.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
 
@@ -17,13 +17,13 @@ afterEach(async () => {
 	);
 });
 
-describe('MissionDaemonService', () => {
+describe('MissionDaemon', () => {
 	it('continues startup hydration when a persisted mission fails strict loading', async () => {
 		const workspaceRoot = await createTempWorkspace();
 		const adapter = new FilesystemAdapter(workspaceRoot);
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-good'), createDescriptor('mission-good'));
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-bad'), createDescriptor('mission-bad'));
-		const loadRuntime = vi.fn(async (input: { missionId: string }) => {
+		const loadMission = vi.fn(async (input: { missionId: string }) => {
 			if (input.missionId === 'mission-bad') {
 				throw new Error('strict persisted mission failure');
 			}
@@ -32,11 +32,11 @@ describe('MissionDaemonService', () => {
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 		try {
-			await expect(new MissionDaemonService({ loadRuntime }).hydrateRepositoryMissions({
+			await expect(new MissionDaemon({ loadMission }).hydrateRepositoryMissions({
 				surfacePath: workspaceRoot
 			})).resolves.toBeUndefined();
 
-			expect(loadRuntime).toHaveBeenCalledTimes(2);
+			expect(loadMission).toHaveBeenCalledTimes(2);
 			expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Mission daemon could not hydrate mission 'mission-bad'"));
 		} finally {
 			consoleError.mockRestore();

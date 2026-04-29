@@ -1,4 +1,4 @@
-import type { EntityContract } from '../Entity/EntityContract.js';
+import type { EntitySchema } from '../Entity/EntitySchema.js';
 import {
     missionTaskEntityName,
     taskIdentityPayloadSchema,
@@ -7,15 +7,15 @@ import {
     taskCommandAcknowledgementSchema
 } from './TaskSchema.js';
 
-export const taskEntityContract: EntityContract = {
+export const taskEntityContract: EntitySchema = {
     entity: missionTaskEntityName,
     queries: {
         read: {
             payload: taskIdentityPayloadSchema,
             result: missionTaskSnapshotSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
-                const mission = await service.loadRequiredMissionRuntime(payload, context);
+                const service = await loadMissionDaemon(context);
+                const mission = await service.loadRequiredMission(payload, context);
                 try {
                     return missionTaskSnapshotSchema.parse(service.requireTask(await service.buildMissionSnapshot(mission, payload.missionId), payload.taskId));
                 } finally {
@@ -29,9 +29,9 @@ export const taskEntityContract: EntityContract = {
             payload: taskExecuteCommandPayloadSchema,
             result: taskCommandAcknowledgementSchema,
             execute: async (payload, context) => {
-                const service = await loadMissionDaemonService(context);
+                const service = await loadMissionDaemon(context);
                 const terminalSessionName = service.getTerminalSessionName(payload.input);
-                const mission = await service.loadRequiredMissionRuntime(payload, context, terminalSessionName);
+                const mission = await service.loadRequiredMission(payload, context, terminalSessionName);
                 try {
                     service.requireTask(await service.buildMissionSnapshot(mission, payload.missionId), payload.taskId);
                     switch (payload.commandId) {
@@ -64,7 +64,7 @@ export const taskEntityContract: EntityContract = {
     }
 };
 
-async function loadMissionDaemonService(context: Parameters<typeof import('../../daemon/runtime/mission/MissionDaemonService.js').requireMissionDaemonService>[0]) {
-    const { requireMissionDaemonService } = await import('../../daemon/runtime/mission/MissionDaemonService.js');
-    return requireMissionDaemonService(context);
+async function loadMissionDaemon(context: Parameters<typeof import('../../daemon/MissionDaemon.js').requireMissionDaemon>[0]) {
+    const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+    return requireMissionDaemon(context);
 }

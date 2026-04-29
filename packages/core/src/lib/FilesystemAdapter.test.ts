@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
 import { resolveMissionWorkspaceRoot } from './repositoryPaths.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
-import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
+import { createMissionStateData, createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
+import { Mission } from '../entities/Mission/Mission.js';
 
 describe('FilesystemAdapter', () => {
 	it('derives mission branch names with a normalized title slug', () => {
@@ -20,7 +21,7 @@ describe('FilesystemAdapter', () => {
 		const missionDir = adapter.getTrackedMissionDir('mission-101', '/tmp/repo');
 
 		expect(missionDir).toBe(path.join('/tmp/repo', '.mission', 'missions', 'mission-101'));
-		expect(adapter.getMissionRuntimeRecordPath(missionDir)).toBe(
+		expect(adapter.getMissionStateDataPath(missionDir)).toBe(
 			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', 'mission.json')
 		);
 		expect(adapter.getMissionStagePath(missionDir, 'prd')).toBe(
@@ -170,7 +171,8 @@ describe('FilesystemAdapter', () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
-			await adapter.initializeMissionRuntimeRecord({
+			await Mission.initializeRuntimeData({
+				adapter,
 				missionDir,
 				missionId: 'mission-109-runtime-document',
 				configuration: createMissionWorkflowConfigurationSnapshot({
@@ -195,8 +197,44 @@ describe('FilesystemAdapter', () => {
 			expect(task?.status).toBe('pending');
 			expect(task?.agent).toBe('planner');
 
-			const workflowDocument = await adapter.readMissionRuntimeRecord(missionDir);
+			const workflowDocument = await Mission.readRuntimeData(adapter, missionDir);
 			expect(workflowDocument?.runtime.tasks).toEqual([]);
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
+
+	it('rejects inline legacy event logs in mission runtime data', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			const configuration = createMissionWorkflowConfigurationSnapshot({
+				createdAt: '2026-04-01T00:00:00.000Z',
+				workflowVersion: DEFAULT_WORKFLOW_VERSION,
+				workflow: createDefaultWorkflowSettings()
+			});
+			const data = createMissionStateData({
+				missionId: 'mission-inline-event-log',
+				configuration,
+				createdAt: configuration.createdAt
+			});
+			await fs.writeFile(
+				adapter.getMissionStateDataPath(missionDir),
+				`${JSON.stringify({
+					...data,
+					eventLog: [{
+						eventId: 'mission.created:legacy',
+						type: 'mission.created',
+						occurredAt: configuration.createdAt,
+						source: 'human',
+						payload: {}
+					}]
+				}, null, 2)}\n`,
+				'utf8'
+			);
+
+			await expect(Mission.readRuntimeData(adapter, missionDir)).rejects.toThrow(/eventLog/u);
+			await expect(Mission.readEventLog(adapter, missionDir)).resolves.toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}

@@ -1,15 +1,15 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AgentCommand, AgentPrompt } from '../agent/AgentRuntimeTypes.js';
-import { createConfiguredAgentRunners } from '../agent/runtimes/AgentRuntimeFactory.js';
-import type { EntityExecutionContext } from '../../../entities/Entity/Entity.js';
-import type { EntityCommandDescriptor } from '../../../entities/Entity/EntitySchema.js';
+import type { AgentCommand, AgentPrompt } from './runtime/agent/AgentRuntimeTypes.js';
+import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
+import type { EntityExecutionContext } from '../entities/Entity/Entity.js';
+import type { EntityCommandDescriptor } from '../entities/Entity/EntitySchema.js';
 import type {
     MissionAgentCommand,
     MissionAgentPrompt,
     MissionAgentSessionSnapshot
-} from '../../../entities/AgentSession/AgentSessionSchema.js';
-import type { MissionArtifactSnapshot } from '../../../entities/Artifact/ArtifactSchema.js';
+} from '../entities/AgentSession/AgentSessionSchema.js';
+import type { MissionArtifactSnapshot } from '../entities/Artifact/ArtifactSchema.js';
 import {
     missionActionListSnapshotSchema,
     missionIdentityPayloadSchema,
@@ -19,19 +19,19 @@ import {
     type MissionIdentityPayload,
     type MissionSnapshot,
     type MissionWorktreeNodeData
-} from '../../../entities/Mission/MissionSchema.js';
-import { Mission } from '../../../entities/Mission/Mission.js';
-import type { MissionStageSnapshot } from '../../../entities/Stage/StageSchema.js';
-import type { MissionTaskSnapshot } from '../../../entities/Task/TaskSchema.js';
-import { Repository } from '../../../entities/Repository/Repository.js';
-import { createDefaultRepositorySettings } from '../../../entities/Repository/RepositorySettings.js';
-import { readRepositorySettingsDocument } from '../../../lib/daemonConfig.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../../../lib/repositoryPaths.js';
-import { normalizeWorkflowSettings } from '../../../settings/validation.js';
-import type { OperatorActionDescriptor } from '../../../types.js';
-import { readMissionWorkflowDefinition } from '../../../workflow/mission/preset.js';
-import { createDefaultWorkflowSettings } from '../../../workflow/mission/workflow.js';
+} from '../entities/Mission/MissionSchema.js';
+import { Mission } from '../entities/Mission/Mission.js';
+import type { MissionStageSnapshot } from '../entities/Stage/StageSchema.js';
+import type { MissionTaskSnapshot } from '../entities/Task/TaskSchema.js';
+import { Repository } from '../entities/Repository/Repository.js';
+import { createDefaultRepositorySettings } from '../entities/Repository/RepositorySettings.js';
+import { readRepositorySettingsDocument } from '../lib/daemonConfig.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { getMissionWorktreesPath } from '../lib/repositoryPaths.js';
+import { normalizeWorkflowSettings } from '../settings/validation.js';
+import type { OperatorActionDescriptor } from '../types.js';
+import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 
 export type MissionLoader = (
     input: MissionIdentityPayload,
@@ -71,7 +71,7 @@ export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
     'build'
 ]);
 
-export class MissionDaemonService {
+export class MissionDaemon {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
     private readonly missionHandles = new Map<string, MissionHandle>();
 
@@ -503,11 +503,11 @@ export class MissionDaemonService {
     }
 }
 
-export function requireMissionDaemonService(context: EntityExecutionContext): MissionDaemonService {
-    if (!context.missionService) {
+export function requireMissionDaemon(context: EntityExecutionContext): MissionDaemon {
+    if (!context.missionDaemon) {
         throw new Error('Mission entity methods require a daemon-owned mission service.');
     }
-    return context.missionService as MissionDaemonService;
+    return context.missionDaemon;
 }
 
 type EntityActionCommandMapping = {
