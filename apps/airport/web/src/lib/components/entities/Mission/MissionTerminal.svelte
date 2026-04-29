@@ -42,7 +42,7 @@
     const mission = $derived(missionScope.mission);
     const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
-    const repositoryId = $derived(activeRepository?.repositoryId ?? "");
+    const repositoryId = $derived(activeRepository?.id ?? "");
 
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<MissionTerminalSnapshot | null>(null);

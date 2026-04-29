@@ -38,12 +38,34 @@ type GitHubIssuePayload = {
 };
 
 type GitHubRepositoryPayload = {
+	name?: string;
 	full_name?: string;
+	description?: string | null;
+	topics?: string[];
+	homepage?: string | null;
+	license?: {
+		key?: string;
+		name?: string;
+		spdx_id?: string;
+		url?: string | null;
+	} | null;
 	html_url?: string;
+	visibility?: string;
 	private?: boolean;
 	archived?: boolean;
+	default_branch?: string;
+	stargazers_count?: number;
+	forks_count?: number;
+	watchers_count?: number;
+	subscribers_count?: number;
+	open_issues_count?: number;
+	created_at?: string;
+	updated_at?: string;
+	pushed_at?: string;
 	owner?: {
 		login?: string;
+		type?: string;
+		html_url?: string;
 	};
 };
 
@@ -138,18 +160,68 @@ export class GitHubPlatformAdapter {
 				}
 				repositories.set(fullName.toLowerCase(), {
 					fullName,
+					name: repository.name?.trim() || fullName.split('/').at(-1) || fullName,
+					description: repository.description ?? null,
+					topics: normalizeStringArray(repository.topics),
+					...(repository.homepage?.trim()
+						? { homepageUrl: repository.homepage.trim() }
+						: {}),
+					...(repository.license
+						? {
+							license: {
+								...(repository.license.key?.trim() ? { key: repository.license.key.trim() } : {}),
+								...(repository.license.name?.trim() ? { name: repository.license.name.trim() } : {}),
+								...(repository.license.spdx_id?.trim() ? { spdxId: repository.license.spdx_id.trim() } : {}),
+								...(repository.license.url?.trim() ? { url: repository.license.url.trim() } : {})
+							}
+						}
+						: {}),
 					...(repository.owner?.login?.trim()
 						? { ownerLogin: repository.owner.login.trim() }
+						: {}),
+					...(repository.owner?.type?.trim()
+						? { ownerType: repository.owner.type.trim() }
+						: {}),
+					...(repository.owner?.html_url?.trim()
+						? { ownerUrl: repository.owner.html_url.trim() }
 						: {}),
 					...(repository.html_url?.trim()
 						? { htmlUrl: repository.html_url.trim() }
 						: {}),
-					visibility: repository.private ? 'private' : 'public',
-					archived: Boolean(repository.archived)
+					visibility: normalizeGitHubVisibility(repository.visibility, repository.private),
+					...(repository.default_branch?.trim() ? { defaultBranch: repository.default_branch.trim() } : {}),
+					archived: Boolean(repository.archived),
+					...optionalNonNegativeInteger('starsCount', repository.stargazers_count),
+					...optionalNonNegativeInteger('forksCount', repository.forks_count),
+					...optionalNonNegativeInteger('watchersCount', repository.watchers_count),
+					...optionalNonNegativeInteger('subscribersCount', repository.subscribers_count),
+					...optionalNonNegativeInteger('openIssuesCount', repository.open_issues_count),
+					...(repository.created_at?.trim() ? { createdAt: repository.created_at.trim() } : {}),
+					...(repository.updated_at?.trim() ? { updatedAt: repository.updated_at.trim() } : {}),
+					...(repository.pushed_at?.trim() ? { pushedAt: repository.pushed_at.trim() } : {})
 				});
 			}
 		}
 
+
+		function normalizeStringArray(value: string[] | undefined): string[] {
+			return [...new Set((value ?? [])
+				.map((item) => item.trim())
+				.filter(Boolean))]
+				.sort((left, right) => left.localeCompare(right));
+		}
+
+		function normalizeGitHubVisibility(value: string | undefined, isPrivate: boolean | undefined): 'private' | 'public' | 'internal' {
+			const normalizedValue = value?.trim().toLowerCase();
+			if (normalizedValue === 'private' || normalizedValue === 'public' || normalizedValue === 'internal') {
+				return normalizedValue;
+			}
+			return isPrivate ? 'private' : 'public';
+		}
+
+		function optionalNonNegativeInteger<TKey extends string>(key: TKey, value: number | undefined): Partial<Record<TKey, number>> {
+			return Number.isInteger(value) && value >= 0 ? { [key]: value } as Record<TKey, number> : {};
+		}
 		return [...repositories.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
 	}
 

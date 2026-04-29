@@ -1,10 +1,6 @@
 // /apps/airport/web/src/routes/api/runtime/sessions/[sessionId]/terminal/+server.ts: Session terminal snapshot/input relay for xterm.js over Airport web runtime routes.
 import { json } from '@sveltejs/kit';
-import {
-    agentSessionTerminalInputSchema as missionSessionTerminalInputSchema,
-    agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema,
-    agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema
-} from '@flying-pillow/mission-core/entities';
+import { agentSessionTerminalInputSchema as missionSessionTerminalInputSchema, agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema, agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 
@@ -17,7 +13,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 
     const gateway = new DaemonGateway(locals);
     const repository = query.repositoryId
-        ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
+        ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
         : undefined;
     const snapshot = await gateway.getMissionSessionTerminalSnapshot({
         missionId: query.missionId,
@@ -43,7 +39,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
     const gateway = new DaemonGateway(locals);
     const repository = query.repositoryId
-        ? await gateway.resolveRepositoryCandidate({ repositoryId: query.repositoryId })
+        ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
         : undefined;
     const snapshot = await gateway.sendMissionSessionTerminalInput({
         missionId: body.missionId,

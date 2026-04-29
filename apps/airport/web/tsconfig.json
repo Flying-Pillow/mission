@@ -10,7 +10,36 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "paths": {
+      "$lib": [
+        "./src/lib"
+      ],
+      "$lib/*": [
+        "./src/lib/*"
+      ],
+      "$docs": [
+        "../../../docs"
+      ],
+      "$docs/*": [
+        "../../../docs/*"
+      ],
+      "$app/types": [
+        "./.svelte-kit/types/index.d.ts"
+      ],
+      "@flying-pillow/mission-core": [
+        "../../../packages/core/src"
+      ],
+      "@flying-pillow/mission-core/*": [
+        "../../../packages/core/src/*"
+      ],
+      "@flying-pillow/mission": [
+        "../../../packages/mission/src"
+      ],
+      "@flying-pillow/mission/*": [
+        "../../../packages/mission/src/*"
+      ]
+    }
   },
   "include": [
     ".svelte-kit/ambient.d.ts",

@@ -14,9 +14,18 @@
     import NavSecondary from "$lib/components/nav-secondary.svelte";
     import NavUser from "$lib/components/nav-user.svelte";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+    import {
+        getRepositoryDisplayDescription,
+        getRepositoryDisplayName,
+    } from "$lib/components/entities/Repository/Repository.svelte.js";
     import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
-    import type { MissionSummary } from "$lib/components/entities/types";
+    import type {
+        MissionSummary,
+        SidebarRepositorySummary,
+    } from "$lib/components/entities/types";
+
+    type SidebarRepositoryView = SidebarRepositorySummary & { id: string };
 
     const logo = asset("/logo.png");
     const appContext = getAppContext();
@@ -69,17 +78,21 @@
     const showRepositoryNavigation = $derived(routeSegments[0] !== "airport");
 
     const sidebarRepositories = $derived.by(() => {
-        return (appContext?.airport.repositories ?? []).map((repository) => {
-            const isSelected = repository.repositoryId === activeRepositoryId;
+        const repositories = (appContext?.airport.repositories ??
+            []) as SidebarRepositoryView[];
+        return repositories.map((repository) => {
+            const isSelected = repository.id === activeRepositoryId;
 
             return {
                 ...repository,
+                displayName: getRepositoryDisplayName(repository),
+                displayDescription: getRepositoryDisplayDescription(repository),
                 icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
-                href: `/repository/${encodeURIComponent(repository.repositoryId)}`,
+                href: `/repository/${encodeURIComponent(repository.id)}`,
                 missions: (repository.missions ?? []).map(
                     (mission: MissionSummary) => ({
                         ...mission,
-                        href: `/repository/${encodeURIComponent(repository.repositoryId)}/missions/${encodeURIComponent(mission.missionId)}`,
+                        href: `/repository/${encodeURIComponent(repository.id)}/missions/${encodeURIComponent(mission.missionId)}`,
                         isActive:
                             isSelected && mission.missionId === activeMissionId,
                     }),
@@ -153,11 +166,11 @@
                                 </div>
                             </Sidebar.MenuItem>
                         {:else}
-                            {#each sidebarRepositories as repository (repository.repositoryId)}
+                            {#each sidebarRepositories as repository (repository.id)}
                                 <Sidebar.MenuItem>
                                     <Sidebar.MenuButton
                                         class="h-auto py-2"
-                                        isActive={repository.repositoryId ===
+                                        isActive={repository.id ===
                                             activeRepositoryId}
                                     >
                                         {#snippet child({ props })}
@@ -171,12 +184,12 @@
                                                 >
                                                     <span
                                                         class="truncate text-sm font-medium"
-                                                        >{repository.label}</span
+                                                        >{repository.displayName}</span
                                                     >
                                                     <span
                                                         class="text-muted-foreground truncate text-xs"
                                                     >
-                                                        {repository.description}
+                                                        {repository.displayDescription}
                                                     </span>
                                                 </span>
                                             </a>

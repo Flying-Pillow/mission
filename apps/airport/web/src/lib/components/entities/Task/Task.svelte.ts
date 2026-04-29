@@ -1,8 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
-import type {
-    EntityCommandDescriptor,
-    MissionTaskSnapshot
-} from '@flying-pillow/mission-core/entities';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskData = MissionTaskSnapshot;

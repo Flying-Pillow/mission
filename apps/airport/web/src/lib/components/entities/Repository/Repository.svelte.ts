@@ -1,16 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
-import type {
-    GitHubIssueDetail,
-    MissionSnapshot,
-    RepositorySnapshot,
-    TrackedIssueSummary
-} from '@flying-pillow/mission-core/entities';
-import {
-    githubIssueDetailSchema,
-    repositoryMissionStartAcknowledgementSchema,
-    repositorySnapshotSchema,
-    trackedIssueSummarySchema
-} from '@flying-pillow/mission-core/entities';
+import type { MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { githubIssueDetailSchema, repositoryMissionStartAcknowledgementSchema, repositorySnapshotSchema, trackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { GitHubIssueDetail, RepositorySnapshot, TrackedIssueSummary } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
@@ -18,9 +9,11 @@ import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 
+type RepositorySummary = RepositorySnapshot['repository'];
+
 export type RepositoryMissionResolver = (snapshot: MissionSnapshot) => Mission;
 export type RepositorySnapshotLoader = (input: {
-    repositoryId: string;
+    id: string;
     repositoryRootPath?: string;
 }) => Promise<RepositorySnapshot>;
 
@@ -64,23 +57,23 @@ export class Repository implements EntityModel<RepositorySnapshot> {
         this.selectedMissionState = mission;
     }
 
-    public get repositoryId(): string {
-        return this.data.repository.repositoryId;
-    }
-
     public get id(): string {
-        return this.repositoryId;
+        return this.data.repository.id;
     }
 
     public get repositoryRootPath(): string {
         return this.data.repository.repositoryRootPath;
     }
 
-    public get label(): string {
-        return this.data.repository.label;
+    public get displayName(): string {
+        return getRepositoryDisplayName(this.data.repository);
     }
 
-    public get summary(): RepositorySnapshot['repository'] {
+    public get displayDescription(): string {
+        return getRepositoryDisplayDescription(this.data.repository);
+    }
+
+    public get summary(): RepositorySummary {
         return structuredClone($state.snapshot(this.data.repository));
     }
 
@@ -174,7 +167,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
     public async refresh(): Promise<this> {
         return this.updateFromSnapshot(
             await this.loadSnapshot({
-                repositoryId: this.repositoryId,
+                id: this.id,
                 repositoryRootPath: this.repositoryRootPath
             })
         );
@@ -203,7 +196,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
             entity: 'Repository',
             method: 'listIssues',
             payload: {
-                repositoryId: this.repositoryId,
+                id: this.id,
                 repositoryRootPath: this.repositoryRootPath
             }
         });
@@ -215,7 +208,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
                 entity: 'Repository',
                 method: 'getIssue',
                 payload: {
-                    repositoryId: this.repositoryId,
+                    id: this.id,
                     repositoryRootPath: this.repositoryRootPath,
                     issueNumber
                 }
@@ -228,7 +221,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
             entity: 'Repository',
             method: 'startMissionFromIssue',
             payload: {
-                repositoryId: this.repositoryId,
+                id: this.id,
                 repositoryRootPath: this.repositoryRootPath,
                 issueNumber
             }
@@ -236,7 +229,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
         return {
             missionId: result.id,
-            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.id)}`
+            redirectTo: `/repository/${encodeURIComponent(this.id)}/missions/${encodeURIComponent(result.id)}`
         };
     }
 
@@ -249,7 +242,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
             entity: 'Repository',
             method: 'startMissionFromBrief',
             payload: {
-                repositoryId: this.repositoryId,
+                id: this.id,
                 repositoryRootPath: this.repositoryRootPath,
                 ...input
             }
@@ -257,7 +250,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
         return {
             missionId: result.id,
-            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.id)}`
+            redirectTo: `/repository/${encodeURIComponent(this.id)}/missions/${encodeURIComponent(result.id)}`
         };
     }
 
@@ -268,4 +261,12 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
         return this.resolveMission(snapshot);
     }
+}
+
+export function getRepositoryDisplayName(repository: RepositorySummary): string {
+    return repository.githubRepository ?? repository.repoName;
+}
+
+export function getRepositoryDisplayDescription(repository: RepositorySummary): string {
+    return repository.githubRepository ?? repository.repositoryRootPath;
 }

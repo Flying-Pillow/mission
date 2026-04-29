@@ -1,1 +1,0 @@
-export * from './GitHubRepositorySchema.js';

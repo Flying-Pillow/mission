@@ -1,5 +1,5 @@
 {
-  "missionWorkspaceRoot": "missions",
+  "missionsRoot": "missions",
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",

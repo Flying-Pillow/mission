@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../../lib/repositoryPaths.js';
+import { Repository } from '../Repository/Repository.js';
 import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
 import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
 import type { MissionStageStatus, MissionTowerTreeNode } from '../../types.js';
@@ -18,7 +18,7 @@ afterEach(async () => {
     await Promise.all(
         [...temporaryWorkspaceRoots].map(async (workspaceRoot) => {
             temporaryWorkspaceRoots.delete(workspaceRoot);
-            await fs.rm(getMissionWorktreesPath(workspaceRoot), { recursive: true, force: true }).catch(() => undefined);
+            await fs.rm(Repository.getMissionWorktreesPath(workspaceRoot), { recursive: true, force: true }).catch(() => undefined);
             await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
         })
     );

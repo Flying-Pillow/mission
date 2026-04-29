@@ -72,7 +72,7 @@ export abstract class Entity<
 		entity: object,
 		context: EntityExecutionContext
 	): Promise<EntityCommandDescriptor[]> {
-		const methods = contract.methods ?? contract.commands ?? {};
+		const methods = contract.methods ?? {};
 		const descriptors = await Promise.all(
 			Object.entries(methods)
 				.filter(([, method]) => method.ui)
@@ -116,9 +116,7 @@ export abstract class Entity<
 		const method = Entity.resolveContractMethod(kind, contract, input.method);
 
 		const payload = method.payload.parse(input.payload ?? {});
-		const result = method.execute
-			? await method.execute(payload, context)
-			: await Entity.executeClassMethod(contract, method, input.method, payload, context);
+		const result = await Entity.executeClassMethod(contract, method, input.method, payload, context);
 
 		return method.result.parse(result);
 	}
@@ -128,24 +126,14 @@ export abstract class Entity<
 		contract: EntitySchema,
 		methodName: string
 	): EntityMethod {
-		if (contract.methods) {
-			const method = contract.methods[methodName];
-			if (!method) {
-				throw new Error(`${kind} method '${contract.entity}.${methodName}' is not implemented in the daemon.`);
-			}
-
-			const expectedKind = kind === 'Query' ? 'query' : 'mutation';
-			if (method.kind !== expectedKind) {
-				throw new Error(`${kind} method '${contract.entity}.${methodName}' is declared as '${method.kind ?? 'unknown'}'.`);
-			}
-
-			return method;
-		}
-
-		const methods = kind === 'Query' ? contract.queries : contract.commands;
-		const method = methods?.[methodName];
+		const method = contract.methods?.[methodName];
 		if (!method) {
 			throw new Error(`${kind} method '${contract.entity}.${methodName}' is not implemented in the daemon.`);
+		}
+
+		const expectedKind = kind === 'Query' ? 'query' : 'mutation';
+		if (method.kind !== expectedKind) {
+			throw new Error(`${kind} method '${contract.entity}.${methodName}' is declared as '${method.kind}'.`);
 		}
 
 		return method;

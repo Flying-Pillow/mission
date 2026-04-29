@@ -7,14 +7,11 @@
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
-    import {
-        missionArtifactSnapshotSchema,
-        missionAgentSessionSnapshotSchema,
-        missionSnapshotSchema,
-        missionStageSnapshotSchema,
-        missionStatusSnapshotSchema,
-        missionTaskSnapshotSchema,
-    } from "@flying-pillow/mission-core/entities";
+    import { missionArtifactSnapshotSchema } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+    import { missionAgentSessionSnapshotSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+    import { missionSnapshotSchema, missionStatusSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+    import { missionStageSnapshotSchema } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+    import { missionTaskSnapshotSchema } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -26,7 +23,7 @@
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/browser";
+    import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/types';
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -115,7 +112,9 @@
             missionScope.missionId,
     );
     const repositoryName = $derived(
-        repositorySummary?.repoName ?? repositorySummary?.label ?? "Repository",
+        repositorySummary?.githubRepository ??
+            repositorySummary?.repoName ??
+            "Repository",
     );
     const missionIssueLabel = $derived.by(() => {
         const issueId = missionStatus?.issueId;

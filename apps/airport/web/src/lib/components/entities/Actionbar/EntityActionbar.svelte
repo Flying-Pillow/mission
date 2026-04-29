@@ -10,7 +10,7 @@
     import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
     import RocketIcon from "@tabler/icons-svelte/icons/rocket";
     import type { Icon } from "@tabler/icons-svelte";
-    import type { EntityCommandDescriptor } from "@flying-pillow/mission-core/entities";
+    import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
     import type { ActionableEntity } from "./ActionableEntity";
 
     let {

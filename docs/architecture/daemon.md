@@ -48,7 +48,7 @@ flowchart TD
 ### `WorkspaceManager`
 
 - Resolves the control root from `surfacePath` or `missionId`.
-- Registers real repositories into the machine-local Mission config.
+- Resolves real repositories from configured repository roots and filesystem state.
 - Creates one `MissionWorkspace` per repository root.
 - Maintains the mission-to-workspace index used to route `mission.*`, `task.*`, and `session.*` calls.
 
@@ -63,7 +63,7 @@ flowchart TD
 
 | State | Persisted | Where |
 | --- | --- | --- |
-| Registered repositories and local tool defaults | Yes | Mission config under `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` |
+| Mission roots and managed tool paths | Yes | Mission config under `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` |
 | Repository airport intent | Yes | `.mission/settings.json` under the `airport` field |
 | Composite daemon snapshot | No | Rebuilt in memory from workspace, mission, and airport state |
 | Client connections | No | `Daemon` runtime only |

@@ -6,6 +6,7 @@ import {
 	ensureMissionConfig,
 	getMissionGitHubCliBinary,
 	getMissionDaemonDirectory,
+	getMissionManagedDependenciesRoot,
 	getMissionConfigPath,
 	readMissionConfig,
 	writeMissionConfig
@@ -25,22 +26,24 @@ describe('config', () => {
 		delete process.env['MISSION_CONFIG_PATH'];
 	});
 
-	it('scaffolds a default user config in XDG config home', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('scaffolds a default config in XDG config home', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		const config = await ensureMissionConfig();
 
 		expect(getMissionConfigPath()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'config.json'));
 		expect(config).toMatchObject({
 			version: 1,
-			missionWorkspaceRoot: 'missions'
+			missionsRoot: path.join(os.homedir(), 'missions'),
+			repositoriesRoot: path.join(os.homedir(), 'repositories')
 		});
 	});
 
-	it('derives a Mission-managed runtime directory next to the user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('derives Mission-managed directories next to the config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		expect(getMissionDaemonDirectory()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'runtime'));
+		expect(getMissionManagedDependenciesRoot()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'dependencies'));
 	});
 
 	it('prefers MISSION_CONFIG_PATH when present and resolves the Mission config beneath it', () => {
@@ -48,6 +51,7 @@ describe('config', () => {
 
 		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
 		expect(getMissionDaemonDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionManagedDependenciesRoot()).toBe('/config/mission/dependencies');
 	});
 
 	it('accepts MISSION_CONFIG_PATH values that already point at the Mission config directory', () => {
@@ -55,30 +59,34 @@ describe('config', () => {
 
 		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
 		expect(getMissionDaemonDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionManagedDependenciesRoot()).toBe('/config/mission/dependencies');
 	});
 
-	it('persists user-level overrides', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('persists config overrides', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		await writeMissionConfig({
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 
 		expect(readMissionConfig()).toMatchObject({
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
 
-	it('drops legacy terminalBinary values from existing user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('drops legacy terminalBinary values from existing config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
-				missionWorkspaceRoot: '/tmp/missions',
+				missionsRoot: '/tmp/missions',
+				repositoriesRoot: '/tmp/repositories',
 				terminalBinary: '/usr/local/bin/zellij',
 				ghBinary: '/opt/gh/bin/gh'
 			}, null, 2),
@@ -87,13 +95,14 @@ describe('config', () => {
 
 		expect(readMissionConfig()).toEqual({
 			version: 1,
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
 
 	it('resolves the configured GitHub CLI binary when Mission install has configured one', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		const binaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-gh-binary-'));
 		const ghBinaryPath = path.join(binaryDirectory, 'gh');
 		await fs.writeFile(ghBinaryPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -108,7 +117,7 @@ describe('config', () => {
 	});
 
 	it('ignores a configured GitHub CLI path when the binary no longer exists', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		await writeMissionConfig({
 			ghBinary: '/tmp/mission-fake-gh-does-not-exist/gh'
@@ -117,8 +126,8 @@ describe('config', () => {
 		expect(getMissionGitHubCliBinary()).toBeUndefined();
 	});
 
-	it('does not read legacy repos-map config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('rejects legacy repos-map config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
@@ -133,20 +142,18 @@ describe('config', () => {
 			'utf8'
 		);
 
-		expect(readMissionConfig()).toEqual({
-			version: 1,
-			missionWorkspaceRoot: 'missions'
-		});
+		expect(readMissionConfig()).toBeUndefined();
 	});
 
-	it('rewrites stale registered repositories out of user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('rewrites stale repository registry entries out of config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
-				missionWorkspaceRoot: 'missions',
+				missionsRoot: '/tmp/missions',
+				repositoriesRoot: '/tmp/repositories',
 				terminalBinary: 'zellij',
 				registeredRepositories: [
 					{
@@ -161,7 +168,8 @@ describe('config', () => {
 
 		expect(config).toEqual({
 			version: 1,
-			missionWorkspaceRoot: 'missions'
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories'
 		});
 		expect(readMissionConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('mission-stale-repository');

@@ -7,6 +7,7 @@ export type WorkflowSettingsErrorCode =
 	| 'SETTINGS_VALIDATION_FAILED'
 	| 'SETTINGS_CONFLICT'
 	| 'SETTINGS_FILE_INVALID'
+	| 'SETTINGS_NOT_INITIALIZED'
 	| 'SETTINGS_CONFIRMATION_REQUIRED';
 
 export type WorkflowSettingsValidationError = {

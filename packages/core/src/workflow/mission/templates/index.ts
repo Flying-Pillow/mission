@@ -6,7 +6,7 @@ import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
-import { getMissionWorkflowTemplatesPath } from '../../../lib/repositoryPaths.js';
+import { Repository } from '../../../entities/Repository/Repository.js';
 import type {
     MissionProductTemplate,
     MissionStageTemplateDefinitions,
@@ -113,7 +113,7 @@ async function renderMissionTemplate(
 }
 
 function resolveMissionTemplateDirectory(controlRoot: string): string {
-    const repositoryTemplateDirectory = getMissionWorkflowTemplatesPath(controlRoot);
+    const repositoryTemplateDirectory = Repository.getMissionWorkflowTemplatesPath(controlRoot);
     if (path.isAbsolute(repositoryTemplateDirectory) && fs.existsSync(repositoryTemplateDirectory)) {
         return repositoryTemplateDirectory;
     }

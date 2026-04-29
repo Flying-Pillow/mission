@@ -3,12 +3,13 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-export const MISSION_USER_CONFIG_DIRECTORY = 'mission';
-export const MISSION_USER_CONFIG_FILE = 'config.json';
+export const MISSION_CONFIG_DIRECTORY = 'mission';
+export const MISSION_CONFIG_FILE = 'config.json';
 
 export type MissionConfig = {
 	version: 1;
-	missionWorkspaceRoot?: string;
+	missionsRoot: string;
+	repositoriesRoot: string;
 	ghBinary?: string;
 };
 
@@ -20,26 +21,40 @@ export function getMissionConfigDirectory(): string {
 
 	const xdgConfigHome = process.env['XDG_CONFIG_HOME']?.trim();
 	return xdgConfigHome
-		? path.join(xdgConfigHome, MISSION_USER_CONFIG_DIRECTORY)
-		: path.join(os.homedir(), '.config', MISSION_USER_CONFIG_DIRECTORY);
+		? path.join(xdgConfigHome, MISSION_CONFIG_DIRECTORY)
+		: path.join(os.homedir(), '.config', MISSION_CONFIG_DIRECTORY);
 }
 
 export function getMissionConfigPath(): string {
-	return path.join(getMissionConfigDirectory(), MISSION_USER_CONFIG_FILE);
+	return path.join(getMissionConfigDirectory(), MISSION_CONFIG_FILE);
 }
 
 export function getMissionDaemonDirectory(): string {
 	return path.join(getMissionConfigDirectory(), 'runtime');
 }
 
+export function getMissionManagedDependenciesRoot(): string {
+	return path.join(getMissionConfigDirectory(), 'dependencies');
+}
+
 export function getDefaultMissionConfig(overrides: Partial<MissionConfig> = {}): MissionConfig {
-	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
+	const missionsRoot = normalizeOptionalString(overrides.missionsRoot);
+	const repositoriesRoot = normalizeOptionalString(overrides.repositoriesRoot);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	return {
 		version: 1,
-		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
+		missionsRoot: missionsRoot ?? defaultRootPath('MISSIONS_PATH', 'missions'),
+		repositoriesRoot: repositoriesRoot ?? defaultRootPath('REPOSITORIES_PATH', 'repositories'),
 		...(ghBinary ? { ghBinary } : {})
 	};
+}
+
+export function resolveMissionsRoot(config: MissionConfig = getDefaultMissionConfig()): string {
+	return path.resolve(config.missionsRoot);
+}
+
+export function resolveRepositoriesRoot(config: MissionConfig = getDefaultMissionConfig()): string {
+	return path.resolve(config.repositoriesRoot);
 }
 
 export function getMissionGitHubCliBinary(): string | undefined {
@@ -107,14 +122,21 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined 
 		return undefined;
 	}
 	const candidate = rawConfig as Record<string, unknown>;
+	if (typeof candidate['missionsRoot'] !== 'string' || typeof candidate['repositoriesRoot'] !== 'string') {
+		return undefined;
+	}
 	return getDefaultMissionConfig({
-		...(typeof candidate['missionWorkspaceRoot'] === 'string'
-			? { missionWorkspaceRoot: candidate['missionWorkspaceRoot'] }
-			: {}),
+		missionsRoot: candidate['missionsRoot'],
+		repositoriesRoot: candidate['repositoriesRoot'],
 		...(typeof candidate['ghBinary'] === 'string'
 			? { ghBinary: candidate['ghBinary'] }
 			: {})
 	});
+}
+
+function defaultRootPath(environmentVariableName: string, directoryName: string): string {
+	const configuredRoot = normalizeOptionalString(process.env[environmentVariableName]);
+	return configuredRoot ?? path.join(os.homedir(), directoryName);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
@@ -129,7 +151,7 @@ function resolveConfiguredMissionConfigDirectory(): string | undefined {
 	}
 
 	const resolvedPath = path.resolve(configuredPath);
-	return path.basename(resolvedPath) === MISSION_USER_CONFIG_DIRECTORY
+	return path.basename(resolvedPath) === MISSION_CONFIG_DIRECTORY
 		? resolvedPath
-		: path.join(resolvedPath, MISSION_USER_CONFIG_DIRECTORY);
+		: path.join(resolvedPath, MISSION_CONFIG_DIRECTORY);
 }

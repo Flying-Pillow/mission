@@ -2,7 +2,7 @@
 <script lang="ts">
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
-    import Home from "./Home.svelte";
+    import AirportPage from "$lib/components/airport/AirportPage.svelte";
     import {
         SidebarInset,
         SidebarProvider,
@@ -24,6 +24,6 @@
         class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0"
     >
         <AirportHeader />
-        <Home />
+        <AirportPage />
     </SidebarInset>
 </SidebarProvider>

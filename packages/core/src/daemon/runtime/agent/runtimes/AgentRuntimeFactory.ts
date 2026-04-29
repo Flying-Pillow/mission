@@ -1,6 +1,6 @@
 import { CopilotCliAgentRunner } from './CopilotCliAgentRunner.js';
 import { PiAgentRunner } from './PiAgentRunner.js';
-import { readRepositorySettingsDocument } from '../../../../lib/daemonConfig.js';
+import { Repository } from '../../../../entities/Repository/Repository.js';
 import type { AgentRunner } from '../AgentRunner.js';
 
 export async function createConfiguredAgentRunners(options: {
@@ -8,7 +8,7 @@ export async function createConfiguredAgentRunners(options: {
 	terminalSessionName?: string;
 	logLine?: (line: string) => void;
 }): Promise<AgentRunner[]> {
-	readRepositorySettingsDocument(options.controlRoot);
+	Repository.readSettingsDocument(options.controlRoot);
 
 	return [
 		new CopilotCliAgentRunner({

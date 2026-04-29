@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/daemon/health.server.ts: Tracks daemon availability and recovery state for the Airport web server.
-import type { SystemState } from '@flying-pillow/mission-core';
+import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
 import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
 import { clearSharedDaemonClient } from './shared-client.server';
 import { openDaemonConnection } from './transport.server';

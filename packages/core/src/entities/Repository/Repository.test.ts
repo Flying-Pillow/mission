@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { Repository } from './Repository.js';
-import { createDefaultRepositorySettings } from './RepositorySettings.js';
+import { createDefaultRepositorySettings } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
         const repository = Repository.open('/tmp/mission-proof-of-concept');
 
+        expect(repository.id).toMatch(/^repository:local\/mission-proof-of-concept\/[a-f0-9]{8}$/u);
+        expect(repository.toSchema().id).toBe(repository.id);
         expect(repository.ownerId).toBe('local');
         expect(repository.repoName).toBe('mission-proof-of-concept');
-        expect(repository.label).toBe('mission-proof-of-concept');
         expect(repository.isInitialized).toBe(false);
         expect(repository.workflowConfiguration).toEqual(createDefaultWorkflowSettings());
     });
 
-    it('registers a GitHub repository and updates only its own configuration', () => {
-        const repository = Repository.register({
+    it('opens a GitHub repository and updates only its own configuration', () => {
+        const repository = Repository.create({
             repositoryRootPath: '/workspaces/mission',
             githubRepository: 'Flying-Pillow/mission'
         });
@@ -27,6 +28,7 @@ describe('Repository', () => {
 
         expect(repository.ownerId).toBe('Flying-Pillow');
         expect(repository.repoName).toBe('mission');
+        expect(repository.id).toBe('repository:github/Flying-Pillow/mission');
         expect(repository.githubRepository).toBe('Flying-Pillow/mission');
         expect(repository.settings.instructionsPath).toBe('.copilot');
         expect(repository.isInitialized).toBe(true);
@@ -40,7 +42,7 @@ describe('Repository', () => {
         const repository = Repository.open('/tmp/mission-proof-of-concept');
 
         await expect(repository.read({
-            repositoryId: 'other:repository',
+            id: 'repository:other',
             repositoryRootPath: repository.repositoryRootPath
         })).rejects.toThrow(/does not match/u);
     });

@@ -48,7 +48,7 @@ export type ControlWorkspaceSource = {
 	missionStatus?: ControlMissionStatusSource;
 };
 
-export type ControlDocumentPathField = 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'missionWorkspaceRoot' | 'instructionsPath' | 'skillsPath';
+export type ControlDocumentPathField = 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'missionsRoot' | 'instructionsPath' | 'skillsPath';
 
 export type ControlAgentSessions = MissionAgentSessionRecord[];
 

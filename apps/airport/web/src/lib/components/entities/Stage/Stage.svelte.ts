@@ -1,8 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Stage/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
-import type {
-    EntityCommandDescriptor,
-    MissionStageSnapshot
-} from '@flying-pillow/mission-core/entities';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { MissionStageSnapshot } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 

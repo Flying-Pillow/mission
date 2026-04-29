@@ -1,4 +1,4 @@
-import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 
 export type ActionableEntity = {
     readonly entityName: string;

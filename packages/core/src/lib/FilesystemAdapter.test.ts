@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
-import { resolveMissionWorkspaceRoot } from './repositoryPaths.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
 import { createMissionStateData, createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
 import { Mission } from '../entities/Mission/Mission.js';
@@ -69,7 +69,7 @@ describe('FilesystemAdapter', () => {
 
 			const adapter = new FilesystemAdapter(workspaceRoot);
 			expect(adapter.getMissionWorktreePath('mission-101')).toBe(
-				path.join(resolveMissionWorkspaceRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
+				path.join(Repository.resolveMissionsRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
 			);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });

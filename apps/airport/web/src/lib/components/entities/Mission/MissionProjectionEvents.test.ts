@@ -1,18 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
-import type {
-    AgentSessionCommandAcknowledgement,
-    ArtifactCommandAcknowledgement,
-    MissionAgentSessionSnapshot,
-    MissionArtifactSnapshot,
-    MissionActionListSnapshot,
-    MissionCommandAcknowledgement,
-    MissionSnapshot,
-    MissionStageSnapshot,
-    MissionTaskSnapshot,
-    StageCommandAcknowledgement,
-    TaskCommandAcknowledgement
-} from '@flying-pillow/mission-core/entities';
+import type { AgentSessionCommandAcknowledgement, MissionAgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { ArtifactCommandAcknowledgement, MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { MissionActionListSnapshot, MissionCommandAcknowledgement, MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionStageSnapshot, StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { MissionTaskSnapshot, TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { MissionChildEntityCommandGateway, MissionCommandGateway } from './Mission.svelte.js';
 
 describe('Mission projection reconciliation', () => {

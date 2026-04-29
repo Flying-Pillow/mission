@@ -153,7 +153,7 @@ _Avoid_: raw Agent session log, terminal output, ephemeral log, session state, c
 ### Entity Remote
 
 **Entity**:
-A daemon-addressable domain object in the Mission system with an entity id, schema, and remote methods.
+A daemon-addressable domain object in the Mission system with an Entity class, Entity id, schemas, and remote methods. An Entity is authoritative for its own domain behavior and invariants; it is not a passive data shape with behavior owned elsewhere.
 _Avoid_: model, component, resource
 
 **Entity id**:
@@ -167,6 +167,14 @@ _Avoid_: event type, topic, subscription key
 **Entity schema**:
 The serializable payload and result contract for Entity remote methods.
 _Avoid_: contract, adapter, implementation
+
+**Entity class**:
+The TypeScript class that implements one Entity's authoritative behavior, invariants, identity access, data lifecycle, and remote method targets.
+_Avoid_: adapter, facade, data wrapper, model
+
+**Entity contract**:
+Daemon-readable metadata that binds an Entity class to remote methods, payload schemas, result schemas, events, execution mode, and UI presentation metadata. It routes calls to the Entity class; it does not own domain behavior.
+_Avoid_: behavior implementation, surface command handler, schema module
 
 **Entity input schema**:
 The caller-provided command or query payload shape for creating or changing an Entity.
@@ -193,8 +201,8 @@ Schema-attached metadata that describes an Entity remote method, including acces
 _Avoid_: route config, command config
 
 **Entity adapter**:
-Daemon-side execution code that satisfies Entity remote methods.
-_Avoid_: schema, model, facade
+Legacy phrase for outboard daemon-side Entity execution code. Prefer **Entity class** for domain behavior and **Entity contract** for remote method metadata; reserve adapter for external platform or storage translation.
+_Avoid_: schema, model, facade, behavior owner
 
 **Mission state store**:
 The daemon-owned datastore that persists canonical Entity storage records, Mission runtime data, Agent session context, and durable Mission coordination state.
@@ -371,6 +379,8 @@ _Avoid_: workflow projection, stage projection
 - An **Entity storage schema** carries the canonical `id`, entity type, audit fields, and storage-facing **Field metadata**.
 - An **Entity data schema** may include computed or linked fields described by **Field metadata**.
 - Entity schemas use the standard role names **Entity input schema**, **Entity storage schema**, and **Entity data schema**.
+- An **Entity class** owns behavior and invariants for its Entity.
+- An **Entity contract** binds remote methods and presentation metadata to an **Entity class** without becoming the behavior owner.
 - An **Entity input command** is validated by an **Entity input schema** and applied by the daemon before any **Entity storage records** change.
 - An **Entity storage record** is shaped by an **Entity storage schema** and is the only Entity record shape eligible for durable replication.
 - An **Entity data view** is shaped by an **Entity data schema** and may be derived in the daemon or a **Surface state replica**, but it is not replicated as canonical state.
@@ -396,7 +406,7 @@ _Avoid_: workflow projection, stage projection
 - An **Entity command outbox** stores **Entity input commands** only; it must not write canonical **Entity storage records** locally.
 - An **Entity id** identifies one **Entity**.
 - An **Entity channel** belongs to one **Entity id**.
-- An **Entity adapter** executes remote methods described by an **Entity schema**.
+- An **Entity contract** routes remote methods described by Entity schemas to an **Entity class**.
 - A **System snapshot** bootstraps client state before **Entity events** keep it current.
 - An **Airport pane view** is derived from daemon-owned Airport state.
 - A **Mission control view** is derived from Entity data, workflow definition, and runtime state for operator navigation.
@@ -518,6 +528,7 @@ _Avoid_: workflow projection, stage projection
 - "Branch" was used to mean both a Git ref and a checked-out worktree. Resolved: names or refs use **Ref**; local checked-out Git work uses **Mission worktree**; filesystem locations use **Root** or **Path**.
 - "Stage" can sound like a materialized folder or independently edited state. Resolved: **Mission stage** is derived from **Mission task** progress.
 - Entity schemas used entity-specific id field names such as `repositoryId` or `missionId`. Resolved: an **Entity schema** uses a canonical `id` field for the Entity's identity.
+- Entity behavior was described as if an outboard **Entity adapter** satisfied remote methods. Resolved: the **Entity class** is the behavior owner, while the **Entity contract** holds remote method metadata.
 - "Projection" was used for old coarse-grained mission synchronization, Airport pane data, and workflow-derived state. Resolved: **Projection** is legacy/transition vocabulary; use **System snapshot**, **Entity event**, **Airport pane view**, **Mission control view**, or **Derived workflow state**.
 - "Prompt" was used for both raw CLI input and structured operator intent. Resolved: use **Terminal input** for raw CLI bytes and **Agent session message** or **Agent runtime message** for structured daemon-mediated input.
 - Agent session messages could be mistaken for a new durable Entity. Resolved: session logs record delivered interaction, and **Agent session context** records lasting context state; no separate message Entity is canonical yet.

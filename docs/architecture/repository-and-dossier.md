@@ -20,7 +20,7 @@ Mission uses a repository-owned control namespace rooted at `.mission/`. That na
 | `.mission/missions/<mission-id>/mission.json` | Mission runtime data | Mission state store runtime dossier checkpointing |
 | `.mission/missions/<mission-id>/mission.events.jsonl` | Mission runtime event log | Mission state store runtime dossier checkpointing |
 | `.mission/missions/<mission-id>/<stage>/...` | Stage artifacts and generated task files | Workflow generation/materialization path |
-| `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` | Machine-local registered repositories and Mission-wide defaults | `config.ts` |
+| `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` | Machine-local Mission roots and managed tool paths | `config.ts` |
 | External mission worktree root | Local checkout for doing work | Worktree materialization logic, not dossier identity |
 | `$XDG_RUNTIME_DIR/mission` or temp runtime directory | Daemon socket, manifest, and optional runtime state | Daemon runtime only |
 

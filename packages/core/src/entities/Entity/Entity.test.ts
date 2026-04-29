@@ -21,6 +21,10 @@ type ExampleUi = {
 class ExampleEntity extends Entity<ExampleData, string, ExampleUi> {
     public static override readonly entityName = 'Example';
 
+    public constructor(data: ExampleData) {
+        super(data);
+    }
+
     public get id(): string {
         return this.toData().exampleId;
     }

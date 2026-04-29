@@ -1,33 +1,27 @@
-import type {
-    GitHubIssueDetail,
-    AgentSessionSnapshot,
-    MissionSnapshot,
-    MissionReference,
-    AgentSessionTerminalSnapshot,
-    MissionTerminalSnapshot,
-    Repository,
-    RepositorySnapshot,
-    TrackedIssueSummary,
-    GitHubVisibleRepository,
-} from "@flying-pillow/mission-core/entities";
-import type {
-    MissionStageId,
-    MissionTowerTreeNode,
-    OperatorActionDescriptor,
-    OperatorActionExecutionStep,
-    OperatorActionFlowStep,
-    OperatorActionListSnapshot,
-    OperatorActionQueryContext,
-    OperatorActionTargetContext,
-    OperatorStatus,
-} from "@flying-pillow/mission-core/browser";
+import type { GitHubIssueDetail, MissionReference, RepositoryData, RepositorySnapshot, TrackedIssueSummary } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { AgentSessionSnapshot, AgentSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { MissionSnapshot, MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { GitHubVisibleRepositorySummary as CoreGitHubVisibleRepositorySummary } from '@flying-pillow/mission-core/entities/GitHubRepository/GitHubRepositorySchema';
+import type { MissionStageId, MissionTowerTreeNode, OperatorActionDescriptor, OperatorActionExecutionStep, OperatorActionFlowStep, OperatorActionListSnapshot, OperatorActionQueryContext, OperatorActionTargetContext, OperatorStatus } from '@flying-pillow/mission-core/types';
 import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 
-export type RepositorySummary = Repository;
-export type GitHubVisibleRepositorySummary = GitHubVisibleRepository;
+export type RepositorySummary = RepositoryData;
+export type GitHubVisibleRepositorySummary = CoreGitHubVisibleRepositorySummary;
 export type MissionSummary = MissionReference;
 export type SidebarRepositorySummary = RepositorySummary & {
+    id: string;
     missions?: MissionSummary[];
+};
+export type AirportRepositoryListItem = {
+    key: string;
+    local?: SidebarRepositorySummary;
+    github?: GitHubVisibleRepositorySummary;
+    displayName: string;
+    displayDescription: string;
+    repositoryRootPath?: string;
+    githubRepository?: string;
+    missions: MissionSummary[];
+    isLocal: boolean;
 };
 export type IssueSummary = TrackedIssueSummary;
 export type MissionSessionSummary = AgentSessionSnapshot;

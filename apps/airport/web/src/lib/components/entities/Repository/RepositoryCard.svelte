@@ -1,18 +1,32 @@
 <script lang="ts">
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import {
+        getRepositoryDisplayDescription,
+        getRepositoryDisplayName,
+    } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
 
     const appContext = getAppContext();
     const activeRepository = $derived.by(() => {
         const currentRepository = appContext.airport.activeRepository;
         if (!currentRepository) {
-            throw new Error("Repository card requires an active repository in the app context.");
+            throw new Error(
+                "Repository card requires an active repository in the app context.",
+            );
         }
 
         return currentRepository;
     });
     const repositorySummary = $derived(activeRepository.summary);
-    const repositoryOperationalMode = $derived(activeRepository.operationalMode);
+    const repositoryDisplayName = $derived(
+        getRepositoryDisplayName(repositorySummary),
+    );
+    const repositoryDisplayDescription = $derived(
+        getRepositoryDisplayDescription(repositorySummary),
+    );
+    const repositoryOperationalMode = $derived(
+        activeRepository.operationalMode,
+    );
     const repositoryControlRoot = $derived(
         activeRepository.controlRoot ?? repositorySummary.repositoryRootPath,
     );
@@ -37,10 +51,10 @@
                 Repository
             </p>
             <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                {repositorySummary?.label}
+                {repositoryDisplayName}
             </h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                {repositorySummary?.description}
+                {repositoryDisplayDescription}
             </p>
             <p class="mt-2 font-mono text-xs text-muted-foreground">
                 {repositorySummary?.repositoryRootPath}

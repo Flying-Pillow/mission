@@ -28,7 +28,7 @@ That path model stays the same in both shared tracked mode and local-only contri
 In the current control surface, repository discovery includes actions for:
 
 - registering a repository
-- switching between registered repositories
+- switching between available repositories
 - editing repository setup
 - browsing open GitHub issues once issue intake is configured
 

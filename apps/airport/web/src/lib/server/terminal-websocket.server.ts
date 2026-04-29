@@ -2,22 +2,10 @@ import {
     type Notification as DaemonNotification,
     type MissionAgentTerminalState
 } from '@flying-pillow/mission-core/node';
-import {
-    missionTerminalOutputSchema,
-    missionTerminalSnapshotSchema,
-    type MissionTerminalSnapshot,
-    missionTerminalSocketClientMessageSchema,
-    missionTerminalSocketServerMessageSchema,
-} from '@flying-pillow/mission-core/entities';
-import {
-    agentSessionTerminalOutputSchema as missionSessionTerminalOutputSchema,
-    agentSessionTerminalSnapshotSchema as missionSessionTerminalSnapshotSchema,
-    type AgentSessionTerminalSnapshot,
-    agentSessionTerminalSocketClientMessageSchema as missionSessionTerminalSocketClientMessageSchema,
-    agentSessionTerminalSocketServerMessageSchema as missionSessionTerminalSocketServerMessageSchema,
-    agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema,
-    agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema
-} from '@flying-pillow/mission-core/entities';
+import { missionTerminalOutputSchema, missionTerminalSnapshotSchema, missionTerminalSocketClientMessageSchema, missionTerminalSocketServerMessageSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { agentSessionTerminalOutputSchema as missionSessionTerminalOutputSchema, agentSessionTerminalSnapshotSchema as missionSessionTerminalSnapshotSchema, agentSessionTerminalSocketClientMessageSchema as missionSessionTerminalSocketClientMessageSchema, agentSessionTerminalSocketServerMessageSchema as missionSessionTerminalSocketServerMessageSchema, agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema, agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
@@ -198,7 +186,7 @@ async function handleTerminalConnection(
 
     try {
         const repositoryRootPath = query.repositoryId
-            ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
+            ? (await new DaemonGateway().resolveRepositoryCandidate({ id: query.repositoryId })).repositoryRootPath
             : undefined;
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
@@ -392,7 +380,7 @@ async function handleMissionTerminalConnection(
 
     try {
         repositoryRootPath = repositoryId
-            ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
+            ? (await new DaemonGateway().resolveRepositoryCandidate({ id: repositoryId })).repositoryRootPath
             : undefined;
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,

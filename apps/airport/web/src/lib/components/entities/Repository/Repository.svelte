@@ -10,7 +10,12 @@
     import MissionSummary from "$lib/components/entities/Mission/MissionSummary.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
-    import type { SelectedIssueSummary } from "$lib/components/entities/types";
+    import type {
+        SelectedIssueSummary,
+        SidebarRepositorySummary,
+    } from "$lib/components/entities/types";
+
+    type RepositoryRouteSummary = SidebarRepositorySummary & { id: string };
 
     const appContext = getAppContext();
     const repositoryId = page.params.repositoryId?.trim() ?? "";
@@ -35,6 +40,12 @@
     const repositoryError = $derived(repositoryScope.error);
     const selectedMission = $derived(activeRepository?.selectedMission);
     const repositorySummary = $derived(activeRepository?.summary);
+    const repositoryDisplayName = $derived(
+        activeRepository?.displayName ?? "Repository",
+    );
+    const repositoryDisplayDescription = $derived(
+        activeRepository?.displayDescription ?? "Repository unavailable",
+    );
     const repositoryOperationalMode = $derived(
         activeRepository?.operationalMode,
     );
@@ -54,8 +65,10 @@
     );
 
     onMount(() => {
-        const initialSummary = appContext.airport.repositories.find(
-            (repository) => repository.repositoryId === repositoryId,
+        const repositories = appContext.airport
+            .repositories as RepositoryRouteSummary[];
+        const initialSummary = repositories.find(
+            (repository) => repository.id === repositoryId,
         );
 
         if (initialSummary) {
@@ -127,10 +140,10 @@
                         Repository
                     </p>
                     <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                        {repositorySummary.label}
+                        {repositoryDisplayName}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {repositorySummary.description}
+                        {repositoryDisplayDescription}
                     </p>
                     <p class="mt-2 font-mono text-xs text-muted-foreground">
                         {repositorySummary.repositoryRootPath}
@@ -194,7 +207,7 @@
             </div>
         </section>
 
-        {#key activeRepository.repositoryId}
+        {#key activeRepository.id}
             <div
                 class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-2"
             >

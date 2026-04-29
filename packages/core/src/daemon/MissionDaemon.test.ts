@@ -51,7 +51,7 @@ async function createTempWorkspace(): Promise<string> {
 	await fs.writeFile(
 		path.join(workspaceRoot, '.mission', 'settings.json'),
 		`${JSON.stringify({
-			missionWorkspaceRoot: path.join(workspaceRoot, 'mission-worktrees'),
+			missionsRoot: path.join(workspaceRoot, 'mission-worktrees'),
 			trackingProvider: 'github',
 			instructionsPath: '.agents',
 			skillsPath: '.agents/skills',

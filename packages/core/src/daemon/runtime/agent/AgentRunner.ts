@@ -15,10 +15,7 @@ import {
     TerminalAgentTransport,
     type TerminalAgentTransportOptions
 } from './TerminalAgentTransport.js';
-import {
-    deriveRepositoryIdentity,
-    slugRepositoryIdentitySegment
-} from '../../../lib/repositoryIdentity.js';
+import { Repository } from '../../../entities/Repository/Repository.js';
 
 export type AgentRunnerDefinition = {
     id: AgentRunnerId;
@@ -982,10 +979,10 @@ function buildTaskTerminalSessionName(
     taskId: string,
     agentSessionId: string
 ): string {
-    const repositoryId = deriveRepositoryIdentity(workingDirectory).repositoryId;
+    const repositoryId = Repository.deriveIdentity(workingDirectory).repositoryId;
     return [
         repositoryId,
-        slugRepositoryIdentitySegment(missionId) || 'mission',
+        Repository.slugIdentitySegment(missionId) || 'mission',
         slugSessionSegment(taskId) || 'task',
         slugSessionSegment(agentSessionId) || 'session'
     ].join(':');

@@ -1,27 +1,11 @@
 // /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
-import type {
-    AgentSessionCommandAcknowledgement,
-    ArtifactCommandAcknowledgement,
-    EntityCommandDescriptor,
-    MissionAgentCommand as AgentCommand,
-    MissionAgentPrompt as AgentPrompt,
-    MissionActionListSnapshot,
-    MissionAgentSessionSnapshot as AgentSessionSnapshot,
-    MissionActionDescriptor,
-    MissionArtifactSnapshot,
-    MissionCommandAcknowledgement,
-    MissionProjectionSnapshot,
-    MissionSnapshot,
-    MissionActionQueryContext,
-    MissionStatusSnapshot,
-    MissionStageSnapshot,
-    MissionTaskSnapshot,
-    StageCommandAcknowledgement,
-    TaskCommandAcknowledgement
-} from '@flying-pillow/mission-core/entities';
-import type {
-    OperatorActionExecutionStep
-} from '@flying-pillow/mission-core/browser';
+import type { AgentSessionCommandAcknowledgement, MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt, MissionAgentSessionSnapshot as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { ArtifactCommandAcknowledgement, MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { MissionActionListSnapshot, MissionActionDescriptor, MissionCommandAcknowledgement, MissionProjectionSnapshot, MissionSnapshot, MissionActionQueryContext, MissionStatusSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionStageSnapshot, StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { MissionTaskSnapshot, TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { OperatorActionExecutionStep } from '@flying-pillow/mission-core/types';
 import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
 import {
     Artifact,

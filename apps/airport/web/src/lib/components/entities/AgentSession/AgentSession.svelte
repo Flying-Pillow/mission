@@ -79,7 +79,7 @@
     const mission = $derived(missionScope.mission);
     const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
-    const repositoryId = $derived(activeRepository?.repositoryId ?? "");
+    const repositoryId = $derived(activeRepository?.id ?? "");
     const repositoryRootPath = $derived(
         mission?.missionWorktreePath ??
             activeRepository?.repositoryRootPath ??

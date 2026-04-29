@@ -65,7 +65,7 @@ Tower must preserve daemon action order. It may narrow a visible list by local t
 
 The Airport terminal app does not own:
 
-- repository registration
+- repository discovery
 - mission runtime state
 - airport bindings
 - session lifecycle

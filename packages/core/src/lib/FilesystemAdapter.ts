@@ -7,8 +7,7 @@ import {
 	renderFrontmatterDocument,
 	type FrontmatterValue
 } from './frontmatter.js';
-import { getMissionCatalogPath, getMissionWorktreesPath } from './repositoryPaths.js';
-import { readRepositorySettingsDocument } from './daemonConfig.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
 	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
@@ -82,15 +81,15 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionsPath(): string {
-		const missionWorkspaceRoot = readRepositorySettingsDocument(this.workspaceRoot)?.missionWorkspaceRoot;
-		return getMissionWorktreesPath(
+		const missionsRoot = Repository.readSettingsDocument(this.workspaceRoot)?.missionsRoot;
+		return Repository.getMissionWorktreesPath(
 			this.workspaceRoot,
-			missionWorkspaceRoot ? { missionWorkspaceRoot } : {}
+			missionsRoot ? { missionsRoot } : {}
 		);
 	}
 
 	public getTrackedMissionsPath(checkoutRoot = this.workspaceRoot): string {
-		return getMissionCatalogPath(checkoutRoot);
+		return Repository.getMissionCatalogPath(checkoutRoot);
 	}
 
 	public getTrackedMissionDir(missionId: string, checkoutRoot = this.workspaceRoot): string {

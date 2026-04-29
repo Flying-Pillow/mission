@@ -1,13 +1,8 @@
-import {
-	getRepositorySettingsPath,
-	readRepositorySettingsDocument,
-	resolveRepositorySettingsDocument,
-	writeRepositorySettingsDocument
-} from '../lib/daemonConfig.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import {
 	createDefaultRepositorySettings,
 	type RepositorySettings
-} from '../entities/Repository/RepositorySettings.js';
+} from '../entities/Repository/RepositorySchema.js';
 import {
 	DEFAULT_WORKFLOW_VERSION,
 	createDefaultWorkflowSettings
@@ -22,7 +17,6 @@ import {
 	scaffoldMissionWorkflowPreset,
 	writeMissionWorkflowDefinition
 } from '../workflow/mission/preset.js';
-import { getMissionWorkflowDefinitionPath } from '../lib/repositoryPaths.js';
 import {
 	applyWorkflowSettingsPatch,
 	validateWorkflowSettingsPatch
@@ -56,8 +50,8 @@ export class WorkflowSettingsStore {
 	private readonly workflowPath: string;
 
 	public constructor(private readonly controlRoot: string) {
-		this.settingsPath = getRepositorySettingsPath(controlRoot, { resolveWorkspaceRoot: false });
-		this.workflowPath = getMissionWorkflowDefinitionPath(controlRoot);
+		this.settingsPath = Repository.getSettingsDocumentPath(controlRoot, { resolveWorkspaceRoot: false });
+		this.workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
 	}
 
 	public async get(): Promise<WorkflowSettingsGetResult> {
@@ -68,7 +62,7 @@ export class WorkflowSettingsStore {
 	public async initialize(
 		request: WorkflowSettingsInitializeRequest = {}
 	): Promise<WorkflowSettingsInitializeResult> {
-		const state = await this.readFileState();
+		const state = await this.readFileState({ allowUninitialized: true });
 		if (state.workflowInitialized && state.settingsInitialized && request.force !== true) {
 			return this.toGetResult(state);
 		}
@@ -117,31 +111,25 @@ export class WorkflowSettingsStore {
 		if (overwritePreset || !latestRevision.exists) {
 			await scaffoldMissionWorkflowPreset(this.controlRoot, { overwrite: overwritePreset });
 		}
-		await writeRepositorySettingsDocument(nextDocument, this.controlRoot, {
+		await Repository.writeSettingsDocument(nextDocument, this.controlRoot, {
 			resolveWorkspaceRoot: false
 		});
 		await writeMissionWorkflowDefinition(this.controlRoot, workflow);
 	}
 
 	private createInitializedDocument(currentDocument?: RepositorySettings): RepositorySettings {
-		return resolveRepositorySettingsDocument(currentDocument ?? createDefaultRepositorySettings());
+		if (currentDocument) {
+			return Repository.resolveSettingsDocument(currentDocument);
+		}
+		return Repository.resolveSettingsDocument(createDefaultRepositorySettings());
 	}
 
 	private toGetResult(state: WorkflowSettingsFileState): WorkflowSettingsGetResult {
 		assertValidWorkflowSettings(state.workflow);
-		const warnings: string[] = [];
-		if (!state.workflowInitialized) {
-			warnings.push('Repository workflow settings are not initialized on disk; defaults are being used.');
-		}
-		if (!state.settingsInitialized) {
-			warnings.push('Repository settings are not initialized on disk; defaults are being used.');
-		}
-
 		return {
 			workflow: state.workflow,
 			revision: state.revision.token,
-			metadata: this.createMetadata(state),
-			...(warnings.length > 0 ? { warnings } : {})
+			metadata: this.createMetadata(state)
 		};
 	}
 
@@ -154,12 +142,12 @@ export class WorkflowSettingsStore {
 		};
 	}
 
-	private async readFileState(): Promise<WorkflowSettingsFileState> {
+	private async readFileState(options: { allowUninitialized?: boolean } = {}): Promise<WorkflowSettingsFileState> {
 		const revision = await readWorkflowSettingsRevision(this.workflowPath);
 
 		let document: RepositorySettings | undefined;
 		try {
-			document = readRepositorySettingsDocument(this.controlRoot, {
+			document = Repository.readSettingsDocument(this.controlRoot, {
 				resolveWorkspaceRoot: false
 			});
 		} catch (error) {
@@ -169,7 +157,22 @@ export class WorkflowSettingsStore {
 		}
 
 		const persistedWorkflow = readMissionWorkflowDefinition(this.controlRoot);
-		const workflow = normalizeWorkflowSettings(persistedWorkflow ?? createDefaultWorkflowSettings());
+		if (!document && options.allowUninitialized !== true) {
+			throw new WorkflowSettingsError(
+				'SETTINGS_NOT_INITIALIZED',
+				`Repository settings document '${this.settingsPath}' is required.`
+			);
+		}
+		if (!persistedWorkflow && options.allowUninitialized !== true) {
+			throw new WorkflowSettingsError(
+				'SETTINGS_NOT_INITIALIZED',
+				`Repository workflow definition '${this.workflowPath}' is required.`
+			);
+		}
+		const workflowSource = persistedWorkflow
+			? persistedWorkflow
+			: createDefaultWorkflowSettings();
+		const workflow = normalizeWorkflowSettings(workflowSource);
 
 		if (!revision.exists) {
 			return {

@@ -9,6 +9,8 @@ import {
     repositoryGetIssuePayloadSchema,
     repositoryListIssuesPayloadSchema,
     repositoryMissionStartAcknowledgementSchema,
+    repositoryPreparePayloadSchema,
+    repositoryPrepareResultSchema,
     repositoryRemoveAcknowledgementSchema,
     repositoryRemovePayloadSchema,
     repositoryReadPayloadSchema,
@@ -76,6 +78,17 @@ export const repositoryContract: EntitySchema = {
                 variant: 'destructive',
                 iconHint: 'trash-2',
                 presentationOrder: 90
+            }
+        },
+        prepare: {
+            kind: 'mutation',
+            payload: repositoryPreparePayloadSchema,
+            result: repositoryPrepareResultSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Prepare Repository',
+                iconHint: 'git-pull-request-create',
+                presentationOrder: 5
             }
         },
         startMissionFromIssue: {

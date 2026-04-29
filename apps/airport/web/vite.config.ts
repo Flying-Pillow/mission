@@ -8,10 +8,17 @@ import { defineConfig } from "vite-plus";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDocsRoot = path.resolve(currentDirectory, "../../../docs");
+const missionCoreSourceRoot = path.resolve(currentDirectory, "../../../packages/core/src");
+const missionPackageSourceRoot = path.resolve(currentDirectory, "../../../packages/mission/src");
 const workspacePackageRoots = [
-	path.resolve(currentDirectory, "../../../packages/core/src"),
-	path.resolve(currentDirectory, "../../../packages/mission/src")
+	missionCoreSourceRoot,
+	missionPackageSourceRoot
 ];
+
+const missionModuleAliases = {
+	"@flying-pillow/mission-core": missionCoreSourceRoot,
+	"@flying-pillow/mission": missionPackageSourceRoot
+} as const;
 
 type ViteHttpServer = HttpServer | HttpsServer;
 
@@ -52,6 +59,10 @@ export default defineConfig({
 			"@flying-pillow/mission-core",
 			"@flying-pillow/mission"
 		]
+	},
+	resolve: {
+		alias: missionModuleAliases,
+		conditions: ["typescript", "development", "svelte", "browser", "module", "import", "default"]
 	},
 	server: {
 		fs: {

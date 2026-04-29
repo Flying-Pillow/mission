@@ -1,24 +1,13 @@
 // /apps/airport/web/src/lib/client/runtime/transport/ChildEntityCommandTransport.ts: Child entity command transport for Stage, Task, Artifact, and AgentSession mirrors.
-import type {
-    AgentSessionCommandAcknowledgement,
-    ArtifactCommandAcknowledgement,
-    MissionAgentCommand as AgentCommand,
-    MissionAgentPrompt as AgentPrompt,
-    StageCommandAcknowledgement,
-    TaskCommandAcknowledgement,
-} from '@flying-pillow/mission-core/entities';
-import type {
-    EntityCommandInvocation,
-    EntityQueryInvocation,
-    EntityRemoteResult,
-} from '@flying-pillow/mission-core/protocol/entity-remote';
-import {
-    agentSessionCommandAcknowledgementSchema,
-    artifactCommandAcknowledgementSchema,
-    artifactDocumentSnapshotSchema,
-    stageCommandAcknowledgementSchema,
-    taskCommandAcknowledgementSchema,
-} from '@flying-pillow/mission-core/entities';
+import type { AgentSessionCommandAcknowledgement, MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { ArtifactCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import { agentSessionCommandAcknowledgementSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { artifactCommandAcknowledgementSchema, artifactDocumentSnapshotSchema } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import { stageCommandAcknowledgementSchema } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import { taskCommandAcknowledgementSchema } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type {
     MissionChildEntityCommandGateway,
     MissionDocumentPayload

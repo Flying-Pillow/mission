@@ -1,4 +1,5 @@
 import type { FrontmatterValue } from '../../lib/frontmatter.js';
+import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_ARTIFACTS,
@@ -9,6 +10,13 @@ import {
 	type MissionTaskStatus
 } from '../../types.js';
 import { getMissionArtifactDefinition } from '../../workflow/mission/manifest.js';
+import {
+	artifactExecuteCommandPayloadSchema,
+	artifactDocumentSnapshotSchema,
+	artifactIdentityPayloadSchema,
+	artifactWriteDocumentPayloadSchema,
+	missionArtifactSnapshotSchema
+} from './ArtifactSchema.js';
 
 export type ArtifactKind = 'mission' | 'stage' | 'task';
 
@@ -98,6 +106,66 @@ class ArtifactRuntime {
 }
 
 export const ArtifactRuntimeController = ArtifactRuntime;
+
+export class ArtifactEntity {
+	public static async read(payload: unknown, context: EntityExecutionContext) {
+		const input = artifactIdentityPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return missionArtifactSnapshotSchema.parse(service.requireArtifact(await service.buildMissionSnapshot(mission, input.missionId), input.artifactId));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async readDocument(payload: unknown, context: EntityExecutionContext) {
+		const input = artifactIdentityPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			const snapshot = await service.buildMissionSnapshot(mission, input.missionId);
+			const artifact = service.requireArtifact(snapshot, input.artifactId);
+			const filePath = service.requireArtifactFilePath(snapshot, artifact);
+			await service.assertMissionDocumentPath(filePath, 'read', service.resolveControlRoot(input, context));
+			return artifactDocumentSnapshotSchema.parse(await service.readMissionDocument(filePath));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async writeDocument(payload: unknown, context: EntityExecutionContext) {
+		const input = artifactWriteDocumentPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			const snapshot = await service.buildMissionSnapshot(mission, input.missionId);
+			const artifact = service.requireArtifact(snapshot, input.artifactId);
+			const filePath = service.requireArtifactFilePath(snapshot, artifact);
+			await service.assertMissionDocumentPath(filePath, 'write', service.resolveControlRoot(input, context));
+			return artifactDocumentSnapshotSchema.parse(await service.writeMissionDocument(filePath, input.content));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = artifactExecuteCommandPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			service.requireArtifact(await service.buildMissionSnapshot(mission, input.missionId), input.artifactId);
+			throw new Error(`Artifact command '${input.commandId}' is not implemented in the daemon.`);
+		} finally {
+			mission.dispose();
+		}
+	}
+}
+
+async function loadMissionDaemon(context: EntityExecutionContext) {
+	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+	return requireMissionDaemon(context);
+}
 
 export function createMissionArtifact(input: {
 	artifactKey: MissionArtifactKey;

@@ -1,10 +1,5 @@
 import { DaemonApi } from '@flying-pillow/mission-core/node';
-import type {
-    EntityCommandInvocation,
-    EntityFormInvocation,
-    EntityQueryInvocation,
-    EntityRemoteResult
-} from '@flying-pillow/mission-core/protocol/entity-remote';
+import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
 import { connectSharedAuthenticatedDaemonClient } from './connections.server';
 
 const ENTITY_REQUEST_TIMEOUT_MS = 8_000;

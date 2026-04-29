@@ -4,7 +4,7 @@
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
-    import { artifactDocumentSnapshotSchema } from "@flying-pillow/mission-core/entities";
+    import { artifactDocumentSnapshotSchema } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import { qry } from "../../../../routes/api/entities/remote/query.remote";

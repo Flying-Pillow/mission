@@ -1,26 +1,8 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionCommandTransport.ts: Mission-only snapshot and command transport.
-import type {
-    MissionActionQueryContext,
-    MissionActionListSnapshot,
-    MissionCommandAcknowledgement,
-    MissionProjectionSnapshot
-} from '@flying-pillow/mission-core/entities';
-import type {
-    OperatorActionExecutionStep
-} from '@flying-pillow/mission-core/browser';
-import type {
-    EntityCommandInvocation,
-    EntityQueryInvocation,
-    EntityRemoteResult
-} from '@flying-pillow/mission-core/protocol/entity-remote';
-import {
-    missionActionListSnapshotSchema,
-    missionCommandAcknowledgementSchema,
-    missionDocumentSnapshotSchema,
-    missionMissionCommandSchema,
-    missionProjectionSnapshotSchema,
-    missionWorktreeSnapshotSchema
-} from '@flying-pillow/mission-core/entities';
+import type { MissionActionQueryContext, MissionActionListSnapshot, MissionCommandAcknowledgement, MissionProjectionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { OperatorActionExecutionStep } from '@flying-pillow/mission-core/types';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import { missionActionListSnapshotSchema, missionCommandAcknowledgementSchema, missionDocumentSnapshotSchema, missionMissionCommandSchema, missionProjectionSnapshotSchema, missionWorktreeSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type {
     MissionCommandGateway,
     MissionDocumentPayload

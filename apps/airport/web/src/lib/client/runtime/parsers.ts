@@ -1,21 +1,8 @@
-import type {
-    GitHubIssueDetail,
-    RepositorySnapshot,
-    TrackedIssueSummary
-} from '@flying-pillow/mission-core/entities';
-import type {
-    AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
-    AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage,
-    MissionTerminalSnapshot,
-    MissionTerminalSocketServerMessage
-} from '@flying-pillow/mission-core/entities';
-import {
-    githubIssueDetailSchema,
-    missionMissionCommandSchema,
-    repositorySchema,
-    repositorySnapshotSchema,
-    trackedIssueSummarySchema
-} from '@flying-pillow/mission-core/entities';
+import type { GitHubIssueDetail, RepositorySnapshot, TrackedIssueSummary } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot, AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { MissionTerminalSnapshot, MissionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { githubIssueDetailSchema, repositorySchema, repositorySnapshotSchema, trackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { missionMissionCommandSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import {
     airportRuntimeEventEnvelopeSchema,
     type AirportRuntimeEventEnvelope

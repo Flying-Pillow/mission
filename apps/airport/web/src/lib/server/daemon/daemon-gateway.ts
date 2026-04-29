@@ -6,17 +6,12 @@ import {
     type MissionAgentSessionState,
     type MissionEntity,
 } from '@flying-pillow/mission-core/node';
-import {
-    type AgentSessionSnapshot as AgentSession,
-    type AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
-    type MissionTerminalSnapshot,
-    type RepositoryData as Repository,
-    agentSessionSnapshotSchema,
-    agentSessionTerminalSnapshotSchema,
-    missionTerminalSnapshotSchema,
-    repositorySnapshotSchema,
-    repositorySchema
-} from '@flying-pillow/mission-core/entities';
+import { agentSessionSnapshotSchema, agentSessionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentSessionSnapshot as AgentSession, AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { missionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { repositorySnapshotSchema, repositorySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryData as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
     airportRuntimeEventEnvelopeSchema,
     type AirportRuntimeEventEnvelope
@@ -280,11 +275,11 @@ export class DaemonGateway {
     }
 
     public async resolveRepositoryCandidate(input: {
-        repositoryId: string;
+        id: string;
     }): Promise<Repository> {
-        const repositoryId = input.repositoryId.trim();
-        if (!repositoryId) {
-            throw new Error('Repository access requires a repositoryId.');
+        const id = input.id.trim();
+        if (!id) {
+            throw new Error('Repository access requires an id.');
         }
 
         const daemon = await this.connectSharedDaemonClient();
@@ -295,17 +290,17 @@ export class DaemonGateway {
                     api.entity.query({
                         entity: 'Repository',
                         method: 'read',
-                        payload: { repositoryId }
+                        payload: { id }
                     }),
                     2500,
-                    `Repository '${repositoryId}' read timed out.`
+                    `Repository '${id}' read timed out.`
                 )
             );
 
             return this.toRepositorySnapshot(snapshot.repository);
         } catch (error) {
             if (error instanceof Error && /not found/i.test(error.message)) {
-                throw new Error(`Repository '${repositoryId}' is not registered in Airport.`);
+                throw new Error(`Repository '${id}' could not be resolved in Airport.`);
             }
             throw error;
         } finally {

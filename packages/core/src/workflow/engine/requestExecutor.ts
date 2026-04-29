@@ -1,5 +1,5 @@
 import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
-import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
+import type { MissionDefaultAgentMode } from '../../entities/Repository/RepositorySchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../mission/templates/index.js';
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../mission/manifest.js';
-import { getMissionControlRootFromMissionDir } from '../../lib/repositoryPaths.js';
+import { Repository } from '../../entities/Repository/Repository.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,
@@ -678,7 +678,7 @@ export class MissionWorkflowRequestExecutor {
 					...(artifact.stageId ? { stage: artifact.stageId } : {})
 				},
 				body: await renderMissionProductTemplate(template, {
-					controlRoot: getMissionControlRootFromMissionDir(descriptor.missionDir),
+					controlRoot: Repository.getMissionControlRootFromMissionDir(descriptor.missionDir),
 					brief: descriptor.brief,
 					branchRef: descriptor.branchRef
 				})

@@ -13,7 +13,7 @@
 	setAppContext(appContext);
 
 	onMount(() => {
-		void appContext.application.initialize();
+		void appContext.application.initialize().catch(() => undefined);
 	});
 
 	$effect(() => {

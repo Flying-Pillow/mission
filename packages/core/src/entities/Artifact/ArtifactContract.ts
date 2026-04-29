@@ -1,4 +1,5 @@
 import type { EntitySchema } from '../Entity/EntitySchema.js';
+import { ArtifactEntity } from './Artifact.js';
 import {
     missionArtifactEntityName,
     artifactIdentityPayloadSchema,
@@ -11,74 +12,31 @@ import {
 
 export const artifactEntityContract: EntitySchema = {
     entity: missionArtifactEntityName,
-    queries: {
+    entityClass: ArtifactEntity,
+    methods: {
         read: {
+            kind: 'query',
             payload: artifactIdentityPayloadSchema,
             result: missionArtifactSnapshotSchema,
-            execute: async (payload, context) => {
-                const service = await loadMissionDaemon(context);
-                const mission = await service.loadRequiredMission(payload, context);
-                try {
-                    return missionArtifactSnapshotSchema.parse(service.requireArtifact(await service.buildMissionSnapshot(mission, payload.missionId), payload.artifactId));
-                } finally {
-                    mission.dispose();
-                }
-            }
+            execution: 'class'
         },
         readDocument: {
+            kind: 'query',
             payload: artifactIdentityPayloadSchema,
             result: artifactDocumentSnapshotSchema,
-            execute: async (payload, context) => {
-                const service = await loadMissionDaemon(context);
-                const mission = await service.loadRequiredMission(payload, context);
-                try {
-                    const snapshot = await service.buildMissionSnapshot(mission, payload.missionId);
-                    const artifact = service.requireArtifact(snapshot, payload.artifactId);
-                    const filePath = service.requireArtifactFilePath(snapshot, artifact);
-                    await service.assertMissionDocumentPath(filePath, 'read', service.resolveControlRoot(payload, context));
-                    return artifactDocumentSnapshotSchema.parse(await service.readMissionDocument(filePath));
-                } finally {
-                    mission.dispose();
-                }
-            }
-        }
-    },
-    commands: {
+            execution: 'class'
+        },
         writeDocument: {
+            kind: 'mutation',
             payload: artifactWriteDocumentPayloadSchema,
             result: artifactDocumentSnapshotSchema,
-            execute: async (payload, context) => {
-                const service = await loadMissionDaemon(context);
-                const mission = await service.loadRequiredMission(payload, context);
-                try {
-                    const snapshot = await service.buildMissionSnapshot(mission, payload.missionId);
-                    const artifact = service.requireArtifact(snapshot, payload.artifactId);
-                    const filePath = service.requireArtifactFilePath(snapshot, artifact);
-                    await service.assertMissionDocumentPath(filePath, 'write', service.resolveControlRoot(payload, context));
-                    return artifactDocumentSnapshotSchema.parse(await service.writeMissionDocument(filePath, payload.content));
-                } finally {
-                    mission.dispose();
-                }
-            }
+            execution: 'class'
         },
         executeCommand: {
+            kind: 'mutation',
             payload: artifactExecuteCommandPayloadSchema,
             result: artifactCommandAcknowledgementSchema,
-            execute: async (payload, context) => {
-                const service = await loadMissionDaemon(context);
-                const mission = await service.loadRequiredMission(payload, context);
-                try {
-                    service.requireArtifact(await service.buildMissionSnapshot(mission, payload.missionId), payload.artifactId);
-                    throw new Error(`Artifact command '${payload.commandId}' is not implemented in the daemon.`);
-                } finally {
-                    mission.dispose();
-                }
-            }
+            execution: 'class'
         }
     }
 };
-
-async function loadMissionDaemon(context: Parameters<typeof import('../../daemon/MissionDaemon.js').requireMissionDaemon>[0]) {
-    const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-    return requireMissionDaemon(context);
-}

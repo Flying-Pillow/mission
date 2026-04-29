@@ -1,15 +1,11 @@
-import type {
-    AgentSessionSnapshot,
-    EntityEventEnvelope,
-    MissionActionListSnapshot,
-    MissionArtifactSnapshot,
-    MissionSnapshot,
-    MissionStageSnapshot,
-    MissionStatusSnapshot,
-    MissionTaskSnapshot
-} from '@flying-pillow/mission-core/entities';
+import type { AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { EntityEventEnvelope } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { MissionActionListSnapshot, MissionSnapshot, MissionStatusSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { MissionStageSnapshot } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 
-export { entityEventEnvelopeSchema as airportRuntimeEventEnvelopeSchema } from '@flying-pillow/mission-core/entities';
+export { entityEventEnvelopeSchema as airportRuntimeEventEnvelopeSchema } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 
 type AirportRuntimeEventBase = Omit<EntityEventEnvelope, 'type' | 'payload'>;
 

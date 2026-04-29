@@ -57,6 +57,13 @@
       "types": "./build/daemon.d.ts",
       "import": "./build/daemon.js",
       "default": "./build/daemon.js"
+    },
+    "./*": {
+      "development": "./src/*.ts",
+      "typescript": "./src/*.ts",
+      "types": "./build/*.d.ts",
+      "import": "./build/*.js",
+      "default": "./build/*.js"
     }
   },
   "files": [

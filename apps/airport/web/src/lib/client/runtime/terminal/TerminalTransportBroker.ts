@@ -1,11 +1,5 @@
-import type {
-    AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot,
-    AgentSessionTerminalSocketClientMessage as MissionSessionTerminalSocketClientMessage,
-    AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage,
-    MissionTerminalSnapshot,
-    MissionTerminalSocketClientMessage,
-    MissionTerminalSocketServerMessage,
-} from '@flying-pillow/mission-core/entities';
+import type { AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot, AgentSessionTerminalSocketClientMessage as MissionSessionTerminalSocketClientMessage, AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { MissionTerminalSnapshot, MissionTerminalSocketClientMessage, MissionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import {
     parseMissionSessionTerminalSnapshot,
     parseMissionSessionTerminalSocketServerMessage,

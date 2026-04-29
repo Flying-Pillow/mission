@@ -1,5 +1,6 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type { EntityCommandDescriptor, MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities';
+import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 export type ArtifactDocumentPayload = MissionDocumentSnapshot;
 

@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type {
-    EntityCommandInvocation,
-    EntityFormInvocation,
-    EntityQueryInvocation,
-    EntityRemoteResult
-} from '@flying-pillow/mission-core/protocol/entity-remote';
+import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
 import {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,
@@ -47,7 +42,7 @@ describe('entity remote invocation schemas', () => {
             entityCommandInvocationSchema.parse({
                 entity: 'Repository',
                 method: 'startMissionFromIssue',
-                payload: { repositoryId: 'repo-1', issueNumber: 42 }
+                payload: { id: 'repo-1', issueNumber: 42 }
             })
         ).not.toThrow();
 
@@ -55,7 +50,7 @@ describe('entity remote invocation schemas', () => {
             entityFormInvocationSchema.parse({
                 entity: 'Repository',
                 method: 'startMissionFromBrief',
-                payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+                payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
             })
         ).not.toThrow();
     });
@@ -83,13 +78,13 @@ describe('entity remote dispatch', () => {
         const invocation: EntityCommandInvocation = {
             entity: 'Repository',
             method: 'startMissionFromIssue',
-            payload: { repositoryId: 'repo-1', issueNumber: 42 }
+            payload: { id: 'repo-1', issueNumber: 42 }
         };
 
         await expect(executeEntityCommand(gateway, invocation)).resolves.toEqual({
             entity: 'Repository',
             method: 'startMissionFromIssue',
-            payload: { repositoryId: 'repo-1', issueNumber: 42 }
+            payload: { id: 'repo-1', issueNumber: 42 }
         });
         expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });
@@ -99,13 +94,13 @@ describe('entity remote dispatch', () => {
         const invocation: EntityFormInvocation = {
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+            payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
         };
 
         await expect(executeEntityForm(gateway, invocation)).resolves.toEqual({
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+            payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
         });
         expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });

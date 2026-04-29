@@ -4,6 +4,5 @@ export * from './Artifact/ArtifactSchema.js';
 export * from './GitHubRepository/GitHubRepositorySchema.js';
 export * from './Mission/MissionSchema.js';
 export * from './Repository/RepositorySchema.js';
-export * from './Repository/RepositorySettings.js';
 export * from './Stage/StageSchema.js';
 export * from './Task/TaskSchema.js';

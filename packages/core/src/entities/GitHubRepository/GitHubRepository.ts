@@ -1,3 +1,4 @@
+import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { getMissionGitHubCliBinary } from '../../lib/config.js';
 import { Repository } from '../Repository/Repository.js';
 import {
@@ -14,7 +15,7 @@ import {
 export class GitHubRepository {
 	public static async find(
 		input: GitHubRepositoryFindPayload = {},
-		context?: { authToken?: string; surfacePath?: string }
+		context?: EntityExecutionContext
 	) {
 		gitHubRepositoryFindPayloadSchema.parse(input);
 		const adapter = this.createPlatformAdapter(context);
@@ -23,7 +24,7 @@ export class GitHubRepository {
 
 	public static async clone(
 		input: GitHubRepositoryClonePayload,
-		context?: { authToken?: string; surfacePath?: string }
+		context?: EntityExecutionContext
 	) {
 		const payload = gitHubRepositoryClonePayloadSchema.parse(input);
 		const adapter = this.createPlatformAdapter(context);
@@ -32,21 +33,10 @@ export class GitHubRepository {
 			destinationPath: payload.destinationPath
 		});
 
-		return Repository.add(
-			{ repositoryPath: repositoryRootPath },
-			context?.surfacePath
-				? {
-					surfacePath: context.surfacePath,
-					...(context.authToken ? { authToken: context.authToken } : {})
-				}
-				: undefined
-		);
+		return Repository.add({ repositoryPath: repositoryRootPath }, context);
 	}
 
-	private static createPlatformAdapter(context?: {
-		authToken?: string;
-		surfacePath?: string;
-	}): RepositoryPlatformAdapter {
+	private static createPlatformAdapter(context?: EntityExecutionContext): RepositoryPlatformAdapter {
 		const ghBinary = getMissionGitHubCliBinary();
 		return createRepositoryPlatformAdapter({
 			platform: 'github',

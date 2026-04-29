@@ -1,7 +1,7 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
-import type { RepositorySettings } from './entities/Repository/RepositorySettings.js';
+import type { RepositorySettings } from './entities/Repository/RepositorySchema.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
@@ -335,13 +335,41 @@ export type RepositoryCandidate = {
 	githubRepository?: string;
 };
 
-export type GitHubVisibleRepository = {
+export type GitHubVisibleRepositorySummary = {
 	fullName: string;
+	name: string;
+	description?: string | null;
+	topics: string[];
+	homepageUrl?: string | null;
+	license?: {
+		key?: string;
+		name?: string;
+		spdxId?: string;
+		url?: string | null;
+	} | null;
 	ownerLogin?: string;
+	ownerType?: string;
+	ownerUrl?: string;
 	htmlUrl?: string;
-	visibility: 'private' | 'public';
+	visibility: 'private' | 'public' | 'internal';
+	defaultBranch?: string;
 	archived: boolean;
+	starsCount?: number;
+	forksCount?: number;
+	watchersCount?: number;
+	subscribersCount?: number;
+	openIssuesCount?: number;
+	openPullRequestsCount?: number;
+	closedIssuesCount?: number;
+	commitsCount?: number;
+	releasesCount?: number;
+	workflowRunsCount?: number;
+	createdAt?: string;
+	updatedAt?: string;
+	pushedAt?: string;
 };
+
+export type GitHubVisibleRepository = GitHubVisibleRepositorySummary;
 
 export type GitHubIssueDetail = {
 	number: number;

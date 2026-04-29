@@ -30,6 +30,25 @@
     const cloneTargetPath = $derived(
         `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.fullName}`,
     );
+    const repositoryDescription = $derived(
+        repository.description?.trim() ||
+            repository.htmlUrl ||
+            "No description available",
+    );
+    const repositoryLicense = $derived(
+        repository.license?.spdxId &&
+            repository.license.spdxId !== "NOASSERTION"
+            ? repository.license.spdxId
+            : repository.license?.name,
+    );
+    const activityMetrics = $derived(
+        [
+            { label: "Stars", value: repository.starsCount },
+            { label: "Forks", value: repository.forksCount },
+            { label: "Watchers", value: repository.watchersCount },
+            { label: "Issues", value: repository.openIssuesCount },
+        ].filter((metric) => metric.value !== undefined),
+    );
 
     const cloneState = $derived(
         addRepositoryState?.githubRepository === repository.fullName
@@ -50,9 +69,7 @@
                 githubRepository: repository.fullName,
             });
             detailsOpen = false;
-            await goto(
-                `/repository/${encodeURIComponent(addedRepository.repositoryId)}`,
-            );
+            await goto(`/repository/${encodeURIComponent(addedRepository.id)}`);
         } catch {
             return;
         }
@@ -85,11 +102,19 @@
                 {/if}
             </div>
             <p class="mt-2 text-sm text-muted-foreground">
-                {repository.ownerLogin ?? "GitHub repository"}
+                {repositoryDescription}
             </p>
-            <p class="mt-1 font-mono text-xs text-muted-foreground">
-                {repository.htmlUrl ?? "URL unavailable"}
-            </p>
+            <div class="mt-2 flex flex-wrap gap-2">
+                {#each repository.topics.slice(0, 4) as topic (`${repository.fullName}:${topic}`)}
+                    <Badge variant="secondary">{topic}</Badge>
+                {/each}
+                {#if repositoryLicense}
+                    <Badge variant="outline">{repositoryLicense}</Badge>
+                {/if}
+                {#if repository.defaultBranch}
+                    <Badge variant="outline">{repository.defaultBranch}</Badge>
+                {/if}
+            </div>
         </div>
 
         <div class="flex flex-wrap gap-2 lg:justify-end">
@@ -124,8 +149,7 @@
                         </div>
                         <Dialog.Title>{repository.fullName}</Dialog.Title>
                         <Dialog.Description>
-                            Review the repository details and choose where
-                            Airport should clone it on the daemon host.
+                            {repositoryDescription}
                         </Dialog.Description>
                     </Dialog.Header>
 
@@ -169,6 +193,27 @@
                             </div>
                         </div>
 
+                        {#if activityMetrics.length > 0}
+                            <div class="grid gap-3 sm:grid-cols-4">
+                                {#each activityMetrics as metric (metric.label)}
+                                    <div
+                                        class="rounded-2xl border bg-background/80 p-4"
+                                    >
+                                        <p
+                                            class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                                        >
+                                            {metric.label}
+                                        </p>
+                                        <p
+                                            class="mt-2 text-sm font-semibold text-foreground"
+                                        >
+                                            {metric.value?.toLocaleString()}
+                                        </p>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+
                         <div class="rounded-3xl border bg-muted/40 p-4">
                             <p
                                 class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
@@ -180,6 +225,32 @@
                             >
                                 {repository.fullName}
                             </p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                {#if repository.ownerType}
+                                    <Badge variant="outline"
+                                        >{repository.ownerType}</Badge
+                                    >
+                                {/if}
+                                {#if repository.defaultBranch}
+                                    <Badge variant="outline"
+                                        >{repository.defaultBranch}</Badge
+                                    >
+                                {/if}
+                                {#if repositoryLicense}
+                                    <Badge variant="outline"
+                                        >{repositoryLicense}</Badge
+                                    >
+                                {/if}
+                            </div>
+                            {#if repository.topics.length > 0}
+                                <div class="mt-4 flex flex-wrap gap-2">
+                                    {#each repository.topics as topic (`${repository.fullName}:detail:${topic}`)}
+                                        <Badge variant="secondary"
+                                            >{topic}</Badge
+                                        >
+                                    {/each}
+                                </div>
+                            {/if}
                             <Separator class="my-4" />
                             <p
                                 class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"

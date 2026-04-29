@@ -78,8 +78,7 @@ export const WorkflowGlobalSettingsSchema = z.object({
 export const WorkflowRuntimeSettingsSchema = z.object({
 	agentRunner: z.enum(['copilot-cli', 'pi']),
 	defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
-	defaultModel: z.string().trim().min(1).optional(),
-	towerTheme: z.string().trim().min(1).optional()
+	defaultModel: z.string().trim().min(1).optional()
 }).strict();
 
 export const WorkflowIntegrationSettingsSchema = z.object({
@@ -87,7 +86,7 @@ export const WorkflowIntegrationSettingsSchema = z.object({
 }).strict();
 
 export const WorkflowPathSettingsSchema = z.object({
-	missionWorkspaceRoot: z.string().trim().min(1),
+	missionsRoot: z.string().trim().min(1),
 	instructionsPath: z.string().trim().min(1),
 	skillsPath: z.string().trim().min(1)
 }).strict();

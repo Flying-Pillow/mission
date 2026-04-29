@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { Entity } from '../Entity/Entity.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
@@ -9,6 +9,7 @@ import {
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
 	type MissionAgentLifecycleState,
+	type MissionAgentTerminalState,
 	type MissionAgentSessionLaunchRequest,
 	type MissionAgentSessionRecord
 } from '../../daemon/protocol/contracts.js';
@@ -16,8 +17,8 @@ import type {
 	AgentCommand,
 	AgentPrompt
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
-import { RepositoryScaffoldingService } from '../../lib/RepositoryScaffoldingService.js';
+import type { MissionDefaultAgentMode } from '../Repository/RepositorySchema.js';
+import { Repository } from '../Repository/Repository.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { AgentSessionLogWriter } from '../AgentSession/AgentSessionLogWriter.js';
 import { Task } from '../Task/Task.js';
@@ -81,10 +82,33 @@ import {
 	type Stage
 } from '../Stage/Stage.js';
 import {
+	missionActionListSnapshotSchema,
+	missionAgentSessionCommandPayloadSchema,
+	missionCommandAcknowledgementSchema,
+	missionCommandPayloadSchema,
+	missionDocumentSnapshotSchema,
+	missionEnsureTerminalPayloadSchema,
+	missionExecuteActionPayloadSchema,
+	missionListActionsPayloadSchema,
+	missionProjectionSnapshotSchema,
+	missionReadDocumentPayloadSchema,
+	missionReadPayloadSchema,
+	missionReadProjectionPayloadSchema,
+	missionReadTerminalPayloadSchema,
+	missionReadWorktreePayloadSchema,
+	missionSendTerminalInputPayloadSchema,
+	missionSnapshotSchema,
 	missionEventRecordSchema,
 	missionStateDataSchema,
+	missionTaskCommandPayloadSchema,
+	missionTerminalSnapshotSchema,
+	missionWorktreeSnapshotSchema,
+	missionWriteDocumentPayloadSchema,
+	type MissionCommandAcknowledgement,
 	type MissionData
 } from './MissionSchema.js';
+
+type MissionIdentityPayload = { missionId: string };
 
 export type MissionWorkflowBindings = {
 	workflow: WorkflowGlobalSettings;
@@ -98,6 +122,278 @@ export type MissionWorkflowBindings = {
 
 export class Mission extends Entity<MissionData, string> {
 	private static readonly SESSION_RECONCILE_TIMEOUT_MS = 1_000;
+
+	public static async read(payload: unknown, context: EntityExecutionContext) {
+		const input = missionReadPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return missionSnapshotSchema.parse(await service.buildMissionSnapshot(mission, input.missionId));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async readProjection(payload: unknown, context: EntityExecutionContext) {
+		const input = missionReadProjectionPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			const snapshot = await service.buildMissionSnapshot(mission, input.missionId);
+			return missionProjectionSnapshotSchema.parse({
+				missionId: snapshot.mission.missionId,
+				...(snapshot.status ? { status: snapshot.status } : {}),
+				...(snapshot.workflow ? { workflow: snapshot.workflow } : {}),
+				actions: await service.buildMissionActionListSnapshot(mission, input.missionId),
+				updatedAt: snapshot.mission.updatedAt
+			});
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async listActions(payload: unknown, context: EntityExecutionContext) {
+		const input = missionListActionsPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return missionActionListSnapshotSchema.parse({
+				...(await service.buildMissionActionListSnapshot(mission, input.missionId)),
+				...(input.context ? { context: input.context } : {})
+			});
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async readDocument(payload: unknown, context: EntityExecutionContext) {
+		const input = missionReadDocumentPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			await service.assertMissionDocumentPath(input.path, 'read', service.resolveControlRoot(input, context));
+			return missionDocumentSnapshotSchema.parse(await service.readMissionDocument(input.path));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async readWorktree(payload: unknown, context: EntityExecutionContext) {
+		const input = missionReadWorktreePayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			const rootPath = path.join(Repository.getMissionWorktreesPath(service.resolveControlRoot(input, context)), input.missionId);
+			return missionWorktreeSnapshotSchema.parse({
+				rootPath,
+				fetchedAt: new Date().toISOString(),
+				tree: await service.readDirectoryTree(rootPath, rootPath)
+			});
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async readTerminal(payload: unknown, context: EntityExecutionContext) {
+		const input = missionReadTerminalPayloadSchema.parse(payload);
+		const { readMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
+		const state = await readMissionTerminalState({
+			surfacePath: context.surfacePath,
+			selector: { missionId: input.missionId }
+		});
+		if (!state) {
+			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+		}
+		return Mission.parseTerminalSnapshot(input.missionId, state);
+	}
+
+	public static async command(payload: unknown, context: EntityExecutionContext) {
+		const input = missionCommandPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			switch (input.command.action) {
+				case 'pause':
+					await mission.pauseMission();
+					break;
+				case 'resume':
+					await mission.resumeMission();
+					break;
+				case 'panic':
+					await mission.panicStopMission();
+					break;
+				case 'clearPanic':
+					await mission.clearMissionPanic();
+					break;
+				case 'restartQueue':
+					await mission.restartLaunchQueue();
+					break;
+				case 'deliver':
+					await mission.deliver();
+					break;
+			}
+			return Mission.buildCommandAcknowledgement(input, 'command');
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async taskCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = missionTaskCommandPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const terminalSessionName = input.command.action === 'start'
+			? input.command.terminalSessionName
+			: undefined;
+		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
+		try {
+			switch (input.command.action) {
+				case 'start':
+					await mission.startTask(
+						input.taskId,
+						input.command.terminalSessionName?.trim()
+							? { terminalSessionName: input.command.terminalSessionName.trim() }
+							: {}
+					);
+					break;
+				case 'complete':
+					await mission.completeTask(input.taskId);
+					break;
+				case 'reopen':
+					await mission.reopenTask(input.taskId);
+					break;
+			}
+			return Mission.buildCommandAcknowledgement(input, 'taskCommand', { taskId: input.taskId });
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async sessionCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = missionAgentSessionCommandPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			switch (input.command.action) {
+				case 'complete':
+					await mission.completeAgentSession(input.sessionId);
+					break;
+				case 'cancel':
+					await mission.cancelAgentSession(input.sessionId, input.command.reason);
+					break;
+				case 'terminate':
+					await mission.terminateAgentSession(input.sessionId, input.command.reason);
+					break;
+				case 'prompt':
+					await mission.sendAgentSessionPrompt(input.sessionId, service.normalizeAgentPrompt(input.command.prompt));
+					break;
+				case 'command':
+					await mission.sendAgentSessionCommand(input.sessionId, service.normalizeAgentCommand(input.command.command));
+					break;
+			}
+			return Mission.buildCommandAcknowledgement(input, 'sessionCommand', { sessionId: input.sessionId });
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async executeAction(payload: unknown, context: EntityExecutionContext) {
+		const input = missionExecuteActionPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context, input.terminalSessionName);
+		try {
+			await mission.executeAction(
+				input.actionId,
+				(input.steps ?? []) as OperatorActionExecutionStep[],
+				input.terminalSessionName?.trim()
+					? { terminalSessionName: input.terminalSessionName.trim() }
+					: {}
+			);
+			return Mission.buildCommandAcknowledgement(input, 'executeAction', { actionId: input.actionId });
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async writeDocument(payload: unknown, context: EntityExecutionContext) {
+		const input = missionWriteDocumentPayloadSchema.parse(payload);
+		const service = await Mission.loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			await service.assertMissionDocumentPath(input.path, 'write', service.resolveControlRoot(input, context));
+			return missionDocumentSnapshotSchema.parse(await service.writeMissionDocument(input.path, input.content));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async ensureTerminal(payload: unknown, context: EntityExecutionContext) {
+		const input = missionEnsureTerminalPayloadSchema.parse(payload);
+		const { ensureMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
+		const state = await ensureMissionTerminalState({
+			surfacePath: context.surfacePath,
+			selector: { missionId: input.missionId }
+		});
+		if (!state) {
+			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+		}
+		return Mission.parseTerminalSnapshot(input.missionId, state);
+	}
+
+	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
+		const input = missionSendTerminalInputPayloadSchema.parse(payload);
+		const { sendMissionTerminalInput } = await import('../../daemon/MissionTerminal.js');
+		const state = await sendMissionTerminalInput({
+			surfacePath: context.surfacePath,
+			selector: { missionId: input.missionId },
+			terminalInput: {
+				...(input.data !== undefined ? { data: input.data } : {}),
+				...(input.literal !== undefined ? { literal: input.literal } : {}),
+				...(input.cols !== undefined ? { cols: input.cols } : {}),
+				...(input.rows !== undefined ? { rows: input.rows } : {})
+			}
+		});
+		if (!state) {
+			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+		}
+		return Mission.parseTerminalSnapshot(input.missionId, state);
+	}
+
+	private static async loadMissionDaemon(context: EntityExecutionContext) {
+		const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+		return requireMissionDaemon(context);
+	}
+
+	private static buildCommandAcknowledgement(
+		payload: MissionIdentityPayload,
+		method: MissionCommandAcknowledgement['method'],
+		identifiers: {
+			taskId?: string;
+			sessionId?: string;
+			actionId?: string;
+		} = {}
+	): MissionCommandAcknowledgement {
+		return missionCommandAcknowledgementSchema.parse({
+			ok: true,
+			entity: 'Mission',
+			method,
+			id: payload.missionId,
+			missionId: payload.missionId,
+			...identifiers
+		});
+	}
+
+	private static parseTerminalSnapshot(missionId: string, state: MissionAgentTerminalState) {
+		return missionTerminalSnapshotSchema.parse({
+			missionId,
+			connected: state.connected,
+			dead: state.dead,
+			exitCode: state.dead ? state.exitCode : null,
+			screen: state.screen,
+			...(state.chunk ? { chunk: state.chunk } : {}),
+			...(state.truncated ? { truncated: true } : {}),
+			...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
+		});
+	}
 
 	private readonly agentConsoleEventEmitter = new MissionAgentEventEmitter<MissionAgentConsoleEvent>();
 	private readonly agentEventEmitter = new MissionAgentEventEmitter<MissionAgentEvent>();
@@ -217,8 +513,8 @@ export class Mission extends Entity<MissionData, string> {
 	}
 
 	public async initialize(): Promise<this> {
-		const missionWorkspaceRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
-		await new RepositoryScaffoldingService(missionWorkspaceRoot).initialize();
+		const missionWorktreeRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
+		await Repository.initializeScaffolding(missionWorktreeRoot);
 		await this.adapter.initializeMissionEnvironment(this.missionDir);
 		await this.adapter.writeMissionDescriptor(this.missionDir, this.descriptor);
 		await this.workflowController.initialize();
@@ -278,7 +574,7 @@ export class Mission extends Entity<MissionData, string> {
 	}
 
 	public async toEntity(): Promise<Mission> {
-		return Mission.read(await this.status());
+		return Mission.fromStatus(await this.status());
 	}
 
 	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
@@ -1827,7 +2123,7 @@ export class Mission extends Entity<MissionData, string> {
 		return data;
 	}
 
-	public static read(status: OperatorStatus): Mission {
+	public static fromStatus(status: OperatorStatus): Mission {
 		const data = Mission.createDataFromStatus(status);
 		const missionDir = data.missionRootDir ?? data.missionDir ?? process.cwd();
 		const adapter = new FilesystemAdapter(missionDir);
@@ -2721,7 +3017,7 @@ function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
 }
 
 export function toMission(status: OperatorStatus): Mission {
-	return Mission.read(status);
+	return Mission.fromStatus(status);
 }
 
 export type { MissionData as MissionSummary };

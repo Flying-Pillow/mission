@@ -1,12 +1,20 @@
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import { getMissionGitHubCliBinary } from '../../lib/config.js';
+import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
+import {
+	getMissionGitHubCliBinary,
+	readMissionConfig,
+	resolveRepositoriesRoot
+} from '../../lib/config.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import { readRepositorySettingsDocument } from '../../lib/daemonConfig.js';
-import { MissionPreparationService } from './MissionPreparation.js';
 import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
-import type { MissionBrief } from '../../types.js';
-import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
+import { resolveGitHubRepositoryFromWorkspace } from '../../platforms/GitHubPlatformAdapter.js';
+import { refreshSystemStatus } from '../../system/SystemStatus.js';
+import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../../types.js';
 import { resolveGitWorkspaceRoot } from '../../lib/workspacePaths.js';
 import {
 	repositorySnapshotSchema,
@@ -28,52 +36,121 @@ import {
 	type RepositoryListIssuesPayload,
 	type RepositoryReadPayload,
 	type RepositoryAddPayload,
+	type RepositoryPreparePayload,
+	type RepositoryPrepareResult,
 	type RepositoryRemoveAcknowledgement,
 	type RepositoryRemovePayload,
+	type RepositorySettings,
 	type RepositoryStartMissionFromBriefPayload,
 	type RepositoryStartMissionFromIssuePayload,
+	RepositorySettingsSchema,
+	createDefaultRepositorySettings,
 	repositoryFindPayloadSchema,
 	repositoryGetIssuePayloadSchema,
 	repositoryIdentityPayloadSchema,
 	repositoryListIssuesPayloadSchema,
 	repositoryMissionStartAcknowledgementSchema,
+	repositoryPreparePayloadSchema,
+	repositoryPrepareResultSchema,
 	repositoryReadPayloadSchema,
 	repositoryAddPayloadSchema,
 	repositoryRemoveAcknowledgementSchema,
 	repositoryRemovePayloadSchema,
-	repositoryRegistrationInputSchema,
+	repositoryLocalAddInputSchema,
 	repositoryStartMissionFromBriefPayloadSchema,
 	repositoryStartMissionFromIssuePayloadSchema
 } from './RepositorySchema.js';
-import {
-	RepositorySettingsSchema,
-	type RepositorySettings
-} from './RepositorySettings.js';
 import type { WorkflowGlobalSettings } from '../../workflow/WorkflowSchema.js';
-import { createDefaultRepositorySettings } from './RepositorySettings.js';
-import { readMissionWorkflowDefinition } from '../../workflow/mission/preset.js';
-import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { normalizeWorkflowSettings } from '../../settings/validation.js';
-import { createRepositoryPlatformAdapter } from './PlatformAdapter.js';
+import {
+	createRepositoryPlatformAdapter,
+	type RepositoryPlatformKind
+} from './PlatformAdapter.js';
+
+export type RepositoryIdentity = {
+	id: string;
+	repositoryRootPath: string;
+	githubRepository?: string;
+};
+
+export type RepositoryScaffolding = {
+	controlDirectoryPath: string;
+	settingsDocumentPath: string;
+	workflowDirectoryPath: string;
+	workflowDefinitionPath: string;
+	workflowTemplatesPath: string;
+	worktreesRoot: string;
+};
 
 export class Repository extends Entity<RepositoryData, string> {
 	public static override readonly entityName = repositoryEntityName;
+	public static readonly missionDirectoryName = '.mission';
+	public static readonly defaultMissionsRoot = 'missions';
+	public static readonly missionWorkflowDirectoryName = 'workflow';
+	public static readonly missionWorkflowDefinitionFileName = 'workflow.json';
 
 	public static async find(
 		input: RepositoryFindPayload = {},
-		context?: EntityExecutionContext
+		_context?: EntityExecutionContext
 	): Promise<RepositorySnapshot[]> {
 		repositoryFindPayloadSchema.parse(input);
-		const repositories = await Repository.getRepositoryFactory(context).find(Repository);
+		const repositoriesById = new Map<string, Repository>();
+
+		for (const repository of await Repository.discoverConfiguredRepositories()) {
+			repositoriesById.set(repository.id, repository);
+		}
 
 		return await Promise.all(
-			repositories.map((repository) =>
+			[...repositoriesById.values()].map((repository) =>
 				repository.read({
-					repositoryId: repository.repositoryId,
+					id: repository.id,
 					repositoryRootPath: repository.repositoryRootPath
 				})
 			)
 		);
+	}
+
+	private static async discoverConfiguredRepositories(): Promise<Repository[]> {
+		const config = readMissionConfig();
+		if (!config) {
+			return [];
+		}
+
+		const repositoriesRoot = resolveRepositoriesRoot(config);
+		const repositoryRootPaths = await Repository.findGitRepositoryRoots(repositoriesRoot);
+		return repositoryRootPaths.map((repositoryRootPath) => Repository.open(repositoryRootPath));
+	}
+
+	private static async findGitRepositoryRoots(rootPath: string): Promise<string[]> {
+		const discovered = new Set<string>();
+
+		async function visit(directoryPath: string, remainingDepth: number): Promise<void> {
+			if (remainingDepth < 0) {
+				return;
+			}
+
+			try {
+				const directoryEntries = await fsp.readdir(directoryPath, { withFileTypes: true });
+				if (directoryEntries.some((entry) => entry.name === '.git')) {
+					discovered.add(path.resolve(directoryPath));
+					return;
+				}
+
+				await Promise.all(
+					directoryEntries
+						.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+						.map((entry) => visit(path.join(directoryPath, entry.name), remainingDepth - 1))
+				);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+					return;
+				}
+				throw error;
+			}
+		}
+
+		await visit(rootPath, 3);
+		return [...discovered].sort((left, right) => left.localeCompare(right));
 	}
 
 	public static async add(
@@ -84,27 +161,29 @@ export class Repository extends Entity<RepositoryData, string> {
 		const repositoryRootPath = 'githubRepository' in payload
 			? await Repository.checkoutGitHubRepository(payload, context)
 			: payload.repositoryPath;
-		const repository = await Repository.registerLocalRepository(repositoryRootPath, context);
+		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
 		return await repository.read({
-			repositoryId: repository.repositoryId,
+			id: repository.id,
 			repositoryRootPath: repository.repositoryRootPath
 		});
 	}
 
-	public static async resolve(input: unknown, context?: EntityExecutionContext): Promise<Repository | undefined> {
+	public static async resolve(input: unknown, context?: EntityExecutionContext): Promise<Repository> {
 		const payload = repositoryIdentityPayloadSchema.parse(input);
-		const factory = Repository.getRepositoryFactory(context);
-		const storedRepository = await factory.read(Repository, payload.repositoryId);
-		if (storedRepository) {
-			return storedRepository;
+		const discoveredRepository = (await Repository.discoverConfiguredRepositories())
+			.find((repository) => repository.id === payload.id);
+		if (discoveredRepository) {
+			return discoveredRepository;
 		}
 
-		return payload.repositoryRootPath?.trim()
-			? Repository.open(payload.repositoryRootPath.trim())
-			: undefined;
+		const repository = await Repository.getRepositoryFactory(context).read(Repository, payload.id);
+		if (!repository) {
+			throw new Error(`Repository '${payload.id}' could not be resolved.`);
+		}
+		return repository;
 	}
 
-	public static register(input: RepositoryInput): Repository {
+	public static create(input: RepositoryInput): Repository {
 		return new Repository(Repository.createRepositoryData(repositoryInputSchema.parse(input)));
 	}
 
@@ -112,14 +191,247 @@ export class Repository extends Entity<RepositoryData, string> {
 		repositoryRootPath: string,
 		input: Partial<Omit<RepositoryInput, 'repositoryRootPath'>> = {}
 	): Repository {
-		return Repository.register({
+		return Repository.create({
 			repositoryRootPath,
 			...input
 		});
 	}
 
-	private static async registerLocalRepository(repositoryPath: string, context?: EntityExecutionContext): Promise<Repository> {
-		const { repositoryPath: trimmedRepositoryPath } = repositoryRegistrationInputSchema.parse({ repositoryPath });
+	public static deriveIdentity(repositoryRootPath: string): RepositoryIdentity {
+		const normalizedRepositoryRootPath = path.resolve(repositoryRootPath);
+		const githubRepository = Repository.normalizeGitHubRepositoryName(
+			resolveGitHubRepositoryFromWorkspace(normalizedRepositoryRootPath)
+		);
+		if (githubRepository) {
+			return {
+				id: Repository.buildGitHubRepositoryId(githubRepository),
+				repositoryRootPath: normalizedRepositoryRootPath,
+				githubRepository
+			};
+		}
+
+		return {
+			id: Repository.buildLocalRepositoryId(normalizedRepositoryRootPath),
+			repositoryRootPath: normalizedRepositoryRootPath
+		};
+	}
+
+	public static buildGitHubRepositoryId(githubRepository: string): string {
+		const normalizedRepository = Repository.normalizeGitHubRepositoryName(githubRepository);
+		if (!normalizedRepository) {
+			throw new Error(`GitHub repository '${githubRepository}' is invalid.`);
+		}
+		return `repository:github/${normalizedRepository}`;
+	}
+
+	public static slugIdentitySegment(value: string): string {
+		return value
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+	}
+
+	public static getMissionDirectoryPath(repositoryRootPath: string): string {
+		return path.join(repositoryRootPath, Repository.missionDirectoryName);
+	}
+
+	public static getMissionCatalogPath(repositoryRootPath: string): string {
+		return path.join(Repository.getMissionDirectoryPath(repositoryRootPath), 'missions');
+	}
+
+	public static getMissionWorkflowPath(repositoryRootPath: string): string {
+		return path.join(Repository.getMissionDirectoryPath(repositoryRootPath), Repository.missionWorkflowDirectoryName);
+	}
+
+	public static getMissionWorkflowDefinitionPath(repositoryRootPath: string): string {
+		return path.join(Repository.getMissionWorkflowPath(repositoryRootPath), Repository.missionWorkflowDefinitionFileName);
+	}
+
+	public static getMissionWorkflowTemplatesPath(repositoryRootPath: string): string {
+		return path.join(Repository.getMissionWorkflowPath(repositoryRootPath), 'templates');
+	}
+
+	public static getMissionControlRootFromMissionDir(missionDir: string): string {
+		return path.resolve(missionDir, '..', '..', '..');
+	}
+
+	public static resolveMissionsRoot(
+		configuredRoot = Repository.defaultMissionsRoot
+	): string {
+		const normalizedRoot = configuredRoot.trim() || Repository.defaultMissionsRoot;
+		const configuredMissionsPath = process.env['MISSIONS_PATH']?.trim();
+		if (normalizedRoot === Repository.defaultMissionsRoot && configuredMissionsPath) {
+			return path.resolve(configuredMissionsPath);
+		}
+		if (path.isAbsolute(normalizedRoot)) {
+			return path.resolve(normalizedRoot);
+		}
+		if (normalizedRoot === '~') {
+			return os.homedir();
+		}
+		if (normalizedRoot.startsWith(`~${path.sep}`)) {
+			return path.join(os.homedir(), normalizedRoot.slice(2));
+		}
+		return path.resolve(os.homedir(), normalizedRoot);
+	}
+
+	public static getMissionWorktreesPath(
+		repositoryRootPath: string,
+		options: { missionsRoot?: string } = {}
+	): string {
+		const githubRepository = resolveGitHubRepositoryFromWorkspace(repositoryRootPath);
+		if (githubRepository) {
+			const [owner, repository] = githubRepository
+				.split('/')
+				.map((segment) => segment.trim())
+				.filter((segment) => segment.length > 0);
+			if (owner && repository) {
+				return path.join(
+					Repository.resolveMissionsRoot(options.missionsRoot),
+					owner,
+					repository
+				);
+			}
+		}
+
+		return path.join(
+			Repository.resolveMissionsRoot(options.missionsRoot),
+			path.basename(path.resolve(repositoryRootPath))
+		);
+	}
+
+	public static getMissionDaemonRoot(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): string {
+		const resolvedControlRoot = options.resolveWorkspaceRoot === false
+			? path.resolve(repositoryRootPath.trim())
+			: Repository.resolveMissionControlRoot(repositoryRootPath);
+		return Repository.getMissionDirectoryPath(resolvedControlRoot);
+	}
+
+	public static getWorkflowSettingsDocumentPath(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): string {
+		return path.join(Repository.getMissionDaemonRoot(repositoryRootPath, options), 'workflow', 'workflow.json');
+	}
+
+	public static getSettingsDocumentPath(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): string {
+		return path.join(Repository.getMissionDaemonRoot(repositoryRootPath, options), 'settings.json');
+	}
+
+	public static readPlatform(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): RepositoryPlatformKind | undefined {
+		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
+		try {
+			const content = fs.readFileSync(settingsPath, 'utf8').trim();
+			if (!content) {
+				return undefined;
+			}
+			const source = JSON.parse(content) as unknown;
+			if (!source || typeof source !== 'object' || Array.isArray(source)) {
+				return undefined;
+			}
+			const platform = (source as { platform?: unknown }).platform;
+			return platform === 'github' ? platform : undefined;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+				return undefined;
+			}
+			throw error;
+		}
+	}
+
+	public static resolveSettingsDocument(input: unknown = {}): RepositorySettings {
+		return RepositorySettingsSchema.parse(input);
+	}
+
+	public static readSettingsDocument(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): RepositorySettings | undefined {
+		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
+		try {
+			const content = fs.readFileSync(settingsPath, 'utf8').trim();
+			if (!content) {
+				return undefined;
+			}
+			return Repository.resolveSettingsDocument(JSON.parse(content) as unknown);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+				return undefined;
+			}
+			throw error;
+		}
+	}
+
+	public static requireSettingsDocument(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): RepositorySettings {
+		const document = Repository.readSettingsDocument(repositoryRootPath, options);
+		if (!document) {
+			throw new Error(`Repository settings document '${Repository.getSettingsDocumentPath(repositoryRootPath, options)}' is required.`);
+		}
+		return document;
+	}
+
+	public static async ensureSettingsDocument(repositoryRootPath = process.cwd()): Promise<RepositorySettings> {
+		const currentDocument = Repository.readSettingsDocument(repositoryRootPath);
+		if (currentDocument) {
+			return currentDocument;
+		}
+
+		return Repository.writeSettingsDocument(createDefaultRepositorySettings(), repositoryRootPath);
+	}
+
+	public static async writeSettingsDocument(
+		document: RepositorySettings,
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): Promise<RepositorySettings> {
+		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
+		const nextDocument = Repository.resolveSettingsDocument(document);
+		const temporarySettingsPath = `${settingsPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
+		await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
+		await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(nextDocument, null, 2)}\n`, 'utf8');
+		await fsp.rename(temporarySettingsPath, settingsPath);
+		return nextDocument;
+	}
+
+	public static async initializeScaffolding(repositoryRootPath: string): Promise<RepositoryScaffolding> {
+		const { WorkflowSettingsStore } = await import('../../settings/index.js');
+		const controlDirectoryPath = Repository.getMissionDirectoryPath(repositoryRootPath);
+		const settingsDocumentPath = Repository.getSettingsDocumentPath(repositoryRootPath, {
+			resolveWorkspaceRoot: false
+		});
+		const worktreesRoot = Repository.getMissionWorktreesPath(repositoryRootPath);
+
+		await fsp.mkdir(controlDirectoryPath, { recursive: true });
+		await new WorkflowSettingsStore(repositoryRootPath).initialize();
+		const workflowDirectoryPath = path.join(controlDirectoryPath, 'workflow');
+		const workflowDefinitionPath = path.join(workflowDirectoryPath, 'workflow.json');
+		const workflowTemplatesPath = path.join(workflowDirectoryPath, 'templates');
+
+		return {
+			controlDirectoryPath,
+			settingsDocumentPath,
+			workflowDirectoryPath,
+			workflowDefinitionPath,
+			workflowTemplatesPath,
+			worktreesRoot
+		};
+	}
+
+	private static async addLocalRepository(repositoryPath: string, context?: EntityExecutionContext): Promise<Repository> {
+		const { repositoryPath: trimmedRepositoryPath } = repositoryLocalAddInputSchema.parse({ repositoryPath });
 		const controlRoot = resolveGitWorkspaceRoot(trimmedRepositoryPath);
 		if (!controlRoot) {
 			throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
@@ -152,11 +464,7 @@ export class Repository extends Entity<RepositoryData, string> {
 	}
 
 	public get id(): string {
-		return this.repositoryId;
-	}
-
-	public get repositoryId(): string {
-		return this.data.repositoryId;
+		return this.data.id;
 	}
 
 	public get repositoryRootPath(): string {
@@ -169,14 +477,6 @@ export class Repository extends Entity<RepositoryData, string> {
 
 	public get repoName(): string {
 		return this.data.repoName;
-	}
-
-	public get label(): string {
-		return this.data.label;
-	}
-
-	public get description(): string {
-		return this.data.description;
 	}
 
 	public get githubRepository(): string | undefined {
@@ -235,25 +535,83 @@ export class Repository extends Entity<RepositoryData, string> {
 		return true;
 	}
 
+	public async prepare(
+		input: RepositoryPreparePayload,
+		context?: EntityExecutionContext
+	): Promise<RepositoryPrepareResult> {
+		this.assertRepositoryIdentity(repositoryPreparePayloadSchema.parse(input));
+		const githubRepository = this.githubRepository?.trim();
+		if (!githubRepository) {
+			throw new Error(`Repository '${this.id}' does not have a GitHub remote configured.`);
+		}
+
+		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const branchRef = store.deriveRepositoryBootstrapBranchName();
+		const baseBranch = store.getDefaultBranch();
+		const temporaryRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-bootstrap-'));
+		const proposalWorktreePath = path.join(temporaryRoot, 'bootstrap');
+
+		try {
+			await store.materializeLinkedWorktree(proposalWorktreePath, branchRef, baseBranch);
+			const initialization = await Repository.initializeScaffolding(proposalWorktreePath);
+
+			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
+			proposalStore.stagePaths([
+				path.relative(proposalWorktreePath, initialization.settingsDocumentPath),
+				path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
+			], proposalWorktreePath, { force: true });
+			proposalStore.commit(Repository.buildBootstrapCommitMessage(), proposalWorktreePath);
+			proposalStore.pushBranch(branchRef, proposalWorktreePath);
+
+			refreshSystemStatus({ cwd: proposalWorktreePath });
+			const github = new GitHubPlatformAdapter(
+				proposalWorktreePath,
+				githubRepository,
+				context?.authToken ? { authToken: context.authToken } : {}
+			);
+			const pullRequestUrl = await github.createPullRequest({
+				title: 'Initialize Mission repository scaffolding',
+				body: Repository.buildBootstrapPullRequestBody(branchRef),
+				headBranch: branchRef,
+				baseBranch
+			});
+
+			return repositoryPrepareResultSchema.parse({
+				kind: 'repository-bootstrap',
+				state: 'pull-request-opened',
+				branchRef,
+				baseBranch,
+				pullRequestUrl,
+				controlDirectoryPath: Repository.getMissionDirectoryPath(this.repositoryRootPath),
+				settingsPath: Repository.getSettingsDocumentPath(this.repositoryRootPath),
+				worktreesPath: Repository.getMissionWorktreesPath(this.repositoryRootPath),
+				missionsPath: Repository.getMissionCatalogPath(this.repositoryRootPath)
+			});
+		} finally {
+			await store.removeLinkedWorktree(proposalWorktreePath).catch(() => undefined);
+			await fsp.rm(temporaryRoot, { recursive: true, force: true });
+		}
+	}
+
 	public override async remove(
 		input: RepositoryRemovePayload,
 		context?: EntityExecutionContext
 	): Promise<RepositoryRemoveAcknowledgement> {
 		const payload = repositoryRemovePayloadSchema.parse(input);
 		this.assertRepositoryIdentity(payload);
-		await this.getEntityFactory(context).remove(Repository, this.repositoryId);
+		await this.getEntityFactory(context).remove(Repository, this.id);
 		return repositoryRemoveAcknowledgementSchema.parse({
 			ok: true,
 			entity: repositoryEntityName,
 			method: 'remove',
-			id: this.repositoryId
+			id: this.id
 		});
 	}
 
 	public async read(input: RepositoryReadPayload): Promise<RepositorySnapshot> {
 		this.assertRepositoryIdentity(repositoryReadPayloadSchema.parse(input));
 		const store = new FilesystemAdapter(this.repositoryRootPath);
-		const settings = readRepositorySettingsDocument(this.repositoryRootPath);
+		const settings = Repository.readSettingsDocument(this.repositoryRootPath);
 		const missions = await store.listMissions().catch(() => []);
 		const currentBranch = store.isGitRepository() ? store.getCurrentBranch() : undefined;
 
@@ -332,12 +690,17 @@ export class Repository extends Entity<RepositoryData, string> {
 		brief: MissionBrief,
 		method: 'startMissionFromIssue' | 'startMissionFromBrief'
 	): Promise<RepositoryMissionStartAcknowledgement> {
-		const settings = readRepositorySettingsDocument(this.repositoryRootPath) ?? createDefaultRepositorySettings();
+		const { readMissionWorkflowDefinition } = await import('../../workflow/mission/preset.js');
+		const settings = Repository.requireSettingsDocument(this.repositoryRootPath);
+		const workflowDocument = readMissionWorkflowDefinition(this.repositoryRootPath);
+		if (!workflowDocument) {
+			throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(this.repositoryRootPath)}' is required.`);
+		}
 		const workflow = normalizeWorkflowSettings(
-			readMissionWorkflowDefinition(this.repositoryRootPath) ?? createDefaultWorkflowSettings()
+			workflowDocument
 		);
 		const store = new FilesystemAdapter(this.repositoryRootPath);
-		const preparation = await new MissionPreparationService(store, {
+		const preparation = await this.prepareMissionFromBrief(store, {
 			workflow,
 			taskRunners: new Map(),
 			...(settings.instructionsPath
@@ -348,7 +711,7 @@ export class Repository extends Entity<RepositoryData, string> {
 				: {}),
 			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
 			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
-		}).prepareFromBrief({ brief });
+		}, { brief });
 
 		if (preparation.kind !== 'mission') {
 			throw new Error('Mission preparation returned an unexpected result.');
@@ -360,6 +723,99 @@ export class Repository extends Entity<RepositoryData, string> {
 			method,
 			id: preparation.missionId
 		});
+	}
+
+	private async prepareMissionFromBrief(
+		store: FilesystemAdapter,
+		workflowBindings: MissionWorkflowBindings,
+		input: {
+			brief: MissionBrief;
+			branchRef?: string;
+		}
+	): Promise<MissionPreparationStatus> {
+		const missionId = store.createMissionId(input.brief);
+		const canonicalMissionRootDir = store.getTrackedMissionDir(missionId);
+		const branchRef = input.branchRef
+			?? (input.brief.issueId !== undefined
+				? store.deriveMissionBranchName(input.brief.issueId, input.brief.title)
+				: store.deriveDraftMissionBranchName(input.brief.title));
+		const baseBranch = store.getDefaultBranch();
+		const createdAt = new Date().toISOString();
+		const proposalWorktreePath = store.getMissionWorktreePath(missionId);
+		let preparedMission: Mission | undefined;
+
+		try {
+			await store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
+
+			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
+			const initialization = Repository.readSettingsDocument(proposalWorktreePath)
+				? undefined
+				: await Repository.initializeScaffolding(proposalWorktreePath);
+			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
+			const existingDescriptor = await proposalStore.readMissionDescriptor(missionRootDir);
+			if (existingDescriptor) {
+				return {
+					kind: 'mission',
+					state: 'branch-prepared',
+					missionId,
+					branchRef: existingDescriptor.branchRef,
+					baseBranch,
+					worktreePath: proposalWorktreePath,
+					missionRootDir,
+					...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
+					...(input.brief.url ? { issueUrl: input.brief.url } : {})
+				};
+			}
+
+			const descriptor: MissionDescriptor = {
+				missionId,
+				missionDir: missionRootDir,
+				brief: input.brief,
+				branchRef,
+				createdAt
+			};
+
+			const { Mission } = await import('../Mission/Mission.js');
+			preparedMission = Mission.hydrate(
+				proposalStore,
+				missionRootDir,
+				descriptor,
+				workflowBindings
+			);
+			await preparedMission.initialize();
+			preparedMission.dispose();
+			preparedMission = undefined;
+
+			proposalStore.stagePaths(
+				[
+					...(initialization
+						? [
+							path.relative(proposalWorktreePath, initialization.settingsDocumentPath),
+							path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
+						]
+						: []),
+					path.relative(proposalWorktreePath, missionRootDir)
+				],
+				proposalWorktreePath,
+				{ force: true }
+			);
+			proposalStore.commit(Repository.buildMissionPreparationCommitMessage(missionId, input.brief), proposalWorktreePath);
+			proposalStore.pushBranch(branchRef, proposalWorktreePath);
+
+			return {
+				kind: 'mission',
+				state: 'branch-prepared',
+				missionId,
+				branchRef,
+				baseBranch,
+				worktreePath: proposalWorktreePath,
+				missionRootDir: canonicalMissionRootDir,
+				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
+				...(input.brief.url ? { issueUrl: input.brief.url } : {})
+			};
+		} finally {
+			preparedMission?.dispose();
+		}
 	}
 
 	private tryCreateGitHubPlatformAdapter(authToken?: string): GitHubPlatformAdapter | undefined {
@@ -378,14 +834,14 @@ export class Repository extends Entity<RepositoryData, string> {
 	private requireGitHubPlatformAdapter(authToken?: string): GitHubPlatformAdapter {
 		const adapter = this.tryCreateGitHubPlatformAdapter(authToken);
 		if (!adapter) {
-			throw new Error(`Repository '${this.repositoryId}' does not have a GitHub remote configured.`);
+			throw new Error(`Repository '${this.id}' does not have a GitHub remote configured.`);
 		}
 		return adapter;
 	}
 
-	private assertRepositoryIdentity(input: { repositoryId: string; repositoryRootPath?: string | undefined }): void {
-		if (input.repositoryId !== this.repositoryId) {
-			throw new Error(`Repository payload id '${input.repositoryId}' does not match '${this.repositoryId}'.`);
+	private assertRepositoryIdentity(input: { id: string; repositoryRootPath?: string | undefined }): void {
+		if (input.id !== this.id) {
+			throw new Error(`Repository payload id '${input.id}' does not match '${this.id}'.`);
 		}
 
 		if (input.repositoryRootPath && path.resolve(input.repositoryRootPath) !== this.repositoryRootPath) {
@@ -395,18 +851,16 @@ export class Repository extends Entity<RepositoryData, string> {
 
 	private static createRepositoryData(input: RepositoryInput): RepositoryData {
 		const normalizedRepositoryRootPath = path.resolve(input.repositoryRootPath);
-		const identity = deriveRepositoryIdentity(normalizedRepositoryRootPath);
+		const identity = Repository.deriveIdentity(normalizedRepositoryRootPath);
 		const githubRepository = input.githubRepository?.trim() || identity.githubRepository;
 		const { ownerId, repoName } = Repository.deriveRepositoryNames(normalizedRepositoryRootPath, githubRepository);
 		const defaults = createDefaultRepositoryConfiguration();
 
 		return repositoryDataSchema.parse({
-			repositoryId: identity.repositoryId,
+			id: identity.id,
 			repositoryRootPath: normalizedRepositoryRootPath,
 			ownerId,
 			repoName,
-			label: input.label?.trim() || repoName,
-			description: input.description ?? githubRepository ?? normalizedRepositoryRootPath,
 			...(githubRepository ? { githubRepository } : {}),
 			settings: input.settings ?? defaults.settings,
 			workflowConfiguration: input.workflowConfiguration ?? defaults.workflowConfiguration,
@@ -438,6 +892,51 @@ export class Repository extends Entity<RepositoryData, string> {
 			: path.join(repositoryRootPath, configuredPath);
 	}
 
+	private static normalizeGitHubRepositoryName(value: string | undefined): string | undefined {
+		const [owner, repository, ...rest] = value?.trim().split('/').map((segment) => segment.trim()) ?? [];
+		if (!owner || !repository || rest.length > 0) {
+			return undefined;
+		}
+		return `${owner}/${repository}`;
+	}
+
+	private static buildLocalRepositoryId(repositoryRootPath: string): string {
+		const repositoryLabel = Repository.slugIdentitySegment(path.basename(repositoryRootPath) || 'repository') || 'repository';
+		const repositoryHash = createHash('sha1').update(repositoryRootPath).digest('hex').slice(0, 8);
+		return `repository:local/${repositoryLabel}/${repositoryHash}`;
+	}
+
+	private static resolveMissionControlRoot(repositoryRootPath: string): string {
+		const normalizedRoot = repositoryRootPath.trim();
+		const resolvedRoot = resolveGitWorkspaceRoot(normalizedRoot);
+		return resolvedRoot ?? path.resolve(normalizedRoot);
+	}
+
+	private static buildBootstrapCommitMessage(): string {
+		return 'chore(mission): initialize repository scaffolding';
+	}
+
+	private static buildMissionPreparationCommitMessage(missionId: string, brief: MissionBrief): string {
+		return `chore(mission): prepare ${missionId}${brief.issueId !== undefined ? ` for #${String(brief.issueId)}` : ''}`;
+	}
+
+	private static buildBootstrapPullRequestBody(branchRef: string): string {
+		return [
+			'## Repository Bootstrap',
+			'',
+			'This PR initializes the tracked Mission repository scaffolding.',
+			'',
+			`- Branch: \`${branchRef}\``,
+			'- Creates `.mission/settings.json` as the repository settings document.',
+			'- Creates `.mission/workflow/workflow.json` as the repository workflow definition.',
+			'- Creates `.mission/workflow/templates/` as the repository-owned workflow preset.',
+			'- Establishes repo-scoped Mission control settings.',
+			'- Leaves branch-owned `.mission/missions/<mission-id>` content to mission branches.',
+			'',
+			'After merge, pull the default branch before preparing a mission.'
+		].join('\n');
+	}
+
 	private static getRepositoryFactory(context?: EntityExecutionContext) {
 		const factory = Repository.getEntityFactory(context);
 		if (!factory.has(Repository)) {
@@ -446,7 +945,7 @@ export class Repository extends Entity<RepositoryData, string> {
 				table: 'repository',
 				entityClass: Repository,
 				storageSchema: repositoryDataSchema,
-				getId: (record) => record.repositoryId
+				getId: (record) => record.id
 			});
 		}
 		return factory;

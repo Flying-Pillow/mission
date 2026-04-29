@@ -24,14 +24,10 @@ import { Mission } from '../entities/Mission/Mission.js';
 import type { MissionStageSnapshot } from '../entities/Stage/StageSchema.js';
 import type { MissionTaskSnapshot } from '../entities/Task/TaskSchema.js';
 import { Repository } from '../entities/Repository/Repository.js';
-import { createDefaultRepositorySettings } from '../entities/Repository/RepositorySettings.js';
-import { readRepositorySettingsDocument } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../lib/repositoryPaths.js';
 import { normalizeWorkflowSettings } from '../settings/validation.js';
 import type { OperatorActionDescriptor } from '../types.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
-import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 
 export type MissionLoader = (
     input: MissionIdentityPayload,
@@ -327,7 +323,7 @@ export class MissionDaemon {
         const canonicalPath = await resolveCanonicalDocumentPath(candidatePath, intent);
         const roots = await Promise.all([
             canonicalizeAllowedRoot(controlRoot),
-            canonicalizeAllowedRoot(getMissionWorktreesPath(controlRoot))
+            canonicalizeAllowedRoot(Repository.getMissionWorktreesPath(controlRoot))
         ]);
 
         if (!roots.some((rootPath) => rootPath && isPathInsideRoot(rootPath, canonicalPath))) {
@@ -407,9 +403,13 @@ export class MissionDaemon {
         context: { surfacePath: string },
     ): Promise<Mission | undefined> => {
         const controlRoot = input.repositoryRootPath?.trim() || context.surfacePath;
-        const settings = readRepositorySettingsDocument(controlRoot) ?? createDefaultRepositorySettings();
+        const settings = Repository.requireSettingsDocument(controlRoot);
+        const workflowDocument = readMissionWorkflowDefinition(controlRoot);
+        if (!workflowDocument) {
+            throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(controlRoot)}' is required.`);
+        }
         const workflow = normalizeWorkflowSettings(
-            readMissionWorkflowDefinition(controlRoot) ?? createDefaultWorkflowSettings()
+            workflowDocument
         );
         const taskRunners = new Map(
             (await createConfiguredAgentRunners({

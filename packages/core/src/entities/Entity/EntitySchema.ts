@@ -44,11 +44,6 @@ const entityClassSchema = z.custom<Function>((value) =>
     && typeof (value as { prototype?: unknown }).prototype === 'object'
 );
 
-const entityMethodExecuteSchema = z.custom<(
-    payload: any,
-    context: any
-) => Promise<unknown> | unknown>((value) => typeof value === 'function');
-
 export const entityCommandInputOptionSchema = z.object({
     optionId: z.string().trim().min(1),
     label: z.string().trim().min(1),
@@ -128,21 +123,18 @@ export const entityEventSchema = z.object({
 }).strict();
 
 export const entityMethodSchema = z.object({
-    kind: entityMethodKindSchema.optional(),
+    kind: entityMethodKindSchema,
     payload: zodSchema,
     result: zodSchema,
-    execution: entityMethodExecutionSchema.optional(),
-    ui: entityMethodUiSchema.optional(),
-    execute: entityMethodExecuteSchema.optional()
+    execution: entityMethodExecutionSchema,
+    ui: entityMethodUiSchema.optional()
 }).strict();
 
 export const entitySchema = z.object({
     entity: entityNameSchema,
-    entityClass: entityClassSchema.optional(),
+    entityClass: entityClassSchema,
     properties: z.record(z.string(), entityPropertySchema).optional(),
-    methods: z.record(z.string(), entityMethodSchema).optional(),
-    queries: z.record(z.string(), entityMethodSchema).optional(),
-    commands: z.record(z.string(), entityMethodSchema).optional(),
+    methods: z.record(z.string(), entityMethodSchema),
     events: z.record(z.string(), entityEventSchema).optional()
 }).strict();
 

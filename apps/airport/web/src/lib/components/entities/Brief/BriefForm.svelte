@@ -6,7 +6,7 @@
     import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
     import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
-    import { missionFromBriefInputSchema } from "@flying-pillow/mission-core/entities";
+    import { missionFromBriefInputSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
     import type { inferFlattenedErrors, z } from "zod/v4";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";

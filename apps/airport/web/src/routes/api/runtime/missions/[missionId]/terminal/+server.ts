@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { missionTerminalInputSchema } from '@flying-pillow/mission-core/entities';
+import { missionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
@@ -75,7 +75,7 @@ const missionTerminalQuerySchema = z.object({
 async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, repositoryId?: string) {
     const gateway = new DaemonGateway(locals);
     const repository = repositoryId
-        ? await gateway.resolveRepositoryCandidate({ repositoryId })
+        ? await gateway.resolveRepositoryCandidate({ id: repositoryId })
         : undefined;
     return await gateway.getMissionTerminalSnapshot({
         missionId,
@@ -96,7 +96,7 @@ async function sendMissionTerminalInput(
 ) {
     const gateway = new DaemonGateway(locals);
     const repository = input.repositoryId
-        ? await gateway.resolveRepositoryCandidate({ repositoryId: input.repositoryId })
+        ? await gateway.resolveRepositoryCandidate({ id: input.repositoryId })
         : undefined;
     return await gateway.sendMissionTerminalInput({
         ...input,

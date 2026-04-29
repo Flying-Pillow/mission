@@ -89,6 +89,8 @@ describe('daemon entity dispatch', () => {
 		const findSpy = vi.spyOn(GitHubRepository, 'find').mockResolvedValue([
 			{
 				fullName: 'Flying-Pillow/mission',
+				name: 'mission',
+				topics: [],
 				ownerLogin: 'Flying-Pillow',
 				visibility: 'public',
 				archived: false
@@ -107,6 +109,8 @@ describe('daemon entity dispatch', () => {
 			})).resolves.toEqual([
 				{
 					fullName: 'Flying-Pillow/mission',
+					name: 'mission',
+					topics: [],
 					ownerLogin: 'Flying-Pillow',
 					visibility: 'public',
 					archived: false

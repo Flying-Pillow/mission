@@ -2,6 +2,7 @@ import type {
 	MissionTaskArtifactReference
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
+import type { EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import type { MissionAgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
@@ -16,6 +17,12 @@ import {
 	type MissionTaskStatusIntent
 } from '../../types.js';
 import type { MissionStateData } from '../../workflow/engine/index.js';
+import {
+	missionTaskSnapshotSchema,
+	taskCommandAcknowledgementSchema,
+	taskExecuteCommandPayloadSchema,
+	taskIdentityPayloadSchema
+} from './TaskSchema.js';
 
 export type TaskData = {
 	taskId: string;
@@ -92,10 +99,54 @@ export type TaskVerificationReworkRequest = {
 };
 
 export class Task {
+	public static async read(payload: unknown, context: EntityExecutionContext) {
+		const input = taskIdentityPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return missionTaskSnapshotSchema.parse(service.requireTask(await service.buildMissionSnapshot(mission, input.missionId), input.taskId));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = taskExecuteCommandPayloadSchema.parse(payload);
+		const service = await loadMissionDaemon(context);
+		const terminalSessionName = service.getTerminalSessionName(input.input);
+		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
+		try {
+			service.requireTask(await service.buildMissionSnapshot(mission, input.missionId), input.taskId);
+			switch (input.commandId) {
+				case 'task.start':
+					await mission.startTask(input.taskId, terminalSessionName ? { terminalSessionName } : {});
+					break;
+				case 'task.complete':
+					await mission.completeTask(input.taskId);
+					break;
+				case 'task.reopen':
+					await mission.reopenTask(input.taskId);
+					break;
+				default:
+					throw new Error(`Task command '${input.commandId}' is not implemented in the daemon.`);
+			}
+			return taskCommandAcknowledgementSchema.parse({
+				ok: true,
+				entity: 'Task',
+				method: 'executeCommand',
+				id: input.taskId,
+				missionId: input.missionId,
+				taskId: input.taskId,
+				commandId: input.commandId
+			});
+		} finally {
+			mission.dispose();
+		}
+	}
+
 	public static isReady(task: MissionTaskState): boolean {
 		return task.status === 'ready' && task.waitingOn.length === 0;
 	}
-
 	public static isActive(task: MissionTaskState): boolean {
 		return task.status === 'queued' || task.status === 'running';
 	}
@@ -353,6 +404,11 @@ export class Task {
 
 		return tasks.find((candidate) => candidate.taskId === task.pairedTaskId && candidate.taskKind === 'implementation');
 	}
+}
+
+async function loadMissionDaemon(context: EntityExecutionContext) {
+	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
+	return requireMissionDaemon(context);
 }
 
 function stripMarkdownExtension(fileName: string): string {

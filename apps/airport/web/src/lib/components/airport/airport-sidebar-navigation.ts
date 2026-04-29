@@ -11,11 +11,6 @@ export function getAirportSidebarNavigation(
 ): AirportSidebarNavigationItem[] {
 	return [
 		{
-			title: "Kanban",
-			href: "/kanban",
-			isActive: pathname.startsWith("/kanban"),
-		},
-		{
 			title: "Documentation",
 			href: "/docs",
 			isActive: isDocsRoutePath(pathname),

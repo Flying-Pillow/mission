@@ -14,10 +14,7 @@
     const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
     const repository = $derived.by(() => {
         const activeRepository = appContext.airport.activeRepository;
-        if (
-            !activeRepository ||
-            activeRepository.repositoryId !== repositoryId
-        ) {
+        if (!activeRepository || activeRepository.id !== repositoryId) {
             return null;
         }
 
@@ -88,7 +85,7 @@
     {:else}
         <RepositoryCard />
 
-        {#key repository.repositoryId}
+        {#key repository.id}
             <div
                 class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-2"
             >
