@@ -1,6 +1,7 @@
 <script lang="ts">
     import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import { Badge } from "$lib/components/ui/badge/index.js";
+    import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
+    import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
     const activeRepository = $derived.by(() => {
@@ -13,83 +14,44 @@
 
         return currentRepository;
     });
+    const activeRepositoryPanelItem = $derived.by(
+        (): AirportRepositoryListItem => {
+            const listedRepository =
+                appContext.application.repositoryListItems.find(
+                    (repository) => repository.key === activeRepository.id,
+                );
+            if (listedRepository) {
+                return listedRepository;
+            }
+
+            const platformRepositoryRef =
+                activeRepository.data.platformRepositoryRef ?? undefined;
+            return {
+                key: activeRepository.id,
+                local: {
+                    ...activeRepository.data,
+                    missions: activeRepository.missions,
+                },
+                displayName:
+                    platformRepositoryRef ?? activeRepository.data.repoName,
+                displayDescription:
+                    platformRepositoryRef ??
+                    activeRepository.data.repositoryRootPath,
+                repositoryRootPath: activeRepository.data.repositoryRootPath,
+                ...(platformRepositoryRef ? { platformRepositoryRef } : {}),
+                missions: activeRepository.missions,
+                isLocal: true,
+            };
+        },
+    );
+
+    async function refreshRepositories(): Promise<void> {
+        await appContext.application.loadRepositories({ force: true });
+    }
 </script>
 
-<section class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm">
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Repository
-            </p>
-            <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                {activeRepository.data.platformRepositoryRef ??
-                    activeRepository.data.repoName}
-            </h1>
-            <p class="mt-1 text-sm text-muted-foreground">
-                {activeRepository.data.platformRepositoryRef ??
-                    activeRepository.data.repositoryRootPath}
-            </p>
-            <p class="mt-2 font-mono text-xs text-muted-foreground">
-                {activeRepository.data.repositoryRootPath}
-            </p>
-        </div>
-        <div class="flex flex-wrap justify-end gap-2">
-            <Badge variant="secondary"
-                >{activeRepository.missions.length === 1
-                    ? "1 mission"
-                    : `${activeRepository.missions.length} missions`}</Badge
-            >
-            {#if activeRepository.data.operationalMode}
-                <Badge variant="outline"
-                    >{activeRepository.data.operationalMode}</Badge
-                >
-            {/if}
-        </div>
-    </div>
-
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Control root
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {activeRepository.data.repositoryRootPath}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Branch
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {activeRepository.data.currentBranch ?? "Unavailable"}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Tracking
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {activeRepository.data.platformRepositoryRef ??
-                    "Not configured"}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Setup
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {!activeRepository.data.isInitialized ? "Incomplete" : "Ready"}
-            </p>
-        </div>
-    </div>
-</section>
+<RepositoryPanel
+    repository={activeRepositoryPanelItem}
+    localRepository={activeRepository}
+    onCommandExecuted={refreshRepositories}
+/>

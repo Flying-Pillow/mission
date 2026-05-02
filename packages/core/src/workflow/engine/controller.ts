@@ -90,7 +90,7 @@ export class MissionWorkflowController {
         }
         const document = await this.refresh();
         if (!document) {
-            throw new Error(`Mission workflow document is missing for mission '${this.descriptor.missionId}'.`);
+            throw new Error(`Mission runtime data is missing for mission '${this.descriptor.missionId}'.`);
         }
         return document;
     }

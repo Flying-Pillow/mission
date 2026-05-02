@@ -15,11 +15,11 @@ export type GitHubBranchSyncStatus = {
 	remoteHead?: string;
 };
 
-export function resolveGitHubRepositoryFromWorkspace(workspaceRoot: string): string | undefined {
-	const remoteNames = runGitLines(workspaceRoot, ['remote']);
+export function resolveGitHubRepositoryFromRepositoryRoot(repositoryRootPath: string): string | undefined {
+	const remoteNames = runGitLines(repositoryRootPath, ['remote']);
 	const orderedRemoteNames = ['origin', ...remoteNames.filter((name) => name !== 'origin')];
 	for (const remoteName of orderedRemoteNames) {
-		const remoteUrl = runGitOutput(workspaceRoot, ['remote', 'get-url', remoteName]);
+		const remoteUrl = runGitOutput(repositoryRootPath, ['remote', 'get-url', remoteName]);
 		const repository = parseGitHubRepositoryFromRemote(remoteUrl);
 		if (repository) {
 			return repository;
@@ -86,7 +86,7 @@ function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
 
 export class GitHubPlatformAdapter {
 	public constructor(
-		private readonly workspaceRoot: string,
+		private readonly repositoryRootPath: string,
 		private readonly repository?: string,
 		private readonly options: { authToken?: string; ghBinary?: string } = {}
 	) { }
@@ -314,7 +314,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub remote fetch requires a remote name.');
 		}
 
-		assertGit(this.workspaceRoot, ['fetch', '--prune', normalizedRemoteName]);
+		assertGit(this.repositoryRootPath, ['fetch', '--prune', normalizedRemoteName]);
 	}
 
 	public getBranchSyncStatus(branchRef: string, remoteName = 'origin'): GitHubBranchSyncStatus {
@@ -328,7 +328,7 @@ export class GitHubPlatformAdapter {
 		}
 
 		const trackingRef = `refs/remotes/${normalizedRemoteName}/${normalizedBranchRef}`;
-		const remoteHead = runGitOutput(this.workspaceRoot, ['rev-parse', '--verify', trackingRef]);
+		const remoteHead = runGitOutput(this.repositoryRootPath, ['rev-parse', '--verify', trackingRef]);
 		if (!remoteHead) {
 			return {
 				branchRef: normalizedBranchRef,
@@ -339,12 +339,12 @@ export class GitHubPlatformAdapter {
 			};
 		}
 
-		const localHead = runGitOutput(this.workspaceRoot, ['rev-parse', 'HEAD']);
+		const localHead = runGitOutput(this.repositoryRootPath, ['rev-parse', 'HEAD']);
 		if (!localHead) {
 			throw new Error(`GitHub branch sync status could not resolve HEAD for '${normalizedBranchRef}'.`);
 		}
 
-		const counts = runGitOutput(this.workspaceRoot, ['rev-list', '--left-right', '--count', `HEAD...${trackingRef}`]);
+		const counts = runGitOutput(this.repositoryRootPath, ['rev-list', '--left-right', '--count', `HEAD...${trackingRef}`]);
 		const [aheadRaw, behindRaw] = counts.split(/\s+/u).filter(Boolean);
 		const aheadCount = Number.parseInt(aheadRaw ?? '0', 10);
 		const behindCount = Number.parseInt(behindRaw ?? '0', 10);
@@ -377,7 +377,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub branch pull requires a remote name.');
 		}
 
-		assertGit(this.workspaceRoot, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
+		assertGit(this.repositoryRootPath, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
 	}
 
 	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
@@ -415,7 +415,7 @@ export class GitHubPlatformAdapter {
 	private async runJsonProcess<T>(args: string[]): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const child = spawn(this.resolveGhBinary(), args, {
-				cwd: this.workspaceRoot,
+				cwd: this.repositoryRootPath,
 				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -457,7 +457,7 @@ export class GitHubPlatformAdapter {
 	private async runTextProcess(args: string[]): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
 			const child = spawn(this.resolveGhBinary(), args, {
-				cwd: this.workspaceRoot,
+				cwd: this.repositoryRootPath,
 				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -506,8 +506,8 @@ export class GitHubPlatformAdapter {
 	}
 }
 
-function runGitLines(workspaceRoot: string, args: string[]): string[] {
-	const output = runGitOutput(workspaceRoot, args);
+function runGitLines(repositoryRootPath: string, args: string[]): string[] {
+	const output = runGitOutput(repositoryRootPath, args);
 	if (!output) {
 		return [];
 	}
@@ -517,18 +517,18 @@ function runGitLines(workspaceRoot: string, args: string[]): string[] {
 		.filter(Boolean);
 }
 
-function runGitOutput(workspaceRoot: string, args: string[]): string {
+function runGitOutput(repositoryRootPath: string, args: string[]): string {
 	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
+		cwd: repositoryRootPath,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
 	return result.status === 0 ? result.stdout.trim() : '';
 }
 
-function assertGit(workspaceRoot: string, args: string[]): void {
+function assertGit(repositoryRootPath: string, args: string[]): void {
 	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
+		cwd: repositoryRootPath,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe']
 	});

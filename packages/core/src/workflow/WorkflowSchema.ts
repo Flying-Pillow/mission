@@ -163,13 +163,6 @@ export const WorkflowPathSettingsSchema = z.object({
 	skillsPath: z.string().trim().min(1)
 }).strict();
 
-export const WorkflowSettingsDocumentSchema = z.object({
-	workflow: WorkflowDefinitionSchema,
-	runtime: WorkflowRuntimeSettingsSchema,
-	integration: WorkflowIntegrationSettingsSchema,
-	paths: WorkflowPathSettingsSchema
-}).strict();
-
 export type WorkflowMissionAutostartSettings = z.infer<typeof WorkflowMissionAutostartSettingsSchema>;
 export type WorkflowHumanInLoopSettings = z.infer<typeof WorkflowHumanInLoopSettingsSchema>;
 export type WorkflowPanicSettings = z.infer<typeof WorkflowPanicSettingsSchema>;
@@ -184,4 +177,3 @@ export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 export type WorkflowRuntimeSettings = z.infer<typeof WorkflowRuntimeSettingsSchema>;
 export type WorkflowIntegrationSettings = z.infer<typeof WorkflowIntegrationSettingsSchema>;
 export type WorkflowPathSettings = z.infer<typeof WorkflowPathSettingsSchema>;
-export type WorkflowSettingsDocument = z.infer<typeof WorkflowSettingsDocumentSchema>;

@@ -9,7 +9,7 @@ import type {
 } from './RepositorySchema.js';
 import {
 	GitHubPlatformAdapter,
-	resolveGitHubRepositoryFromWorkspace
+	resolveGitHubRepositoryFromRepositoryRoot
 } from '../../platforms/GitHubPlatformAdapter.js';
 
 export type RepositoryBranchSyncStatus = {
@@ -24,7 +24,7 @@ export type RepositoryBranchSyncStatus = {
 
 export type RepositoryPlatformAdapterInput = {
 	platform: RepositoryPlatformKindType;
-	workspaceRoot: string;
+	repositoryRootPath: string;
 	repository?: string;
 	authToken?: string;
 	ghBinary?: string;
@@ -63,11 +63,11 @@ export interface RepositoryPlatformAdapter {
 
 export function resolveRepositoryPlatformRepository(
 	platform: RepositoryPlatformKindType,
-	workspaceRoot: string
+	repositoryRootPath: string
 ): string | undefined {
 	switch (platform) {
 		case 'github':
-			return resolveGitHubRepositoryFromWorkspace(workspaceRoot);
+			return resolveGitHubRepositoryFromRepositoryRoot(repositoryRootPath);
 	}
 }
 
@@ -77,7 +77,7 @@ export function createRepositoryPlatformAdapter(
 	switch (input.platform) {
 		case 'github':
 			return new GitHubPlatformAdapter(
-				input.workspaceRoot,
+				input.repositoryRootPath,
 				input.repository,
 				{
 					...(input.authToken ? { authToken: input.authToken } : {}),

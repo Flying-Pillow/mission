@@ -93,6 +93,13 @@ export type ResolvedMission = {
 	descriptor: MissionDescriptor;
 };
 
+export type GitWorktreeStatus = {
+	clean: boolean;
+	stagedCount: number;
+	unstagedCount: number;
+	untrackedCount: number;
+};
+
 export type MissionSessionLogMetadataRecord = {
 	[key: string]: unknown;
 };
@@ -325,6 +332,33 @@ export class FilesystemAdapter {
 
 	public isWorktreeClean(cwd = this.workspaceRoot): boolean {
 		return this.runGit(['status', '--porcelain'], cwd) === '';
+	}
+
+	public getWorktreeStatus(cwd = this.workspaceRoot): GitWorktreeStatus {
+		const output = this.runGit(['status', '--porcelain=v1'], cwd);
+		const status = {
+			clean: output === '',
+			stagedCount: 0,
+			unstagedCount: 0,
+			untrackedCount: 0
+		};
+
+		for (const line of output.split('\n').map((entry) => entry.trimEnd()).filter(Boolean)) {
+			const indexStatus = line[0] ?? ' ';
+			const worktreeStatus = line[1] ?? ' ';
+			if (indexStatus === '?' && worktreeStatus === '?') {
+				status.untrackedCount += 1;
+				continue;
+			}
+			if (indexStatus !== ' ') {
+				status.stagedCount += 1;
+			}
+			if (worktreeStatus !== ' ') {
+				status.unstagedCount += 1;
+			}
+		}
+
+		return status;
 	}
 
 	public pullDefaultBranch(branchRef = this.getDefaultBranch(), cwd = this.workspaceRoot): void {

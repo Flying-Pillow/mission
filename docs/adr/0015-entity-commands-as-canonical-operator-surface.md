@@ -4,6 +4,8 @@ Entity commands are the canonical operator surface for Repository, Mission, Stag
 
 Airport is a control surface and proxy. It renders `EntityCommandDescriptor` values from Entity command views, gathers any command input or confirmation, and forwards the descriptor `commandId` through the SvelteKit gateway to daemon `entity.command`. Airport may keep helper methods for artifacts, worktrees, terminals, prompt delivery, and event streams where those helpers represent distinct transport behavior, but it must not invent Mission behavior or a second command vocabulary.
 
+Entity command views are split by execution target. `commands` advertises instance-level commands for one target Entity id. `classCommands` advertises class-level commands for an Entity class when the operator action is not tied to an existing Entity instance, such as Repository clone or registration. Both views are derived from Entity contract metadata and Entity availability methods; neither view is Entity data.
+
 The daemon request surface is intentionally small: `ping`, `event.subscribe`, `system.status`, `entity.query`, and `entity.command`. Entity behavior belongs behind Entity contracts.
 
 Entity contracts own remote method metadata: payload schema, result schema, execution mode, and event payload schema. Entity classes own behavior. For Mission-tree commands, the ownership model is that each child Entity contract owns its command ids and input schemas, while the Running Mission aggregate remains the delegate for behavior that changes aggregate workflow state.
@@ -17,6 +19,7 @@ Consequences:
 - Command payloads use the target Entity locator, the advertised `commandId`, and optional typed `input` needed by the owning Entity contract.
 - Airport command UI uses Commandbar naming.
 - Entity command views advertise available commands; Entity data schemas must not contain command descriptors.
+- Class-level commands are advertised through `classCommands`, not through ambiguous source, collection, or global command vocabulary.
 - Callers send back the advertised `commandId` with the target Entity locator and typed input required by the owning Entity contract.
 - Child Entity command ids and input schemas should move into the owning child Entity schema/contract files.
 - Artifact exposes `command` only for real Artifact-owned commands such as body update; it must not expose ad hoc mutation method names like `writeBody`.

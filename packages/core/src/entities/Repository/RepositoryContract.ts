@@ -1,4 +1,4 @@
-import { EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
+import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
 import { Repository } from './Repository.js';
 import {
     RepositoryAddSchema,
@@ -9,12 +9,15 @@ import {
     repositoryEntityName,
     RepositoryFindSchema,
     RepositoryFindAvailableSchema,
+    RepositoryClassCommandsSchema,
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
     RepositoryPrepareResultSchema,
     RepositoryRemoveAcknowledgementSchema,
+    RepositorySyncCommandAcknowledgementSchema,
+    RepositorySyncStatusSchema,
     RepositoryStartMissionFromBriefSchema,
     RepositoryStartMissionFromIssueSchema,
     TrackedIssueSummarySchema
@@ -48,6 +51,12 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryPlatformRepositorySchema.array(),
             execution: 'class'
         },
+        classCommands: {
+            kind: 'query',
+            payload: RepositoryClassCommandsSchema,
+            result: EntityClassCommandViewSchema,
+            execution: 'class'
+        },
         read: {
             kind: 'query',
             payload: RepositoryLocatorSchema,
@@ -58,6 +67,12 @@ export const RepositoryContract: EntityContractType = {
             kind: 'query',
             payload: RepositoryLocatorSchema,
             result: EntityCommandViewSchema,
+            execution: 'entity'
+        },
+        syncStatus: {
+            kind: 'query',
+            payload: RepositoryLocatorSchema,
+            result: RepositorySyncStatusSchema,
             execution: 'entity'
         },
         listIssues: {
@@ -78,7 +93,8 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryDataSchema,
             execution: 'class',
             ui: {
-                label: 'Add Repository',
+                label: 'Clone Repository',
+                variant: 'default',
                 iconHint: 'folder-plus',
                 presentationOrder: 0
             }
@@ -92,6 +108,10 @@ export const RepositoryContract: EntityContractType = {
                 label: 'Remove Repository',
                 variant: 'destructive',
                 iconHint: 'trash-2',
+                confirmation: {
+                    required: true,
+                    prompt: 'Remove this Repository from Mission and delete its Repository root from disk? This cannot be undone.'
+                },
                 presentationOrder: 90
             }
         },
@@ -102,31 +122,50 @@ export const RepositoryContract: EntityContractType = {
             execution: 'entity',
             ui: {
                 label: 'Prepare Repository',
+                variant: 'ghost',
                 iconHint: 'git-pull-request-create',
                 presentationOrder: 5
+            }
+        },
+        fetchExternalState: {
+            kind: 'mutation',
+            payload: RepositoryLocatorSchema,
+            result: RepositorySyncCommandAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                variant: 'outline',
+                label: 'Fetch External State',
+                iconHint: 'refresh-cw',
+                presentationOrder: 20
+            }
+        },
+        fastForwardFromExternal: {
+            kind: 'mutation',
+            payload: RepositoryLocatorSchema,
+            result: RepositorySyncCommandAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Fast-Forward From External',
+                variant: 'default',
+                iconHint: 'git-pull-request-arrow',
+                confirmation: {
+                    required: true,
+                    prompt: 'Fast-forward this Repository from its external tracking branch? This updates the local checkout without merging divergent local commits.'
+                },
+                presentationOrder: 25
             }
         },
         startMissionFromIssue: {
             kind: 'mutation',
             payload: RepositoryStartMissionFromIssueSchema,
             result: RepositoryMissionStartAcknowledgementSchema,
-            execution: 'entity',
-            ui: {
-                label: 'Start Mission From Issue',
-                iconHint: 'circle-play',
-                presentationOrder: 10
-            }
+            execution: 'entity'
         },
         startMissionFromBrief: {
             kind: 'mutation',
             payload: RepositoryStartMissionFromBriefSchema,
             result: RepositoryMissionStartAcknowledgementSchema,
-            execution: 'entity',
-            ui: {
-                label: 'Start Mission From Brief',
-                iconHint: 'file-plus-2',
-                presentationOrder: 20
-            }
+            execution: 'entity'
         }
     },
     events: {

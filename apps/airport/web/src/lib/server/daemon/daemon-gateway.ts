@@ -63,6 +63,27 @@ export class DaemonGateway {
         };
     }
 
+    public async openApplicationEventSubscription(input: {
+        channels: string[];
+        surfacePath?: string;
+        onEvent: (event: AddressedNotification) => void;
+    }): Promise<{ dispose(): void }> {
+        const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
+        await daemon.client.request<null>('event.subscribe', {
+            channels: input.channels
+        });
+        const subscription = daemon.client.onDidEvent((event) => {
+            input.onEvent(toAddressedNotification(event));
+        });
+
+        return {
+            dispose: () => {
+                subscription.dispose();
+                daemon.dispose();
+            }
+        };
+    }
+
     public async getMissionSessionTerminalSnapshot(input: {
         missionId: string;
         sessionId: string;

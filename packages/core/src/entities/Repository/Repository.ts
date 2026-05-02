@@ -4,7 +4,7 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import { EntityCommandViewSchema, type EntityCommandViewType } from '../Entity/EntitySchema.js';
+import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
 	getMissionGitHubCliBinary,
@@ -12,7 +12,7 @@ import {
 	resolveRepositoriesRoot
 } from '../../lib/config.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import { resolveGitHubRepositoryFromWorkspace } from '../../platforms/GitHubPlatformAdapter.js';
+import { resolveGitHubRepositoryFromRepositoryRoot } from '../../platforms/GitHubPlatformAdapter.js';
 import { refreshSystemStatus } from '../../system/SystemStatus.js';
 import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../../types.js';
 import { resolveGitWorkspaceRoot } from '../../lib/workspacePaths.js';
@@ -34,11 +34,14 @@ import {
 	type TrackedIssueSummaryType,
 	type RepositoryFindType,
 	type RepositoryFindAvailableType,
+	type RepositoryClassCommandsType,
 	type RepositoryGetIssueType,
 	type RepositoryLocatorType,
 	type RepositoryAddType,
 	type RepositoryPrepareResultType,
 	type RepositoryRemoveAcknowledgementType,
+	type RepositorySyncCommandAcknowledgementType,
+	type RepositorySyncStatusType,
 	type RepositorySettingsType,
 	type RepositoryStartMissionFromBriefType,
 	type RepositoryStartMissionFromIssueType,
@@ -46,12 +49,15 @@ import {
 	createDefaultRepositorySettings,
 	RepositoryFindSchema,
 	RepositoryFindAvailableSchema,
+	RepositoryClassCommandsSchema,
 	RepositoryGetIssueSchema,
 	RepositoryLocatorSchema,
 	RepositoryMissionStartAcknowledgementSchema,
 	RepositoryPrepareResultSchema,
 	RepositoryAddSchema,
 	RepositoryRemoveAcknowledgementSchema,
+	RepositorySyncCommandAcknowledgementSchema,
+	RepositorySyncStatusSchema,
 	RepositoryLocalAddInputSchema,
 	RepositoryStartMissionFromBriefSchema,
 	RepositoryStartMissionFromIssueSchema
@@ -114,12 +120,68 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const ghBinary = getMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform,
-			workspaceRoot: context?.surfacePath?.trim() || process.cwd(),
+			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
 			...(context?.authToken ? { authToken: context.authToken } : {}),
 			...(ghBinary ? { ghBinary } : {})
 		});
 
 		return await adapter.listRepositories();
+	}
+
+	public static async classCommands(
+		input: RepositoryClassCommandsType = {},
+		context?: EntityExecutionContext
+	): Promise<EntityClassCommandViewType> {
+		const args = RepositoryClassCommandsSchema.parse(input);
+		const { RepositoryContract } = await import('./RepositoryContract.js');
+		return EntityClassCommandViewSchema.parse({
+			entity: repositoryEntityName,
+			commands: await Repository.availableCommands(
+				RepositoryContract,
+				args.commandInput,
+				{
+					surfacePath: context?.surfacePath?.trim() || process.cwd(),
+					...(context?.authToken ? { authToken: context.authToken } : {}),
+					...(context?.entityFactory ? { entityFactory: context.entityFactory } : {})
+				}
+			)
+		});
+	}
+
+	public static async canAdd(input?: unknown, context?: EntityExecutionContext) {
+		const result = RepositoryAddSchema.safeParse(input ?? {});
+		if (!result.success || !('repositoryRef' in result.data)) {
+			return true;
+		}
+
+		const registeredRepository = await Repository.findRegisteredPlatformRepository(result.data.repositoryRef, context);
+		return registeredRepository
+			? { available: false, reason: `Repository '${result.data.repositoryRef}' is already checked out at '${registeredRepository.repositoryRootPath}'.` }
+			: true;
+	}
+
+	public async canFetchExternalState(_context?: EntityExecutionContext) {
+		if (!this.platformRepositoryRef?.trim()) {
+			return { available: false, reason: 'Repository has no external platform repository ref.' };
+		}
+		if (!fs.existsSync(this.repositoryRootPath)) {
+			return { available: false, reason: 'Repository root does not exist.' };
+		}
+		const store = new FilesystemAdapter(this.repositoryRootPath);
+		return store.isGitRepository()
+			? true
+			: { available: false, reason: 'Repository root is not a Git worktree.' };
+	}
+
+	public async canFastForwardFromExternal(context?: EntityExecutionContext) {
+		const status = this.buildSyncStatus(context?.authToken, { refreshExternalState: true });
+		if (!status.worktree.clean) {
+			return { available: false, reason: 'Repository has local changes.' };
+		}
+		if (status.external.status !== 'behind') {
+			return { available: false, reason: Repository.describeExternalSyncState(status) };
+		}
+		return true;
 	}
 
 	private static async discoverConfiguredRepositories(): Promise<Repository[]> {
@@ -165,13 +227,36 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return [...discovered].sort((left, right) => left.localeCompare(right));
 	}
 
+	private static async assertRemovableRepositoryRoot(repositoryRootPath: string): Promise<string> {
+		const resolvedRepositoryRootPath = path.resolve(repositoryRootPath);
+		if (resolvedRepositoryRootPath === path.parse(resolvedRepositoryRootPath).root) {
+			throw new Error('Cannot remove the filesystem root as a Repository root.');
+		}
+		if (resolvedRepositoryRootPath === path.resolve(os.homedir())) {
+			throw new Error('Cannot remove the operator home directory as a Repository root.');
+		}
+
+		const gitEntryPath = path.join(resolvedRepositoryRootPath, '.git');
+		const gitEntry = await fsp.lstat(gitEntryPath).catch((error: NodeJS.ErrnoException) => {
+			if (error.code === 'ENOENT') {
+				throw new Error(`Repository root '${resolvedRepositoryRootPath}' must contain a .git entry before it can be removed.`);
+			}
+			throw error;
+		});
+		if (!gitEntry.isDirectory() && !gitEntry.isFile()) {
+			throw new Error(`Repository root '${resolvedRepositoryRootPath}' has an invalid .git entry.`);
+		}
+
+		return resolvedRepositoryRootPath;
+	}
+
 	public static async add(
 		input: RepositoryAddType,
 		context?: EntityExecutionContext
 	): Promise<RepositoryDataType> {
 		const args = RepositoryAddSchema.parse(input);
 		const repositoryRootPath = 'repositoryRef' in args
-			? await Repository.checkoutPlatformRepository(args, context)
+			? await Repository.checkoutPlatformRepositoryAfterDuplicateCheck(args, context)
 			: args.repositoryPath;
 		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
 		return await repository.read({
@@ -218,7 +303,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public static deriveIdentity(repositoryRootPath: string): RepositoryIdentity {
 		const normalizedRepositoryRootPath = path.resolve(repositoryRootPath);
 		const platformRepositoryRef = Repository.normalizeGitHubRepositoryName(
-			resolveGitHubRepositoryFromWorkspace(normalizedRepositoryRootPath)
+			resolveGitHubRepositoryFromRepositoryRoot(normalizedRepositoryRootPath)
 		);
 		if (platformRepositoryRef) {
 			return {
@@ -298,7 +383,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		repositoryRootPath: string,
 		options: { missionsRoot?: string } = {}
 	): string {
-		const githubRepository = resolveGitHubRepositoryFromWorkspace(repositoryRootPath);
+		const githubRepository = resolveGitHubRepositoryFromRepositoryRoot(repositoryRootPath);
 		if (githubRepository) {
 			const [owner, repository] = githubRepository
 				.split('/')
@@ -327,13 +412,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			? path.resolve(repositoryRootPath.trim())
 			: Repository.resolveMissionControlRoot(repositoryRootPath);
 		return Repository.getMissionDirectoryPath(resolvedControlRoot);
-	}
-
-	public static getWorkflowSettingsDocumentPath(
-		repositoryRootPath = process.cwd(),
-		options: { resolveWorkspaceRoot?: boolean } = {}
-	): string {
-		return path.join(Repository.getMissionDaemonRoot(repositoryRootPath, options), 'workflow', 'workflow.json');
 	}
 
 	public static getSettingsDocumentPath(
@@ -435,14 +513,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
 	}
 
-	private static async checkoutPlatformRepository(
+	private static async checkoutPlatformRepositoryAfterDuplicateCheck(
 		input: Extract<RepositoryAddType, { repositoryRef: string }>,
 		context?: EntityExecutionContext
 	): Promise<string> {
+		await Repository.assertPlatformRepositoryIsNotRegistered(input.repositoryRef, context);
 		const ghBinary = getMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform: input.platform,
-			workspaceRoot: context?.surfacePath?.trim() || process.cwd(),
+			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
 			...(context?.authToken ? { authToken: context.authToken } : {}),
 			...(ghBinary ? { ghBinary } : {})
 		});
@@ -451,6 +530,42 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			repositoryRef: input.repositoryRef,
 			destinationPath: input.destinationPath
 		});
+	}
+
+	private static async assertPlatformRepositoryIsNotRegistered(
+		repositoryRef: string,
+		context?: EntityExecutionContext
+	): Promise<void> {
+		const normalizedRepositoryRef = Repository.normalizeGitHubRepositoryName(repositoryRef);
+		if (!normalizedRepositoryRef) {
+			throw new Error(`Platform repository ref '${repositoryRef}' is invalid.`);
+		}
+
+		const registeredRepository = await Repository.findRegisteredPlatformRepository(normalizedRepositoryRef, context);
+		if (registeredRepository) {
+			throw new Error(`Repository '${normalizedRepositoryRef}' is already checked out at '${registeredRepository.repositoryRootPath}'.`);
+		}
+	}
+
+	private static async findRegisteredPlatformRepository(
+		repositoryRef: string,
+		context?: EntityExecutionContext
+	): Promise<Repository | undefined> {
+		const normalizedRepositoryRef = Repository.normalizeGitHubRepositoryName(repositoryRef);
+		if (!normalizedRepositoryRef) {
+			return undefined;
+		}
+
+		const repositoryId = Repository.buildGitHubRepositoryId(normalizedRepositoryRef);
+		const normalizedKey = normalizedRepositoryRef.toLowerCase();
+		const discoveredRepository = (await Repository.discoverConfiguredRepositories())
+			.find((repository) => repository.id === repositoryId
+				|| repository.platformRepositoryRef?.trim().toLowerCase() === normalizedKey);
+		if (discoveredRepository) {
+			return discoveredRepository;
+		}
+
+		return await Repository.getRepositoryFactory(context).read(Repository, repositoryId) ?? undefined;
 	}
 
 	public constructor(data: RepositoryStorageType) {
@@ -607,6 +722,8 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): Promise<RepositoryRemoveAcknowledgementType> {
 		const args = RepositoryLocatorSchema.parse(input);
 		this.assertRepositoryIdentity(args);
+		const repositoryRootPath = await Repository.assertRemovableRepositoryRoot(this.repositoryRootPath);
+		await fsp.rm(repositoryRootPath, { recursive: true });
 		await this.getEntityFactory(context).remove(Repository, this.id);
 		return RepositoryRemoveAcknowledgementSchema.parse({
 			ok: true,
@@ -629,6 +746,54 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			isInitialized: this.isInitialized || settings !== undefined
 		});
 		return this.toData();
+	}
+
+	public async syncStatus(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<RepositorySyncStatusType> {
+		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		return RepositorySyncStatusSchema.parse(this.buildSyncStatus(context?.authToken, { refreshExternalState: true }));
+	}
+
+	public async fetchExternalState(
+		input: RepositoryLocatorType,
+		context?: EntityExecutionContext
+	): Promise<RepositorySyncCommandAcknowledgementType> {
+		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		this.requireRepositoryPlatformAdapter(context?.authToken).fetchRemote();
+		return RepositorySyncCommandAcknowledgementSchema.parse({
+			ok: true,
+			entity: repositoryEntityName,
+			method: 'fetchExternalState',
+			id: this.id,
+			syncStatus: this.buildSyncStatus(context?.authToken)
+		});
+	}
+
+	public async fastForwardFromExternal(
+		input: RepositoryLocatorType,
+		context?: EntityExecutionContext
+	): Promise<RepositorySyncCommandAcknowledgementType> {
+		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+		const adapter = this.requireRepositoryPlatformAdapter(context?.authToken);
+		adapter.fetchRemote();
+		const status = this.buildSyncStatus(context?.authToken);
+		if (!status.branchRef) {
+			throw new Error('Repository has no current branch to fast-forward.');
+		}
+		if (!status.worktree.clean) {
+			throw new Error('Repository has local changes and cannot be fast-forwarded safely.');
+		}
+		if (status.external.status !== 'behind') {
+			throw new Error(Repository.describeExternalSyncState(status));
+		}
+
+		adapter.pullBranch(status.branchRef);
+		return RepositorySyncCommandAcknowledgementSchema.parse({
+			ok: true,
+			entity: repositoryEntityName,
+			method: 'fastForwardFromExternal',
+			id: this.id,
+			syncStatus: this.buildSyncStatus(context?.authToken)
+		});
 	}
 
 	public async commands(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<EntityCommandViewType> {
@@ -839,7 +1004,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const ghBinary = getMissionGitHubCliBinary();
 		return createRepositoryPlatformAdapter({
 			platform: 'github',
-			workspaceRoot: this.repositoryRootPath,
+			repositoryRootPath: this.repositoryRootPath,
 			repository: platformRepositoryRef,
 			...(authToken ? { authToken } : {}),
 			...(ghBinary ? { ghBinary } : {})
@@ -852,6 +1017,95 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
 		return adapter;
+	}
+
+	private buildSyncStatus(
+		authToken?: string,
+		options: { refreshExternalState?: boolean } = {}
+	): RepositorySyncStatusType {
+		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const rootExists = fs.existsSync(this.repositoryRootPath);
+		const isGitRepository = rootExists && store.isGitRepository();
+		const worktree = isGitRepository
+			? store.getWorktreeStatus()
+			: {
+				clean: false,
+				stagedCount: 0,
+				unstagedCount: 0,
+				untrackedCount: 0
+			};
+		const branchRef = isGitRepository ? store.getCurrentBranch() : undefined;
+		const defaultBranch = isGitRepository ? store.getDefaultBranch() : undefined;
+		const platformRepositoryRef = this.platformRepositoryRef?.trim() || undefined;
+		const platform = platformRepositoryRef ? 'github' as const : undefined;
+
+		let external: RepositorySyncStatusType['external'] = {
+			status: 'unavailable',
+			aheadCount: 0,
+			behindCount: 0,
+			unavailableReason: !rootExists
+				? 'Repository root does not exist.'
+				: platformRepositoryRef
+					? 'Repository external branch status is unavailable.'
+					: 'Repository has no external platform repository ref.'
+		};
+
+		if (isGitRepository && branchRef && branchRef !== 'HEAD') {
+			const adapter = this.tryCreateRepositoryPlatformAdapter(authToken);
+			if (adapter) {
+				try {
+					if (options.refreshExternalState) {
+						adapter.fetchRemote();
+					}
+					const branchStatus = adapter.getBranchSyncStatus(branchRef);
+					external = {
+						status: branchStatus.status,
+						aheadCount: branchStatus.aheadCount,
+						behindCount: branchStatus.behindCount,
+						...(branchStatus.trackingRef ? { trackingRef: branchStatus.trackingRef } : {}),
+						...(branchStatus.localHead ? { localHead: branchStatus.localHead } : {}),
+						...(branchStatus.remoteHead ? { remoteHead: branchStatus.remoteHead } : {})
+					};
+				} catch (error) {
+					external = {
+						status: 'unavailable',
+						aheadCount: 0,
+						behindCount: 0,
+						unavailableReason: error instanceof Error ? error.message : String(error)
+					};
+				}
+			}
+		}
+
+		return RepositorySyncStatusSchema.parse({
+			id: this.id,
+			repositoryRootPath: this.repositoryRootPath,
+			checkedAt: new Date().toISOString(),
+			...(platform ? { platform } : {}),
+			...(platformRepositoryRef ? { platformRepositoryRef } : {}),
+			...(platformRepositoryRef ? { remoteName: 'origin' } : {}),
+			...(branchRef ? { branchRef } : {}),
+			...(defaultBranch ? { defaultBranch } : {}),
+			worktree,
+			external
+		});
+	}
+
+	private static describeExternalSyncState(status: RepositorySyncStatusType): string {
+		switch (status.external.status) {
+			case 'up-to-date':
+				return 'Repository is already up to date with its external tracking branch.';
+			case 'ahead':
+				return 'Repository has local commits that are not on its external tracking branch.';
+			case 'diverged':
+				return 'Repository has diverged from its external tracking branch.';
+			case 'untracked':
+				return 'Repository branch has no external tracking branch.';
+			case 'unavailable':
+				return status.external.unavailableReason ?? 'Repository external branch status is unavailable.';
+			case 'behind':
+				return 'Repository can be fast-forwarded from its external tracking branch.';
+		}
 	}
 
 	private assertRepositoryIdentity(input: { id: string; repositoryRootPath?: string | undefined }): void {

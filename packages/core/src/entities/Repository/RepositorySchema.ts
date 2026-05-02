@@ -104,11 +104,15 @@ export const RepositoryFindAvailableSchema = z.object({
     platform: RepositoryPlatformKindSchema.optional()
 }).strict();
 
+export const RepositoryClassCommandsSchema = z.object({
+    commandInput: z.unknown().optional()
+}).strict();
+
 export const RepositoryLocalAddInputSchema = z.object({
     repositoryPath: z.string().trim().min(1)
 }).strict();
 
-export const RepositoryGitHubCheckoutInputSchema = z.object({
+export const RepositoryPlatformCheckoutInputSchema = z.object({
     platform: z.literal('github'),
     repositoryRef: z.string().trim().min(1),
     destinationPath: z.string().trim().min(1)
@@ -116,11 +120,44 @@ export const RepositoryGitHubCheckoutInputSchema = z.object({
 
 export const RepositoryAddSchema = z.union([
     RepositoryLocalAddInputSchema,
-    RepositoryGitHubCheckoutInputSchema
+    RepositoryPlatformCheckoutInputSchema
 ]);
 
 export const RepositoryGetIssueSchema = RepositoryLocatorSchema.extend({
     issueNumber: z.coerce.number().int().positive()
+}).strict();
+
+export const RepositorySyncStatusSchema = z.object({
+    id: EntityIdSchema,
+    repositoryRootPath: z.string().trim().min(1),
+    checkedAt: z.string().trim().min(1),
+    platform: RepositoryPlatformKindSchema.optional(),
+    platformRepositoryRef: z.string().trim().min(1).optional(),
+    remoteName: z.string().trim().min(1).optional(),
+    branchRef: z.string().trim().min(1).optional(),
+    defaultBranch: z.string().trim().min(1).optional(),
+    worktree: z.object({
+        clean: z.boolean(),
+        stagedCount: z.number().int().nonnegative(),
+        unstagedCount: z.number().int().nonnegative(),
+        untrackedCount: z.number().int().nonnegative()
+    }).strict(),
+    external: z.object({
+        trackingRef: z.string().trim().min(1).optional(),
+        status: z.enum(['up-to-date', 'behind', 'ahead', 'diverged', 'untracked', 'unavailable']),
+        aheadCount: z.number().int().nonnegative(),
+        behindCount: z.number().int().nonnegative(),
+        localHead: z.string().trim().min(1).optional(),
+        remoteHead: z.string().trim().min(1).optional(),
+        unavailableReason: z.string().trim().min(1).optional()
+    }).strict()
+}).strict();
+
+export const RepositorySyncCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(repositoryEntityName),
+    method: z.enum(['fetchExternalState', 'fastForwardFromExternal']),
+    id: z.string().trim().min(1),
+    syncStatus: RepositorySyncStatusSchema
 }).strict();
 
 export const MissionFromIssueInputSchema = z.object({
@@ -200,9 +237,12 @@ export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSc
 export type RepositoryPlatformRepositoryType = z.infer<typeof RepositoryPlatformRepositorySchema>;
 export type RepositoryFindType = z.infer<typeof RepositoryFindSchema>;
 export type RepositoryFindAvailableType = z.infer<typeof RepositoryFindAvailableSchema>;
+export type RepositoryClassCommandsType = z.infer<typeof RepositoryClassCommandsSchema>;
 export type RepositoryAddType = z.infer<typeof RepositoryAddSchema>;
 export type RepositoryLocatorType = z.infer<typeof RepositoryLocatorSchema>;
 export type RepositoryGetIssueType = z.infer<typeof RepositoryGetIssueSchema>;
+export type RepositorySyncStatusType = z.infer<typeof RepositorySyncStatusSchema>;
+export type RepositorySyncCommandAcknowledgementType = z.infer<typeof RepositorySyncCommandAcknowledgementSchema>;
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;

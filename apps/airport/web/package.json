@@ -47,6 +47,7 @@
     "@dnd-kit/abstract": "^0.1.21",
     "@dnd-kit/helpers": "^0.1.21",
     "@flying-pillow/mission-core": "workspace:*",
+    "@iconify/svelte": "^5.2.1",
     "@tabler/icons-svelte": "^3.41.1",
     "@tanstack/table-core": "^8.21.3",
     "@xterm/addon-fit": "^0.11.0",

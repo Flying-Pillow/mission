@@ -212,6 +212,10 @@ _Avoid_: view model, response model
 A first-class Entity query result that advertises currently available Entity commands for one target Entity id. It is not Entity data and must not be stored inside an Entity data schema.
 _Avoid_: commands data, command snapshot, command alias
 
+**Entity class command view**:
+A first-class Entity query result that advertises currently available class-level Entity commands, such as Repository registration or clone. It is returned by `classCommands` and is not tied to an existing Entity id.
+_Avoid_: source-prefixed command vocabulary, collection command vocabulary, global command vocabulary, command snapshot
+
 **Entity data change event**:
 A daemon notification that carries the current Entity data after an Entity changed. It is named `data.changed` and uses a `data` payload when the payload is the Entity data schema itself.
 _Avoid_: snapshot changed, entity snapshot event, data snapshot

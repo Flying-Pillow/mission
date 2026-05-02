@@ -4,5 +4,5 @@ export type CommandableEntity = {
     readonly entityName: string;
     readonly entityId: string;
     readonly commands: EntityCommandDescriptorType[];
-    executeCommand(commandId: string, input?: unknown): Promise<void>;
+    executeCommand(commandId: string, input?: unknown): Promise<unknown>;
 };

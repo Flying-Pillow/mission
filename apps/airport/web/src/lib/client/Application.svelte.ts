@@ -1,4 +1,5 @@
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import { z } from 'zod/v4';
 import {
     MissionCatalogEntrySchema,
     MissionRuntimeEventEnvelopeSchema,
@@ -34,12 +35,15 @@ type EventSourceFactory = (url: string) => EventSource;
 type EntityQueryExecutionContext = 'event' | 'render';
 type EntityCommandExecutor = (input: EntityCommandInvocation) => Promise<EntityRemoteResult>;
 
-type AddRepositoryState = {
-    error?: string;
-    success?: boolean;
-    repositoryPath?: string;
-    platformRepositoryRef?: string;
-};
+const applicationEntityEventSchema = z.object({
+    type: z.string().trim().min(1),
+    entityId: z.string().trim().min(1),
+    channel: z.string().trim().min(1),
+    eventName: z.string().trim().min(1),
+    occurredAt: z.string().trim().min(1),
+    entity: z.string().trim().min(1).optional(),
+    id: z.string().trim().min(1).optional()
+}).passthrough();
 
 const missionEntityName = 'Mission';
 
@@ -59,6 +63,7 @@ export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
     private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshotType, Mission>>();
     private repositoryVersion = $state(0);
+    private applicationEventSubscription: RuntimeSubscription | undefined;
     private activeMissionState = $state<Mission | undefined>();
     #activeRouteKey: string | undefined;
     #routeSyncRequestId = 0;
@@ -68,8 +73,6 @@ export class AirportApplication {
     public githubRepositoriesState = $state<RepositoryPlatformRepositoryType[]>([]);
     public githubRepositoriesLoading = $state(false);
     public githubRepositoriesError = $state<string | undefined>();
-    public addRepositoryState = $state<AddRepositoryState | undefined>();
-    public addRepositoryPending = $state(false);
     public activeRepositoryLoading = $state(false);
     public activeRepositoryError = $state<string | undefined>();
     public activeRepositoryId = $state<string | undefined>();
@@ -93,6 +96,7 @@ export class AirportApplication {
         }
 
         this.#isInitialized = true;
+        this.applicationEventSubscription ??= this.observeApplicationEvents();
 
         try {
             await this.loadRepositories();
@@ -169,6 +173,20 @@ export class AirportApplication {
         this.repositories.set(id, created);
         this.repositoryVersion += 1;
         return created;
+    }
+
+    public removeRepositoryData(repositoryId: string): void {
+        if (!this.repositories.delete(repositoryId)) {
+            return;
+        }
+        if (this.activeRepositoryId === repositoryId) {
+            this.setActiveRepositorySelection(undefined);
+            this.setActiveMissionSelection(undefined);
+            this.activeMissionState = undefined;
+            this.setActiveMissionOutline(undefined);
+            this.setActiveMissionSelectedNodeId(undefined);
+        }
+        this.repositoryVersion += 1;
     }
 
     public reconcileRepositories(repositoryData: RepositoryDataType[]): Repository[] {
@@ -292,45 +310,6 @@ export class AirportApplication {
         return await loadPromise;
     }
 
-    public async addRepository(input: {
-        repositoryPath: string;
-        platformRepositoryRef?: string;
-    }): Promise<Repository> {
-        this.addRepositoryPending = true;
-        this.addRepositoryState = {
-            repositoryPath: input.repositoryPath,
-            ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
-        };
-
-        try {
-            const repository = input.platformRepositoryRef
-                ? this.hydrateRepositoryData(await Repository.addPlatformRepository({
-                    platform: 'github',
-                    repositoryRef: input.platformRepositoryRef,
-                    destinationPath: input.repositoryPath
-                }))
-                : await Repository.add(input.repositoryPath);
-
-            await this.loadRepositories({ force: true });
-            this.addRepositoryState = {
-                success: true,
-                repositoryPath: repository.data.repositoryRootPath,
-                ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
-            };
-            return repository;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.addRepositoryState = {
-                error: message,
-                repositoryPath: input.repositoryPath,
-                ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
-            };
-            throw error;
-        } finally {
-            this.addRepositoryPending = false;
-        }
-    }
-
     public syncPageState(input: {
         pathname: string;
         repositoryId?: string;
@@ -402,6 +381,43 @@ export class AirportApplication {
         return {
             dispose: () => {
                 eventSource.removeEventListener('runtime', handleRuntimeEvent as EventListener);
+                eventSource.removeEventListener('error', handleError as EventListener);
+                eventSource.close();
+            }
+        };
+    }
+
+    private observeApplicationEvents(): RuntimeSubscription {
+        const eventSource = (this.input.createEventSource ?? ((url) => new EventSource(url)))(`/api/runtime/events?scope=application`);
+        const handleEntityEvent = (event: Event) => {
+            const messageEvent = event as MessageEvent<string>;
+            try {
+                const payload = applicationEntityEventSchema.parse(JSON.parse(messageEvent.data));
+                if (payload.type === 'entity.deleted' && payload.entity === 'Repository' && payload.id) {
+                    this.removeRepositoryData(payload.id);
+                    return;
+                }
+                if (payload.type === 'entity.changed' && payload.entity === 'Repository' && payload.id) {
+                    const repository = this.repositories.get(payload.id);
+                    void repository?.refreshSyncStatus().catch(() => undefined);
+                    void repository?.refreshCommands().catch(() => undefined);
+                    void this.loadRepositories({ force: true }).catch(() => undefined);
+                }
+            } catch {
+                // Ignore malformed application events; request-time reads remain authoritative.
+            }
+        };
+
+        const handleError = () => {
+            void this.loadRepositories({ force: true }).catch(() => undefined);
+        };
+
+        eventSource.addEventListener('entity', handleEntityEvent as EventListener);
+        eventSource.addEventListener('error', handleError as EventListener);
+
+        return {
+            dispose: () => {
+                eventSource.removeEventListener('entity', handleEntityEvent as EventListener);
                 eventSource.removeEventListener('error', handleError as EventListener);
                 eventSource.close();
             }

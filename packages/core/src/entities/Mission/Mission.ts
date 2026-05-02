@@ -50,7 +50,6 @@ import {
 } from '../../workflow/engine/index.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import { toAgentSession } from '../AgentSession/AgentSession.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
 import { Task, toTask } from '../Task/Task.js';
@@ -1683,7 +1682,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			...(currentStageId ? { currentStageId } : {}),
 			artifacts,
 			stages,
-			agentSessions: requireArray(status.agentSessions, 'Mission status agentSessions').map((session) => toAgentSession(session)),
+			agentSessions: requireArray(status.agentSessions, 'Mission status agentSessions').map((session) => AgentSession.toDataFromRecord(session)),
 			...(status.recommendedAction ? { recommendedAction: status.recommendedAction } : {})
 		});
 	}

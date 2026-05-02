@@ -77,6 +77,10 @@ describe('daemon entity dispatch', () => {
 
 	it('dispatches Repository platform-backed source methods through explicit handlers', async () => {
 		const repositorySnapshot = Repository.open('/tmp/mission-proof-of-concept').toData();
+		const checkedOutRepository = Repository.create({
+			repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+			platformRepositoryRef: 'Flying-Pillow/already-cloned'
+		});
 		const findSpy = vi.spyOn(Repository, 'findAvailable').mockResolvedValue([
 			{
 				platform: 'github',
@@ -109,6 +113,35 @@ describe('daemon entity dispatch', () => {
 					archived: false
 				}
 			]);
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Repository',
+				method: 'classCommands',
+				payload: {
+					commandInput: {
+						platform: 'github',
+						repositoryRef: 'Flying-Pillow/already-cloned',
+						destinationPath: '/repositories/Flying-Pillow/already-cloned'
+					}
+				}
+			}, {
+				surfacePath: '/repo/root',
+				authToken: 'token',
+				entityFactory: {
+					has: () => true,
+					register: () => undefined,
+					read: async () => checkedOutRepository
+				}
+			} as never)).resolves.toMatchObject({
+				entity: 'Repository',
+				commands: [
+					{
+						commandId: 'repository.add',
+						disabled: true,
+						disabledReason: "Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'."
+					}
+				]
+			});
 
 			await expect(executeEntityCommandInDaemon({
 				entity: 'Repository',

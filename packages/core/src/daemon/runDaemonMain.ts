@@ -24,6 +24,7 @@ import {
 	matchesEntityChannel,
 	type EntityIdType
 } from '../entities/Entity/Entity.js';
+import { EntityIdSchema } from '../entities/Entity/EntitySchema.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import { MissionRegistry } from './MissionRegistry.js';
 
@@ -35,6 +36,7 @@ type NotificationAddress = {
 
 type DaemonServices = {
 	missionRegistry: MissionRegistry;
+	notify?: (event: Notification) => void;
 };
 import {
 	executeEntityCommandInDaemon,
@@ -101,7 +103,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 					continue;
 				}
 
-				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionRegistry });
+				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionRegistry, notify: broadcastEvent });
 			}
 		});
 
@@ -282,6 +284,16 @@ function resolveNotificationAddress(event: Notification): NotificationAddress {
 			};
 		case 'agentSession.data.changed':
 			return childAddress('agent_session', event.missionId, event.reference.sessionId, 'data.changed');
+		case 'entity.deleted':
+			return {
+				entityId: event.id,
+				eventName: 'deleted'
+			};
+		case 'entity.changed':
+			return {
+				entityId: event.id,
+				eventName: 'changed'
+			};
 		case 'session.console':
 			return childAddress('agent_session', event.missionId, event.sessionId, 'console');
 		case 'session.terminal':
@@ -334,6 +346,8 @@ function resolveNotificationOccurredAt(event: Notification): string {
 		case 'task.data.changed':
 		case 'artifact.data.changed':
 		case 'agentSession.data.changed':
+		case 'entity.deleted':
+		case 'entity.changed':
 		case 'session.console':
 		case 'mission.terminal':
 		case 'session.terminal':
@@ -408,20 +422,24 @@ export async function createResponse(
 				} = await import('./protocol/entityRemote.js');
 				const commandInvocation = entityCommandInvocationSchema.safeParse(request.params);
 				const authToken = request.authToken?.trim();
+				const invocation = commandInvocation.success
+					? commandInvocation.data
+					: entityFormInvocationSchema.parse(request.params);
+				const result = await executeEntityCommandInDaemon(
+					invocation,
+					{
+						surfacePath: resolveSurfacePath(request.surfacePath),
+						...(services.missionRegistry ? { missionRegistry: services.missionRegistry } : {}),
+						...(authToken ? { authToken } : {})
+					}
+				);
+				notifyEntityMutation(invocation, result, request, services);
+
 				return {
 					type: 'response',
 					id: request.id,
 					ok: true,
-					result: await executeEntityCommandInDaemon(
-						commandInvocation.success
-							? commandInvocation.data
-							: entityFormInvocationSchema.parse(request.params),
-						{
-							surfacePath: resolveSurfacePath(request.surfacePath),
-							...(services.missionRegistry ? { missionRegistry: services.missionRegistry } : {}),
-							...(authToken ? { authToken } : {})
-						}
-					)
+					result
 				};
 			}
 			default:
@@ -445,6 +463,42 @@ export async function createResponse(
 			},
 		};
 	}
+}
+
+function notifyEntityMutation(
+	input: { entity: string; method: string },
+	result: unknown,
+	request: Request,
+	services: Partial<DaemonServices>
+): void {
+	if (!services.notify || !isRecord(result)) {
+		return;
+	}
+	if (result['ok'] !== true || typeof result['id'] !== 'string' || !result['id'].trim()) {
+		return;
+	}
+
+	if (input.method !== 'remove') {
+		services.notify({
+			type: 'entity.changed',
+			workspaceRoot: resolveSurfacePath(request.surfacePath),
+			entity: input.entity,
+			id: EntityIdSchema.parse(result['id']),
+			method: input.method
+		});
+		return;
+	}
+
+	services.notify({
+		type: 'entity.deleted',
+		workspaceRoot: resolveSurfacePath(request.surfacePath),
+		entity: input.entity,
+		id: EntityIdSchema.parse(result['id'])
+	});
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+	return typeof input === 'object' && input !== null && !Array.isArray(input);
 }
 
 function readSocketOverride(argv: string[]): string | undefined {

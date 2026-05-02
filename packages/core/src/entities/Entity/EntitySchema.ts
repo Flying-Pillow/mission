@@ -94,13 +94,22 @@ export const EntityCommandConfirmationSchema = z.object({
     prompt: z.string().trim().min(1).optional()
 }).strict();
 
+export const EntityCommandButtonVariantSchema = z.enum([
+    'default',
+    'outline',
+    'secondary',
+    'ghost',
+    'destructive',
+    'link'
+]);
+
 export const EntityCommandDescriptorSchema = z.object({
     commandId: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
     disabled: z.boolean(),
     disabledReason: z.string().trim().min(1).optional(),
-    variant: z.enum(['default', 'destructive']).optional(),
+    variant: EntityCommandButtonVariantSchema.optional(),
     iconHint: z.string().trim().min(1).optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
@@ -112,10 +121,15 @@ export const EntityCommandViewSchema = z.object({
     commands: z.array(EntityCommandDescriptorSchema)
 }).strict();
 
+export const EntityClassCommandViewSchema = z.object({
+    entity: EntityNameSchema,
+    commands: z.array(EntityCommandDescriptorSchema)
+}).strict();
+
 export const EntityMethodUiSchema = z.object({
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
-    variant: z.enum(['default', 'destructive']).optional(),
+    variant: EntityCommandButtonVariantSchema.optional(),
     iconHint: z.string().trim().min(1).optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
@@ -177,8 +191,10 @@ export type EntityEventAddressType = z.infer<typeof EntityEventAddressSchema>;
 export type EntityCommandInputOptionType = z.infer<typeof EntityCommandInputOptionSchema>;
 export type EntityCommandInputDescriptorType = z.infer<typeof EntityCommandInputDescriptorSchema>;
 export type EntityCommandConfirmationType = z.infer<typeof EntityCommandConfirmationSchema>;
+export type EntityCommandButtonVariantType = z.infer<typeof EntityCommandButtonVariantSchema>;
 export type EntityCommandDescriptorType = z.infer<typeof EntityCommandDescriptorSchema>;
 export type EntityCommandViewType = z.infer<typeof EntityCommandViewSchema>;
+export type EntityClassCommandViewType = z.infer<typeof EntityClassCommandViewSchema>;
 export type EntityMethodUiType = z.infer<typeof EntityMethodUiSchema>;
 export type EntityMethodExecutionType = z.infer<typeof EntityMethodExecutionSchema>;
 export type EntityMethodKindType = z.infer<typeof EntityMethodKindSchema>;

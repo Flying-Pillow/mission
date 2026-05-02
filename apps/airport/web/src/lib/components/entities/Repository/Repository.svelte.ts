@@ -1,10 +1,10 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryStorageType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryStorageType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
-import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import { Entity } from '$lib/components/entities/shared/Entity.svelte.js';
 
@@ -16,6 +16,8 @@ export type RepositoryDataLoader = (input: {
 export class Repository extends Entity<RepositoryDataType> {
     public data = $state() as RepositoryDataType;
     private readonly loadData: RepositoryDataLoader;
+    private commandDescriptors = $state<EntityCommandDescriptorType[]>([]);
+    private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
     public missions = $state<MissionCatalogEntryType[]>([]);
 
     public constructor(
@@ -35,6 +37,19 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public get id(): string {
         return this.data.id;
+    }
+
+    public get entityId(): string {
+        return this.id;
+    }
+
+    public get commands(): EntityCommandDescriptorType[] {
+        return structuredClone($state.snapshot(this.commandDescriptors));
+    }
+
+    public get syncStatus(): RepositorySyncStatusType | undefined {
+        const status = $state.snapshot(this.syncStatusValue);
+        return status ? structuredClone(status) : undefined;
     }
 
     protected get entityLocator(): Record<string, unknown> {
@@ -59,18 +74,6 @@ export class Repository extends Entity<RepositoryDataType> {
         return getApp().reconcileRepositories(repositoryData);
     }
 
-    public static async add(repositoryPath: string): Promise<Repository> {
-        const data = RepositoryDataSchema.parse(await cmd({
-            entity: 'Repository',
-            method: 'add',
-            payload: {
-                repositoryPath
-            }
-        }));
-
-        return getApp().hydrateRepositoryData(data);
-    }
-
     public static async findAvailable(input: {
         platform?: 'github';
     } = {}) {
@@ -81,16 +84,12 @@ export class Repository extends Entity<RepositoryDataType> {
         }).run());
     }
 
-    public static async addPlatformRepository(input: {
-        platform: 'github';
-        repositoryRef: string;
-        destinationPath: string;
-    }): Promise<RepositoryDataType> {
-        return RepositoryDataSchema.parse(await cmd({
-            entity: 'Repository',
-            method: 'add',
-            payload: input
-        }));
+    public static async classCommands(commandInput?: unknown): Promise<EntityCommandDescriptorType[]> {
+        return Entity.classCommands('Repository', commandInput);
+    }
+
+    public static async executeClassCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
+        return Entity.executeClassCommand<TResult>('Repository', commandId, input);
     }
 
     public setMissionCatalog(missions: MissionCatalogEntryType[]): this {
@@ -114,6 +113,24 @@ export class Repository extends Entity<RepositoryDataType> {
                 repositoryRootPath: this.data.repositoryRootPath
             })
         );
+    }
+
+    public async refreshCommands(): Promise<this> {
+        this.commandDescriptors = await this.loadCommands();
+        return this;
+    }
+
+    public applySyncStatus(input: unknown): this {
+        this.syncStatusValue = RepositorySyncStatusSchema.parse(input);
+        return this;
+    }
+
+    public async refreshSyncStatus(): Promise<this> {
+        return this.applySyncStatus(await qry({
+            entity: 'Repository',
+            method: 'syncStatus',
+            payload: this.entityLocator
+        }));
     }
 
     public applySummary(input: RepositoryStorageType): this {

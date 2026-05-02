@@ -70,14 +70,19 @@ export abstract class Entity<
 	public static async buildUiCommandDescriptors(
 		contract: EntityContractType,
 		entity: object,
-		context: EntityExecutionContext
+		context: EntityExecutionContext,
+		input: {
+			execution?: EntityMethodType['execution'];
+			payload?: unknown;
+		} = {}
 	): Promise<EntityCommandDescriptorType[]> {
 		const methods = contract.methods ?? {};
+		const execution = input.execution ?? 'entity';
 		const descriptors = await Promise.all(
 			Object.entries(methods)
-				.filter(([, method]) => method.ui && method.kind === 'mutation' && method.execution === 'entity')
+				.filter(([, method]) => method.ui && method.kind === 'mutation' && method.execution === execution)
 				.map(async ([methodName, method]) => {
-					const availability = await Entity.resolveMethodAvailability(entity, methodName, context);
+					const availability = await Entity.resolveMethodAvailability(entity, methodName, execution, input.payload, context);
 					return {
 						commandId: createEntityMethodCommandId(contract.entity, methodName),
 						label: method.ui!.label,
@@ -101,6 +106,17 @@ export abstract class Entity<
 
 	protected static getEntityFactory(context?: EntityExecutionContext): EntityFactory {
 		return context?.entityFactory ?? getDefaultEntityFactory();
+	}
+
+	public static async availableCommands(
+		contract: EntityContractType,
+		payload: unknown,
+		context: EntityExecutionContext
+	): Promise<EntityCommandDescriptorType[]> {
+		return Entity.buildUiCommandDescriptors(contract, contract.entityClass, context, {
+			execution: 'class',
+			payload
+		});
 	}
 
 	protected getEntityFactory(context?: EntityExecutionContext): EntityFactory {
@@ -201,6 +217,8 @@ export abstract class Entity<
 	private static async resolveMethodAvailability(
 		entity: object,
 		methodName: string,
+		execution: EntityMethodType['execution'],
+		payload: unknown,
 		context: EntityExecutionContext
 	): Promise<{ available: boolean; reason?: string }> {
 		const availabilityMethodName = createEntityAvailabilityMethodName(methodName);
@@ -212,7 +230,9 @@ export abstract class Entity<
 			throw new Error(`Entity availability member '${availabilityMethodName}' is not a method.`);
 		}
 
-		const result = await availabilityMethod.call(entity, context) as EntityMethodAvailabilityResult;
+		const result = execution === 'class'
+			? await availabilityMethod.call(entity, payload, context) as EntityMethodAvailabilityResult
+			: await availabilityMethod.call(entity, context) as EntityMethodAvailabilityResult;
 		if (result === undefined) {
 			return { available: true };
 		}
@@ -256,7 +276,7 @@ export abstract class Entity<
 		contract: EntityContractType,
 		context: EntityExecutionContext
 	): Promise<EntityCommandDescriptorType[]> {
-		return Entity.buildUiCommandDescriptors(contract, this, context);
+		return Entity.buildUiCommandDescriptors(contract, this, context, { execution: 'entity' });
 	}
 
 	protected available(): EntityMethodAvailability {

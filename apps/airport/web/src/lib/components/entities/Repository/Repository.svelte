@@ -6,9 +6,10 @@
     import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
-    import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
-    import { Badge } from "$lib/components/ui/badge/index.js";
+    import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
+    import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
     const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
@@ -42,11 +43,49 @@
     const activeRepository = $derived(repositoryScope.repository);
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
+    const activeRepositoryPanelItem = $derived.by(
+        (): AirportRepositoryListItem | undefined => {
+            if (!activeRepository) {
+                return undefined;
+            }
+
+            const listedRepository =
+                appContext.application.repositoryListItems.find(
+                    (repository) => repository.key === activeRepository.id,
+                );
+            if (listedRepository) {
+                return listedRepository;
+            }
+
+            const platformRepositoryRef =
+                activeRepository.data.platformRepositoryRef ?? undefined;
+            return {
+                key: activeRepository.id,
+                local: {
+                    ...activeRepository.data,
+                    missions: activeRepository.missions,
+                },
+                displayName:
+                    platformRepositoryRef ?? activeRepository.data.repoName,
+                displayDescription:
+                    platformRepositoryRef ??
+                    activeRepository.data.repositoryRootPath,
+                repositoryRootPath: activeRepository.data.repositoryRootPath,
+                ...(platformRepositoryRef ? { platformRepositoryRef } : {}),
+                missions: activeRepository.missions,
+                isLocal: true,
+            };
+        },
+    );
 
     function closeIssuePreview(): void {
         issuePreviewOpen = false;
         selectedIssue = null;
         issueError = null;
+    }
+
+    async function refreshRepositories(): Promise<void> {
+        await appContext.application.loadRepositories({ force: true });
     }
 </script>
 
@@ -67,95 +106,20 @@
             </p>
         </section>
     {:else}
-        <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
-        >
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                        Repository
-                    </p>
-                    <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                        {activeRepository.data.platformRepositoryRef ??
-                            activeRepository.data.repoName}
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {activeRepository.data.platformRepositoryRef ??
-                            activeRepository.data.repositoryRootPath}
-                    </p>
-                    <p class="mt-2 font-mono text-xs text-muted-foreground">
-                        {activeRepository.data.repositoryRootPath}
-                    </p>
-                </div>
-                <div class="flex flex-wrap justify-end gap-2">
-                    <Badge variant="secondary"
-                        >{activeRepository.missions.length === 1
-                            ? "1 mission"
-                            : `${activeRepository.missions.length} missions`}</Badge
-                    >
-                    {#if activeRepository.data.operationalMode}
-                        <Badge variant="outline"
-                            >{activeRepository.data.operationalMode}</Badge
-                        >
-                    {/if}
-                </div>
-            </div>
-
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div class="rounded-xl border bg-background/70 px-4 py-3">
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                        Control root
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-foreground">
-                        {activeRepository.data.repositoryRootPath}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-background/70 px-4 py-3">
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                        Branch
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-foreground">
-                        {activeRepository.data.currentBranch ?? "Unavailable"}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-background/70 px-4 py-3">
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                        Tracking
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-foreground">
-                        {activeRepository.data.platformRepositoryRef ??
-                            "Not configured"}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-background/70 px-4 py-3">
-                    <p
-                        class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                    >
-                        Setup
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-foreground">
-                        {!activeRepository.data.isInitialized
-                            ? "Incomplete"
-                            : "Ready"}
-                    </p>
-                </div>
-            </div>
-        </section>
+        {#if activeRepositoryPanelItem}
+            <RepositoryPanel
+                repository={activeRepositoryPanelItem}
+                localRepository={activeRepository}
+                onCommandExecuted={refreshRepositories}
+            />
+        {/if}
 
         {#key activeRepository.id}
             <div
                 class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
             >
                 <section class="flex min-h-0 w-full overflow-hidden">
-                    <RepositoryList mode="missions" />
+                    <MissionList />
                 </section>
 
                 <section class="flex min-h-0 w-full overflow-hidden">

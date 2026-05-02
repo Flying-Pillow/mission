@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
@@ -48,6 +52,63 @@ describe('Repository', () => {
         })).rejects.toThrow(/does not match/u);
     });
 
+    it('rejects cloning a platform repository that is already checked out', async () => {
+        const repository = Repository.create({
+            repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+            platformRepositoryRef: 'Flying-Pillow/already-cloned'
+        });
+        const read = vi.fn().mockResolvedValue(repository);
+        const context = {
+            surfacePath: '/repositories',
+            entityFactory: {
+                has: () => true,
+                register: () => undefined,
+                read
+            }
+        } as unknown as EntityExecutionContext;
+
+        await expect(Repository.add({
+            platform: 'github',
+            repositoryRef: 'Flying-Pillow/already-cloned',
+            destinationPath: '/repositories/Flying-Pillow/already-cloned'
+        }, context)).rejects.toThrow("Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'.");
+
+        expect(read).toHaveBeenCalledWith(Repository, 'repository:github/Flying-Pillow/already-cloned');
+    });
+
+    it('hydrates class command descriptors from contract metadata and availability rules', async () => {
+        const repository = Repository.create({
+            repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+            platformRepositoryRef: 'Flying-Pillow/already-cloned'
+        });
+        const context = {
+            surfacePath: '/repositories',
+            entityFactory: {
+                has: () => true,
+                register: () => undefined,
+                read: async () => repository
+            }
+        } as unknown as EntityExecutionContext;
+
+        const view = await Repository.classCommands({
+            commandInput: {
+                platform: 'github',
+                repositoryRef: 'Flying-Pillow/already-cloned',
+                destinationPath: '/repositories/Flying-Pillow/already-cloned'
+            }
+        }, context);
+
+        expect(view.entity).toBe('Repository');
+        expect(view.commands).toEqual([
+            expect.objectContaining({
+                commandId: 'repository.add',
+                label: 'Clone Repository',
+                disabled: true,
+                disabledReason: "Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'."
+            })
+        ]);
+    });
+
     it('resolves identity from extended method payloads', async () => {
         const repository = Repository.open('/tmp/mission-proof-of-concept');
         const context = {
@@ -78,17 +139,149 @@ describe('Repository', () => {
 
         expect(view.commands.map((command) => command.commandId)).toEqual([
             'repository.prepare',
-            'repository.startMissionFromIssue',
-            'repository.startMissionFromBrief',
+            'repository.fetchExternalState',
+            'repository.fastForwardFromExternal',
             'repository.remove'
         ]);
         expect(view.commands.find((command) => command.commandId === 'repository.prepare')).toMatchObject({
             disabled: false
         });
-        expect(view.commands.find((command) => command.commandId === 'repository.startMissionFromBrief')).toMatchObject({
-            disabled: true,
-            disabledReason: 'Repository control state is not initialized.'
+        expect(view.commands.find((command) => command.commandId === 'repository.remove')).toMatchObject({
+            disabled: false,
+            confirmation: {
+                required: true,
+                prompt: 'Remove this Repository from Mission and delete its Repository root from disk? This cannot be undone.'
+            }
         });
+        expect(view.commands.find((command) => command.commandId === 'repository.fetchExternalState')).toMatchObject({
+            disabled: true,
+            disabledReason: 'Repository root does not exist.'
+        });
+    });
+
+    it('reports Repository sync status and fast-forwards safely from external state', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-sync-'));
+        const remotePath = path.join(tempRoot, 'remote.git');
+        const seedPath = path.join(tempRoot, 'seed');
+        const localPath = path.join(tempRoot, 'local');
+
+        try {
+            git(tempRoot, ['init', '--bare', remotePath]);
+            git(tempRoot, ['init', seedPath]);
+            git(seedPath, ['config', 'user.email', 'mission@example.test']);
+            git(seedPath, ['config', 'user.name', 'Mission Test']);
+            await fsp.writeFile(path.join(seedPath, 'README.md'), 'initial\n', 'utf8');
+            git(seedPath, ['add', 'README.md']);
+            git(seedPath, ['commit', '-m', 'initial']);
+            git(seedPath, ['branch', '-M', 'main']);
+            git(seedPath, ['remote', 'add', 'origin', remotePath]);
+            git(seedPath, ['push', '-u', 'origin', 'main']);
+            git(tempRoot, ['--git-dir', remotePath, 'symbolic-ref', 'HEAD', 'refs/heads/main']);
+            git(tempRoot, ['clone', remotePath, localPath]);
+            git(localPath, ['checkout', 'main']);
+
+            const repository = Repository.create({
+                repositoryRootPath: localPath,
+                platformRepositoryRef: 'Flying-Pillow/sync-test'
+            });
+
+            await fsp.writeFile(path.join(seedPath, 'README.md'), 'initial\nremote\n', 'utf8');
+            git(seedPath, ['add', 'README.md']);
+            git(seedPath, ['commit', '-m', 'remote update']);
+            git(seedPath, ['push', 'origin', 'main']);
+
+            await expect(repository.syncStatus({
+                id: repository.id,
+                repositoryRootPath: repository.repositoryRootPath
+            })).resolves.toMatchObject({
+                branchRef: 'main',
+                worktree: { clean: true },
+                external: { status: 'behind', aheadCount: 0, behindCount: 1 }
+            });
+
+            await expect(repository.fetchExternalState({
+                id: repository.id,
+                repositoryRootPath: repository.repositoryRootPath
+            })).resolves.toMatchObject({
+                ok: true,
+                method: 'fetchExternalState',
+                syncStatus: {
+                    external: { status: 'behind', aheadCount: 0, behindCount: 1 }
+                }
+            });
+
+            await expect(repository.fastForwardFromExternal({
+                id: repository.id,
+                repositoryRootPath: repository.repositoryRootPath
+            })).resolves.toMatchObject({
+                ok: true,
+                method: 'fastForwardFromExternal',
+                syncStatus: {
+                    external: { status: 'up-to-date', aheadCount: 0, behindCount: 0 }
+                }
+            });
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('removes Repository storage and deletes its Repository root from disk', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-remove-'));
+        const repositoryRootPath = path.join(tempRoot, 'repository');
+        await fsp.mkdir(path.join(repositoryRootPath, '.git'), { recursive: true });
+        const repository = Repository.open(repositoryRootPath);
+        const remove = vi.fn().mockResolvedValue(undefined);
+        const context = {
+            entityFactory: {
+                has: () => true,
+                register: () => undefined,
+                remove
+            }
+        } as unknown as EntityExecutionContext;
+
+        try {
+            await expect(repository.remove({
+                id: repository.id,
+                repositoryRootPath
+            }, context)).resolves.toMatchObject({
+                ok: true,
+                entity: 'Repository',
+                method: 'remove',
+                id: repository.id
+            });
+
+            await expect(fsp.lstat(repositoryRootPath)).rejects.toMatchObject({ code: 'ENOENT' });
+            expect(remove).toHaveBeenCalledWith(Repository, repository.id);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('refuses to remove a path that is not a Git Repository root', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-remove-'));
+        const repositoryRootPath = path.join(tempRoot, 'not-a-repository');
+        await fsp.mkdir(repositoryRootPath, { recursive: true });
+        const repository = Repository.open(repositoryRootPath);
+        const remove = vi.fn().mockResolvedValue(undefined);
+        const context = {
+            entityFactory: {
+                has: () => true,
+                register: () => undefined,
+                remove
+            }
+        } as unknown as EntityExecutionContext;
+
+        try {
+            await expect(repository.remove({
+                id: repository.id,
+                repositoryRootPath
+            }, context)).rejects.toThrow(`Repository root '${repositoryRootPath}' must contain a .git entry before it can be removed.`);
+
+            await expect(fsp.lstat(repositoryRootPath)).resolves.toBeDefined();
+            expect(remove).not.toHaveBeenCalled();
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
     });
 
     it('marks prepare unavailable after Repository control state is initialized', async () => {
@@ -109,3 +302,21 @@ describe('Repository', () => {
         });
     });
 });
+
+function git(cwd: string, args: string[]): string {
+    const result = spawnSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 'Mission Test',
+            GIT_AUTHOR_EMAIL: 'mission@example.test',
+            GIT_COMMITTER_NAME: 'Mission Test',
+            GIT_COMMITTER_EMAIL: 'mission@example.test'
+        }
+    });
+    if (result.status !== 0) {
+        throw new Error([result.stdout, result.stderr].filter(Boolean).join('\n'));
+    }
+    return result.stdout.trim();
+}

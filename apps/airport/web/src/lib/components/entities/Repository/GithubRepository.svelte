@@ -1,14 +1,16 @@
 <script lang="ts">
+    import { RepositoryDataSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { RepositoryPlatformRepositoryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { goto } from "$app/navigation";
-    import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
+    import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
+    import EntityClassCommandbar from "$lib/components/entities/Commandbar/EntityClassCommandbar.svelte";
+    import { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 
     let {
         repository,
@@ -21,12 +23,7 @@
     const defaultRepositoryPath = "/repositories";
     let detailsOpen = $state(false);
     let repositoryPath = $state(defaultRepositoryPath);
-    const addRepositoryState = $derived(
-        appContext.application.addRepositoryState,
-    );
-    const addRepositoryPending = $derived(
-        appContext.application.addRepositoryPending,
-    );
+    let commandRefreshNonce = $state(0);
     const cloneTargetPath = $derived(
         `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.repositoryRef}`,
     );
@@ -50,29 +47,28 @@
         ].filter((metric) => metric.value !== undefined),
     );
 
-    const cloneState = $derived(
-        addRepositoryState?.platformRepositoryRef === repository.repositoryRef
-            ? addRepositoryState
-            : undefined,
-    );
+    const commandInput = $derived({
+        platform: "github" as const,
+        repositoryRef: repository.repositoryRef,
+        destinationPath: repositoryPath,
+    });
 
     function handleUseRepository(): void {
-        repositoryPath = cloneState?.repositoryPath ?? defaultRepositoryPath;
+        repositoryPath = defaultRepositoryPath;
+        commandRefreshNonce += 1;
     }
 
-    async function handleClone(event: SubmitEvent): Promise<void> {
-        event.preventDefault();
-
-        try {
-            const addedRepository = await appContext.application.addRepository({
-                repositoryPath,
-                platformRepositoryRef: repository.repositoryRef,
-            });
-            detailsOpen = false;
-            await goto(`/airport/${encodeURIComponent(addedRepository.id)}`);
-        } catch {
-            return;
-        }
+    async function executeRepositoryClassCommand(
+        commandId: string,
+    ): Promise<void> {
+        const data = RepositoryDataSchema.parse(
+            await RepositoryEntity.executeClassCommand(commandId, commandInput),
+        );
+        const addedRepository =
+            appContext.application.hydrateRepositoryData(data);
+        await appContext.application.loadRepositories({ force: true });
+        detailsOpen = false;
+        await goto(`/airport/${encodeURIComponent(addedRepository.id)}`);
     }
 </script>
 
@@ -87,7 +83,7 @@
                 <span
                     class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
                 >
-                    <BrandGithubIcon class="size-4" />
+                    <Icon icon="lucide:github" class="size-4" />
                 </span>
                 <h3
                     class="min-w-0 truncate text-sm font-semibold text-foreground"
@@ -128,9 +124,19 @@
                     aria-label={`Open ${repository.repositoryRef} on GitHub`}
                     title="Open on GitHub"
                 >
-                    <BrandGithubIcon class="size-4" />
+                    <Icon icon="lucide:github" class="size-4" />
                 </Button>
             {/if}
+            <EntityClassCommandbar
+                refreshNonce={commandRefreshNonce}
+                entityName="Repository"
+                {commandInput}
+                executeCommand={executeRepositoryClassCommand}
+                onCommandExecuted={async () => undefined}
+                buttonClass="shadow-sm"
+                showEmptyState={false}
+                showLoadingState={false}
+            />
             <Dialog.Root bind:open={detailsOpen}>
                 <Dialog.Trigger>
                     {#snippet child({ props })}
@@ -140,8 +146,8 @@
                             onclick={handleUseRepository}
                             {...props}
                         >
-                            Clone repository
-                            <ArrowRightIcon class="size-4" />
+                            Details
+                            <Icon icon="lucide:arrow-right" class="size-4" />
                         </Button>
                     {/snippet}
                 </Dialog.Trigger>
@@ -166,7 +172,7 @@
                         </Dialog.Description>
                     </Dialog.Header>
 
-                    <form class="grid gap-5" onsubmit={handleClone}>
+                    <div class="grid gap-5">
                         <input
                             type="hidden"
                             name="platformRepositoryRef"
@@ -301,18 +307,6 @@
                             </p>
                         </div>
 
-                        {#if cloneState?.error}
-                            <p class="text-sm text-rose-600">
-                                {cloneState.error}
-                            </p>
-                        {/if}
-
-                        {#if cloneState?.success}
-                            <p class="text-sm text-emerald-600">
-                                Repository ready: {cloneState.repositoryPath}
-                            </p>
-                        {/if}
-
                         <Dialog.Footer class="pt-2 sm:justify-between">
                             {#if repository.htmlUrl}
                                 <Button
@@ -336,23 +330,23 @@
                                             type="button"
                                             variant="ghost"
                                             {...props}
-                                            disabled={addRepositoryPending}
                                         >
                                             Close
                                         </Button>
                                     {/snippet}
                                 </Dialog.Close>
-                                <Button
-                                    type="submit"
-                                    disabled={addRepositoryPending}
-                                >
-                                    {addRepositoryPending
-                                        ? "Cloning repository..."
-                                        : "Clone repository"}
-                                </Button>
+                                <EntityClassCommandbar
+                                    refreshNonce={commandRefreshNonce}
+                                    entityName="Repository"
+                                    {commandInput}
+                                    executeCommand={executeRepositoryClassCommand}
+                                    onCommandExecuted={async () => undefined}
+                                    buttonClass="shadow-sm"
+                                    showEmptyState={false}
+                                />
                             </div>
                         </Dialog.Footer>
-                    </form>
+                    </div>
                 </Dialog.Content>
             </Dialog.Root>
         </div>

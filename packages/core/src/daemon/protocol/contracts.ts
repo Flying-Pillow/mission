@@ -376,6 +376,19 @@ export type Notification =
 		data: AgentSessionDataType;
 	}
 	| {
+		type: 'entity.deleted';
+		workspaceRoot: string;
+		entity: string;
+		id: EntityIdType;
+	}
+	| {
+		type: 'entity.changed';
+		workspaceRoot: string;
+		entity: string;
+		id: EntityIdType;
+		method: string;
+	}
+	| {
 		type: 'mission.terminal';
 		workspaceRoot: string;
 		missionId: string;

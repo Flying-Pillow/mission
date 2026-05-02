@@ -53,46 +53,46 @@ type AgentSessionLaunchRecord = {
 	updatedAt: string;
 };
 
-export function toAgentSession(record: AgentSessionRecord): AgentSessionDataType {
-	const missionId = requireRecordMissionId(record);
-	return AgentSessionDataSchema.parse({
-		id: createAgentSessionEntityId(missionId, record.sessionId),
-		sessionId: record.sessionId,
-		runnerId: record.runnerId,
-		...(record.transportId ? { transportId: record.transportId } : {}),
-		...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
-		runnerLabel: record.runnerLabel,
-		lifecycleState: record.lifecycleState,
-		...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
-		...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
-		...(record.terminalSessionName && record.terminalPaneId
-			? {
-				terminalHandle: {
-					sessionName: record.terminalSessionName,
-					paneId: record.terminalPaneId
-				}
-			}
-			: {}),
-		...(record.taskId ? { taskId: record.taskId } : {}),
-		...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
-		...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
-		...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
-		context: createAgentSessionContext(record),
-		runtimeMessages: createAgentRuntimeMessageDescriptors(),
-		...(record.scope ? { scope: record.scope } : {}),
-		...(record.telemetry ? { telemetry: record.telemetry } : {}),
-		createdAt: record.createdAt,
-		lastUpdatedAt: record.lastUpdatedAt,
-		...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
-	});
-}
-
-export function createAgentSessionEntityId(missionId: string, sessionId: string): string {
-	return createEntityId('agent_session', `${missionId}/${sessionId}`);
-}
-
 export class AgentSession extends Entity<AgentSessionDataType, string> {
 	public static override readonly entityName = agentSessionEntityName;
+
+	public static createEntityId(missionId: string, sessionId: string): string {
+		return createEntityId('agent_session', `${missionId}/${sessionId}`);
+	}
+
+	public static toDataFromRecord(record: AgentSessionRecord): AgentSessionDataType {
+		const missionId = AgentSession.requireRecordMissionId(record);
+		return AgentSessionDataSchema.parse({
+			id: AgentSession.createEntityId(missionId, record.sessionId),
+			sessionId: record.sessionId,
+			runnerId: record.runnerId,
+			...(record.transportId ? { transportId: record.transportId } : {}),
+			...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
+			runnerLabel: record.runnerLabel,
+			lifecycleState: record.lifecycleState,
+			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
+			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
+			...(record.terminalSessionName && record.terminalPaneId
+				? {
+					terminalHandle: {
+						sessionName: record.terminalSessionName,
+						paneId: record.terminalPaneId
+					}
+				}
+				: {}),
+			...(record.taskId ? { taskId: record.taskId } : {}),
+			...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
+			...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
+			...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+			context: AgentSession.createContext(record),
+			runtimeMessages: AgentSession.createRuntimeMessageDescriptors(),
+			...(record.scope ? { scope: record.scope } : {}),
+			...(record.telemetry ? { telemetry: record.telemetry } : {}),
+			createdAt: record.createdAt,
+			lastUpdatedAt: record.lastUpdatedAt,
+			...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
+		});
+	}
 
 	public static async read(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentSessionLocatorSchema.parse(payload);
@@ -285,6 +285,26 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		return lifecycle === 'cancelled' ? 'session.cancelled' : 'session.terminated';
 	}
 
+	public static createContext(record: AgentSessionRecord): AgentSessionContextType {
+		return AgentSessionContextSchema.parse({
+			artifacts: record.assignmentLabel
+				? [{ id: record.assignmentLabel, role: 'instruction', order: 0, title: record.currentTurnTitle ?? record.assignmentLabel }]
+				: [],
+			instructions: record.currentTurnTitle
+				? [{ instructionId: `${record.sessionId}:turn-title`, text: record.currentTurnTitle, order: 0 }]
+				: []
+		});
+	}
+
+	public static createRuntimeMessageDescriptors(): AgentRuntimeMessageDescriptorType[] {
+		return AgentRuntimeMessageDescriptorSchema.array().parse([
+			{ type: 'interrupt', label: 'Interrupt', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'nudge', label: 'Nudge', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+		]);
+	}
+
 	public static buildTaskScope(
 		task: MissionTaskState,
 		missionId?: string,
@@ -471,7 +491,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	public constructor(owner: AgentSessionOwner, record: AgentSessionRecord);
 	public constructor(ownerOrData: AgentSessionOwner | AgentSessionDataType, record?: AgentSessionRecord) {
 		if (record) {
-			super(toAgentSession(record));
+			super(AgentSession.toDataFromRecord(record));
 			this.owner = ownerOrData as AgentSessionOwner;
 			this.record = AgentSession.cloneRecord(record);
 			return;
@@ -495,7 +515,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	}
 
 	public toEntity(): AgentSessionDataType {
-		return toAgentSession(this.requireRecord());
+		return AgentSession.toDataFromRecord(this.requireRecord());
 	}
 
 	public toState(snapshot?: AgentSessionSnapshot): AgentSessionState {
@@ -652,6 +672,16 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				};
 		}
 	}
+
+	private static requireRecordMissionId(record: AgentSessionRecord): string {
+		const missionId = record.scope && 'missionId' in record.scope && typeof record.scope.missionId === 'string'
+			? record.scope.missionId.trim()
+			: undefined;
+		if (!missionId) {
+			throw new Error(`AgentSession '${record.sessionId}' requires daemon-owned Mission context.`);
+		}
+		return missionId;
+	}
 }
 
 function getTransportFields(snapshot: AgentSessionSnapshot | undefined): {
@@ -667,36 +697,6 @@ function getTransportFields(snapshot: AgentSessionSnapshot | undefined): {
 		terminalSessionName: snapshot.transport.terminalSessionName,
 		...(snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
 	};
-}
-
-function requireRecordMissionId(record: AgentSessionRecord): string {
-	const missionId = record.scope && 'missionId' in record.scope && typeof record.scope.missionId === 'string'
-		? record.scope.missionId.trim()
-		: undefined;
-	if (!missionId) {
-		throw new Error(`AgentSession '${record.sessionId}' requires daemon-owned Mission context.`);
-	}
-	return missionId;
-}
-
-function createAgentSessionContext(record: AgentSessionRecord): AgentSessionContextType {
-	return AgentSessionContextSchema.parse({
-		artifacts: record.assignmentLabel
-			? [{ id: record.assignmentLabel, role: 'instruction', order: 0, title: record.currentTurnTitle ?? record.assignmentLabel }]
-			: [],
-		instructions: record.currentTurnTitle
-			? [{ instructionId: `${record.sessionId}:turn-title`, text: record.currentTurnTitle, order: 0 }]
-			: []
-	});
-}
-
-function createAgentRuntimeMessageDescriptors(): AgentRuntimeMessageDescriptorType[] {
-	return AgentRuntimeMessageDescriptorSchema.array().parse([
-		{ type: 'interrupt', label: 'Interrupt', delivery: 'best-effort', mutatesContext: false },
-		{ type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
-		{ type: 'nudge', label: 'Nudge', delivery: 'best-effort', mutatesContext: false },
-		{ type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
-	]);
 }
 
 async function loadMissionRegistry(context: EntityExecutionContext) {

@@ -33,7 +33,7 @@ export function missionCommand(input: {
 	description?: string;
 	confirmationPrompt?: string;
 	requiresConfirmation?: boolean;
-	variant?: 'default' | 'destructive';
+	variant?: EntityCommandDescriptorType['variant'];
 	input?: EntityCommandDescriptorType['input'];
 	presentationOrder?: number;
 }): EntityCommandDescriptorType {
