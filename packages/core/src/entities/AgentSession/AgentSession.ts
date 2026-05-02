@@ -3,7 +3,7 @@ import type {
 	AgentPrompt,
 	AgentSessionSnapshot
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionTaskState } from '../../types.js';
 import type {
 	MissionAgentModelInfo,
@@ -15,7 +15,9 @@ import type {
 } from '../../daemon/protocol/contracts.js';
 import {
 	AgentSessionCommandAcknowledgementSchema,
-	AgentSessionExecuteCommandInputSchema,
+	AgentSessionCommandInputSchema,
+	AgentSessionContextSchema,
+	AgentRuntimeMessageDescriptorSchema,
 	AgentSessionLocatorSchema,
 	AgentSessionSendCommandInputSchema,
 	AgentSessionSendPromptInputSchema,
@@ -24,6 +26,8 @@ import {
 	AgentSessionDataSchema,
 	AgentSessionCommandIds,
 	agentSessionEntityName,
+	type AgentRuntimeMessageDescriptorType,
+	type AgentSessionContextType,
 	type AgentSessionDataType
 } from './AgentSessionSchema.js';
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
@@ -50,7 +54,9 @@ type AgentSessionLaunchRecord = {
 };
 
 export function toAgentSession(record: AgentSessionRecord): AgentSessionDataType {
+	const missionId = requireRecordMissionId(record);
 	return AgentSessionDataSchema.parse({
+		id: createAgentSessionEntityId(missionId, record.sessionId),
 		sessionId: record.sessionId,
 		runnerId: record.runnerId,
 		...(record.transportId ? { transportId: record.transportId } : {}),
@@ -71,12 +77,18 @@ export function toAgentSession(record: AgentSessionRecord): AgentSessionDataType
 		...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
 		...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
 		...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+		context: createAgentSessionContext(record),
+		runtimeMessages: createAgentRuntimeMessageDescriptors(),
 		...(record.scope ? { scope: record.scope } : {}),
 		...(record.telemetry ? { telemetry: record.telemetry } : {}),
 		createdAt: record.createdAt,
 		lastUpdatedAt: record.lastUpdatedAt,
 		...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 	});
+}
+
+export function createAgentSessionEntityId(missionId: string, sessionId: string): string {
+	return createEntityId('agent_session', `${missionId}/${sessionId}`);
 }
 
 export class AgentSession extends Entity<AgentSessionDataType, string> {
@@ -102,7 +114,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<AgentSession> {
-		const input = AgentSessionExecuteCommandInputSchema.parse(payload);
+		const input = AgentSessionCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -137,8 +149,8 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	}
 
 
-	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = AgentSessionExecuteCommandInputSchema.parse(payload);
+	public async command(payload: unknown, context: EntityExecutionContext) {
+		const input = AgentSessionCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -159,7 +171,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: agentSessionEntityName,
-				method: 'executeCommand',
+				method: 'command',
 				id: input.sessionId,
 				missionId: input.missionId,
 				sessionId: input.sessionId,
@@ -655,6 +667,36 @@ function getTransportFields(snapshot: AgentSessionSnapshot | undefined): {
 		terminalSessionName: snapshot.transport.terminalSessionName,
 		...(snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
 	};
+}
+
+function requireRecordMissionId(record: AgentSessionRecord): string {
+	const missionId = record.scope && 'missionId' in record.scope && typeof record.scope.missionId === 'string'
+		? record.scope.missionId.trim()
+		: undefined;
+	if (!missionId) {
+		throw new Error(`AgentSession '${record.sessionId}' requires daemon-owned Mission context.`);
+	}
+	return missionId;
+}
+
+function createAgentSessionContext(record: AgentSessionRecord): AgentSessionContextType {
+	return AgentSessionContextSchema.parse({
+		artifacts: record.assignmentLabel
+			? [{ artifactId: record.assignmentLabel, role: 'instruction', order: 0, title: record.currentTurnTitle ?? record.assignmentLabel }]
+			: [],
+		instructions: record.currentTurnTitle
+			? [{ instructionId: `${record.sessionId}:turn-title`, text: record.currentTurnTitle, order: 0 }]
+			: []
+	});
+}
+
+function createAgentRuntimeMessageDescriptors(): AgentRuntimeMessageDescriptorType[] {
+	return AgentRuntimeMessageDescriptorSchema.array().parse([
+		{ type: 'interrupt', label: 'Interrupt', delivery: 'best-effort', mutatesContext: false },
+		{ type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
+		{ type: 'nudge', label: 'Nudge', delivery: 'best-effort', mutatesContext: false },
+		{ type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+	]);
 }
 
 async function loadMissionRegistry(context: EntityExecutionContext) {

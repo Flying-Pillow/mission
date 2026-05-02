@@ -84,7 +84,7 @@
     );
     const statusMessage = $derived.by(() => {
         if (loading) {
-            return "Loading document...";
+            return "Loading artifact...";
         }
         if (saveError) {
             return saveError;
@@ -227,8 +227,8 @@
             }
 
             const payload = await artifact.read({ executionContext: "render" });
-            content = payload.content;
-            originalContent = payload.content;
+            content = payload.body.content;
+            originalContent = payload.body.content;
             saveStatus = "idle";
             saveError = null;
             lastSavedAt = payload.updatedAt ?? null;
@@ -260,7 +260,7 @@
 
             const payload = await artifact.write(nextContent);
 
-            originalContent = payload.content;
+            originalContent = payload.body.content;
             loadedPath = path;
             lastSavedAt = payload.updatedAt ?? new Date().toISOString();
             saveStatus = "saved";

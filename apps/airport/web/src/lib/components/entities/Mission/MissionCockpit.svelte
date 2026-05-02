@@ -139,7 +139,7 @@
         <div
             class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
         >
-            Mission cockpit is waiting for the workflow projection.
+            Mission cockpit is waiting for the control view.
         </div>
     {:else}
         <div class="relative w-full px-1 py-2">

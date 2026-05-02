@@ -1,7 +1,8 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema
+    EntityCommandDescriptorSchema,
+    EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
 export const taskEntityName = 'Task' as const;
@@ -38,12 +39,13 @@ export const TaskEventSubjectSchema = TaskLocatorSchema.extend({
     entity: z.literal(taskEntityName)
 }).strict();
 
-export const TaskExecuteCommandInputSchema = TaskLocatorSchema.extend({
+export const TaskCommandInputSchema = TaskLocatorSchema.extend({
     commandId: TaskCommandIdSchema,
     input: z.unknown().optional()
 }).strict();
 
 export const TaskStorageSchema = z.object({
+    id: EntityIdSchema,
     taskId: TaskIdSchema,
     stageId: z.string().trim().min(1),
     sequence: z.number().int().positive(),
@@ -68,7 +70,7 @@ export const TaskDataSchema = z.object({
 
 export const TaskCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(taskEntityName),
-    method: z.literal('executeCommand'),
+    method: z.literal('command'),
     id: z.string().trim().min(1),
     missionId: z.string().trim().min(1),
     taskId: TaskIdSchema,
@@ -85,7 +87,7 @@ export const taskRemoteQueryInputSchemas = {
 } as const;
 
 export const taskRemoteCommandInputSchemas = {
-    executeCommand: TaskExecuteCommandInputSchema
+    command: TaskCommandInputSchema
 } as const;
 
 export const taskRemoteQueryResultSchemas = {
@@ -93,13 +95,13 @@ export const taskRemoteQueryResultSchemas = {
 } as const;
 
 export const taskRemoteCommandResultSchemas = {
-    executeCommand: TaskCommandAcknowledgementSchema
+    command: TaskCommandAcknowledgementSchema
 } as const;
 
 export type TaskLocatorType = z.infer<typeof TaskLocatorSchema>;
 export type TaskEventSubjectType = z.infer<typeof TaskEventSubjectSchema>;
 export type TaskCommandIdType = z.infer<typeof TaskCommandIdSchema>;
-export type TaskExecuteCommandInputType = z.infer<typeof TaskExecuteCommandInputSchema>;
+export type TaskCommandInputType = z.infer<typeof TaskCommandInputSchema>;
 export type TaskStorageType = z.infer<typeof TaskStorageSchema>;
 export type TaskDataType = z.infer<typeof TaskDataSchema>;
 export type TaskCommandAcknowledgementType = z.infer<typeof TaskCommandAcknowledgementSchema>;

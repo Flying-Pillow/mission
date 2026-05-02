@@ -483,8 +483,7 @@
             <div
                 class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
             >
-                Mission files will appear once the workflow projection is
-                available.
+                Mission files will appear once the control view is available.
             </div>
         {/if}
     </div>

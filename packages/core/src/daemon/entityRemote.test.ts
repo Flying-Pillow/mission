@@ -55,7 +55,7 @@ describe('daemon entity dispatch', () => {
 
 	it('dispatches Repository.add through an explicit command handler', async () => {
 		const snapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toSchema(),
+			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
 			controlRoot: '/tmp/mission-proof-of-concept'
 		};
 		const addSpy = vi.spyOn(Repository, 'add').mockResolvedValue(snapshot);
@@ -80,7 +80,7 @@ describe('daemon entity dispatch', () => {
 
 	it('dispatches Repository platform-backed source methods through explicit handlers', async () => {
 		const repositorySnapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toSchema(),
+			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
 			controlRoot: '/tmp/mission-proof-of-concept'
 		};
 		const findSpy = vi.spyOn(Repository, 'findAvailable').mockResolvedValue([
@@ -143,7 +143,7 @@ describe('daemon entity dispatch', () => {
 
 	it('dispatches Repository instance methods through explicit handlers', async () => {
 		const snapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toSchema(),
+			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
 			controlRoot: '/tmp/mission-proof-of-concept'
 		};
 		const repository = {
@@ -258,7 +258,7 @@ describe('daemon entity dispatch', () => {
 
 		await expect(executeEntityQueryInDaemon({
 			entity: 'Mission',
-			method: 'readProjection',
+			method: 'readControlView',
 			payload: { missionId: 'mission-1' }
 		}, context)).resolves.toMatchObject({ missionId: 'mission-1' });
 
@@ -293,7 +293,7 @@ describe('daemon entity dispatch', () => {
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'Stage',
-			method: 'executeCommand',
+			method: 'command',
 			payload: { missionId: 'mission-1', stageId: 'implementation', commandId: 'stage.generateTasks' }
 		}, context)).resolves.toEqual(createStageCommandAcknowledgement());
 
@@ -305,7 +305,7 @@ describe('daemon entity dispatch', () => {
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'Task',
-			method: 'executeCommand',
+			method: 'command',
 			payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
 		}, context)).resolves.toEqual(createTaskCommandAcknowledgement());
 
@@ -317,9 +317,9 @@ describe('daemon entity dispatch', () => {
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'Artifact',
-			method: 'executeCommand',
+			method: 'command',
 			payload: { missionId: 'mission-1', artifactId: 'mission:brief', commandId: 'artifact.review' }
-		}, context)).rejects.toThrow("Command method 'Artifact.executeCommand' is not implemented in the daemon.");
+		}, context)).rejects.toThrow("Command method 'Artifact.command' is not implemented in the daemon.");
 
 		await expect(executeEntityQueryInDaemon({
 			entity: 'AgentSession',
@@ -329,9 +329,9 @@ describe('daemon entity dispatch', () => {
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'AgentSession',
-			method: 'executeCommand',
+			method: 'command',
 			payload: { missionId: 'mission-1', sessionId: 'session-1', commandId: 'agentSession.cancel' }
-		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('executeCommand'));
+		}, context)).resolves.toEqual(createAgentSessionCommandAcknowledgement('command'));
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'AgentSession',
@@ -514,6 +514,7 @@ describe('daemon entity dispatch', () => {
 function createMissionSnapshot(): MissionSnapshotType {
 	return {
 		mission: {
+			id: 'mission:mission-1',
 			missionId: 'mission-1',
 			title: 'Mission One',
 			type: 'task' as const,
@@ -574,7 +575,7 @@ function createMissionHandle(snapshot: MissionSnapshotType['mission']): MissionH
 		pauseMission: vi.fn(async () => undefined),
 		read: vi.fn(async () => ({ ...createMissionSnapshot(), mission: snapshot })),
 		readDocument: vi.fn(),
-		readProjection: vi.fn(async () => ({ missionId: snapshot.missionId })),
+		readControlView: vi.fn(async () => ({ missionId: snapshot.missionId })),
 		readTerminal: vi.fn(),
 		readWorktree: vi.fn(),
 		reopenTask: vi.fn(async () => undefined),
@@ -609,6 +610,7 @@ function createMissionAcknowledgement(
 
 function createMissionStageSnapshot() {
 	return {
+		id: 'stage:mission-1/implementation',
 		stageId: 'implementation',
 		lifecycle: 'active' as const,
 		isCurrentStage: true,
@@ -619,6 +621,7 @@ function createMissionStageSnapshot() {
 
 function createMissionTaskSnapshot() {
 	return {
+		id: 'task:mission-1/implementation/01-task',
 		taskId: 'implementation/01-task',
 		stageId: 'implementation',
 		sequence: 1,
@@ -634,10 +637,12 @@ function createMissionTaskSnapshot() {
 
 function createMissionArtifactSnapshot() {
 	return {
+		id: 'artifact:mission-1/mission:brief',
 		artifactId: 'mission:brief',
 		kind: 'mission' as const,
 		label: 'Brief',
 		fileName: 'BRIEF.md',
+		mimeType: 'text/markdown',
 		filePath: '/repo/root/BRIEF.md',
 		relativePath: 'BRIEF.md'
 	};
@@ -645,10 +650,13 @@ function createMissionArtifactSnapshot() {
 
 function createAgentSessionSnapshot() {
 	return {
+		id: 'agent_session:mission-1/session-1',
 		sessionId: 'session-1',
 		runnerId: 'copilot-cli',
 		runnerLabel: 'Copilot CLI',
 		lifecycleState: 'running' as const,
+		context: { artifacts: [], instructions: [] },
+		runtimeMessages: [],
 		createdAt: '2026-04-26T13:36:00.000Z',
 		lastUpdatedAt: '2026-04-26T13:37:00.000Z'
 	};
@@ -658,7 +666,7 @@ function createStageCommandAcknowledgement() {
 	return {
 		ok: true as const,
 		entity: 'Stage' as const,
-		method: 'executeCommand' as const,
+		method: 'command' as const,
 		id: 'implementation',
 		missionId: 'mission-1',
 		stageId: 'implementation',
@@ -670,7 +678,7 @@ function createTaskCommandAcknowledgement() {
 	return {
 		ok: true as const,
 		entity: 'Task' as const,
-		method: 'executeCommand' as const,
+		method: 'command' as const,
 		id: 'implementation/01-task',
 		missionId: 'mission-1',
 		taskId: 'implementation/01-task',
@@ -678,7 +686,7 @@ function createTaskCommandAcknowledgement() {
 	};
 }
 
-function createAgentSessionCommandAcknowledgement(method: 'executeCommand' | 'sendPrompt' | 'sendCommand') {
+function createAgentSessionCommandAcknowledgement(method: 'command' | 'sendPrompt' | 'sendCommand') {
 	return {
 		ok: true as const,
 		entity: 'AgentSession' as const,
@@ -686,6 +694,6 @@ function createAgentSessionCommandAcknowledgement(method: 'executeCommand' | 'se
 		id: 'session-1',
 		missionId: 'mission-1',
 		sessionId: 'session-1',
-		...(method === 'executeCommand' ? { commandId: 'agentSession.cancel' } : {})
+		...(method === 'command' ? { commandId: 'agentSession.cancel' } : {})
 	};
 }

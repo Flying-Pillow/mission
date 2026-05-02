@@ -501,9 +501,9 @@ export class AirportApplication {
                 missionId: input.missionId,
                 repositoryRootPath: repository.data.repositoryRootPath
             });
-            const projectionSnapshot = await mission.getProjectionSnapshot();
+            const controlViewSnapshot = await mission.getControlViewSnapshot();
             mission.setRouteState({
-                projectionSnapshot,
+                controlViewSnapshot,
                 worktreePath: repository.data.repositoryRootPath
             });
             this.activeMissionState = mission;

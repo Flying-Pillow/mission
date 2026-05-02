@@ -3,7 +3,7 @@ import { Task } from './Task.js';
 import {
     taskEntityName,
     TaskLocatorSchema,
-    TaskExecuteCommandInputSchema,
+    TaskCommandInputSchema,
     TaskStorageSchema,
     TaskDataSchema,
     TaskCommandAcknowledgementSchema,
@@ -23,9 +23,9 @@ export const TaskContract: EntityContractType = {
             result: TaskDataSchema,
             execution: 'class'
         },
-        executeCommand: {
+        command: {
             kind: 'mutation',
-            payload: TaskExecuteCommandInputSchema,
+            payload: TaskCommandInputSchema,
             result: TaskCommandAcknowledgementSchema,
             execution: 'entity'
         }

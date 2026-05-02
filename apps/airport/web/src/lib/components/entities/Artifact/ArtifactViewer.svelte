@@ -4,7 +4,7 @@
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
-    import { ArtifactDocumentDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
+    import { ArtifactBodySnapshotSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import { qry } from "../../../../routes/api/entities/remote/query.remote";
@@ -83,11 +83,13 @@
                         </div>
                     {:then artifactDocumentResult}
                         {@const artifactDocument =
-                            ArtifactDocumentDataSchema.parse(
+                            ArtifactBodySnapshotSchema.parse(
                                 artifactDocumentResult,
                             )}
                         <div class="bg-background/80">
-                            <MarkdownViewer source={artifactDocument.content} />
+                            <MarkdownViewer
+                                source={artifactDocument.body.content}
+                            />
                         </div>
                     {:catch loadError}
                         <div

@@ -71,7 +71,7 @@
     const activeMission = $derived(missionScope.mission);
     const missionLoading = $derived(missionScope.loading);
     const missionLoadError = $derived(missionScope.error);
-    const missionView = $derived(activeMission?.projectionSnapshot);
+    const missionView = $derived(activeMission?.controlViewSnapshot);
     const missionWorktreePath = $derived(
         activeMission?.missionWorktreePath ?? "",
     );
@@ -398,9 +398,9 @@
         missionViewLoading = true;
         missionViewError = null;
         try {
-            const nextView = await activeMission.getProjectionSnapshot();
+            const nextView = await activeMission.getControlViewSnapshot();
             activeMission.setRouteState({
-                projectionSnapshot: nextView,
+                controlViewSnapshot: nextView,
                 worktreePath: missionWorktreePath,
             });
             appContext.setActiveMissionOutline({

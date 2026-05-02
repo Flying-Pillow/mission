@@ -29,7 +29,7 @@ The target direction is:
 | Query | A read method that returns an Entity snapshot or document without changing authoritative state. |
 | Mutation | A command method that accepts a command or write payload and may change state. |
 | Snapshot | A schema-validated read model returned by an Entity. |
-| Projection | A composed read model for surface rendering. This should only exist when it has domain meaning beyond a plain snapshot. |
+| Control view | A composed read model for surface rendering. This should only exist when it has domain meaning beyond a plain snapshot. |
 | Airport | Browser and terminal operator surface. It renders and forwards commands but is not command authority. |
 
 Entity command payloads, command descriptors, Airport command rendering, daemon dispatch, and command tests use `commandId` and typed `input` as the complete operation identity.
@@ -58,7 +58,7 @@ The generic contract shape currently supports `properties`, but these Mission-ow
 | Schema | `packages/core/src/entities/Mission/MissionSchema.ts` |
 | Contract | `packages/core/src/entities/Mission/MissionContract.ts` |
 | Entity name | `Mission` |
-| Contract queries | `read`, `readProjection`, `readDocument`, `readWorktree`, `readTerminal` |
+| Contract queries | `read`, `readControlView`, `readDocument`, `readWorktree`, `readTerminal` |
 | Contract mutations | `command`, `writeDocument`, `ensureTerminal`, `sendTerminalInput` |
 | Contract events | `snapshot.changed`, `status` |
 | Command owners | Mission, Stage, Task, AgentSession through `MissionCommandDescriptors.ts` |
@@ -75,7 +75,7 @@ Important public behavior methods include:
 | Task commands | `startTask`, `completeTask`, `reopenTask`, `reworkTask`, `reworkTaskFromVerification`, `setTaskAutostart` |
 | Stage commands | `generateTasksForStage` |
 | Session commands | `completeAgentSession`, `cancelAgentSession`, `terminateAgentSession`, `sendAgentSessionPrompt`, `sendAgentSessionCommand` |
-| Reads | `buildMissionSnapshot`, `buildMissionProjectionSnapshot`, `readStageSnapshot`, `readTaskSnapshot`, `readArtifactSnapshot`, `readAgentSessionSnapshot` |
+| Reads | `buildMissionSnapshot`, `buildMissionControlViewSnapshot`, `readStageSnapshot`, `readTaskSnapshot`, `readArtifactSnapshot`, `readAgentSessionSnapshot` |
 | Documents | `readDocument`, `writeDocument`, `resolveArtifactDocumentPath`, `readWorktree` |
 | Terminals | `ensureTerminal`, `readTerminal`, `sendTerminalInput` |
 | Workflow collaboration | `startWorkflow`, `evaluateGate`, workflow controller bindings |
@@ -97,7 +97,7 @@ Architectural read:
 | Schema | `packages/core/src/entities/Stage/StageSchema.ts` |
 | Contract | `packages/core/src/entities/Stage/StageContract.ts` |
 | Contract queries | `read` |
-| Contract mutations | `executeCommand` |
+| Contract mutations | `command` |
 | Contract events | `snapshot.changed` |
 | Snapshot fields | `stageId`, `lifecycle`, `isCurrentStage`, `artifacts`, `tasks`, `commands` |
 | Commands | `stage.generateTasks` |
@@ -118,7 +118,7 @@ Architectural read:
 | Schema | `packages/core/src/entities/Task/TaskSchema.ts` |
 | Contract | `packages/core/src/entities/Task/TaskContract.ts` |
 | Contract queries | `read` |
-| Contract mutations | `executeCommand` |
+| Contract mutations | `command` |
 | Contract events | `snapshot.changed` |
 | Snapshot fields | `taskId`, `stageId`, `sequence`, `title`, `instruction`, `lifecycle`, `dependsOn`, `waitingOnTaskIds`, `agentRunner`, `retries`, optional file identity, `commands` |
 | Commands | `task.start`, `task.complete`, `task.reopen`, `task.rework`, `task.reworkFromVerification`, `task.enableAutostart`, `task.disableAutostart` |
@@ -127,7 +127,7 @@ Important behavior methods include `isReady`, `isActive`, `resolveStartRunnerId`
 
 Architectural read:
 
-- Task has enough behavior to be treated as a real child Entity, not a passive projection row.
+- Task has enough behavior to be treated as a real child Entity, not a passive read row.
 - Task command ids should be authoritative. The current command payload should not also carry a separate action enum.
 - `startFromMissionControl` should be reviewed as vocabulary: if it means operator-started task, name it for behavior rather than a surface.
 
@@ -141,16 +141,16 @@ Architectural read:
 | Schema | `packages/core/src/entities/Artifact/ArtifactSchema.ts` |
 | Contract | `packages/core/src/entities/Artifact/ArtifactContract.ts` |
 | Contract queries | `read`, `readDocument` |
-| Contract mutations | `writeDocument`, `executeCommand` |
+| Contract mutations | `writeDocument` |
 | Contract events | `snapshot.changed` |
 | Snapshot fields | `artifactId`, `kind`, `label`, `fileName`, optional `key`, `stageId`, `taskId`, `filePath`, `relativePath`, `commands` |
-| Commands | None implemented; `executeCommand` currently throws |
+| Commands | None implemented; Artifact exposes no command mutation |
 
 Architectural read:
 
 - Artifact document access belongs to Artifact.
-- If Artifact has no commands, remove or hide the command mutation until commands exist.
-- If Artifact will have commands, give them explicit Artifact ownership and stop forcing `commands: []` in Mission projection code.
+- If Artifact gains commands, add a command mutation only once those commands have explicit Artifact ownership.
+- If Artifact will have commands, give them explicit Artifact ownership and stop forcing `commands: []` in Mission control-view code.
 
 ### AgentSession
 
@@ -162,12 +162,12 @@ Architectural read:
 | Schema | `packages/core/src/entities/AgentSession/AgentSessionSchema.ts` |
 | Contract | `packages/core/src/entities/AgentSession/AgentSessionContract.ts` |
 | Contract queries | `read`, `readTerminal` |
-| Contract mutations | `executeCommand`, `sendPrompt`, `sendCommand`, `sendTerminalInput` |
+| Contract mutations | `command`, `sendPrompt`, `sendCommand`, `sendTerminalInput` |
 | Contract events | `snapshot.changed`, `event`, `lifecycle` |
 | Snapshot fields | `sessionId`, `runnerId`, optional `transportId`, `runnerLabel`, optional session log and terminal fields, assignment fields, `lifecycleState`, `scope`, `telemetry`, failure fields, timestamps, `commands` |
 | Commands | `agentSession.complete`, `agentSession.cancel`, `agentSession.terminate` |
 
-Important behavior methods include `read`, `readTerminal`, `executeCommand`, `sendPrompt`, `sendCommand`, `sendTerminalInput`, `isCompatibleForLaunch`, `lifecycleEventType`, `buildTaskScope`, `createRecordFromLaunch`, `createStateFromSnapshot`, `toLifecycleState`, `done`, `cancel`, and `terminate`.
+Important behavior methods include `read`, `readTerminal`, `command`, `sendPrompt`, `sendCommand`, `sendTerminalInput`, `isCompatibleForLaunch`, `lifecycleEventType`, `buildTaskScope`, `createRecordFromLaunch`, `createStateFromSnapshot`, `toLifecycleState`, `done`, `cancel`, and `terminate`.
 
 Architectural read:
 
@@ -196,11 +196,11 @@ These descriptors intentionally stay out of `MissionContract.ts` while they rema
 
 The code should choose one model. Mixed ownership makes descriptors, payloads, and tests argue with each other.
 
-### `MissionProjection.ts`
+### `MissionControlView.ts`
 
 Current role:
 
-- Builds `MissionSnapshot` and `MissionProjectionSnapshot`.
+- Builds `MissionSnapshot` and `MissionControlViewSnapshot`.
 - Resolves Stage, Task, Artifact, and AgentSession snapshots by id.
 - Adds command descriptors to Mission, Stage, Task, and AgentSession snapshots.
 - Forces Artifact commands to an empty array.
@@ -210,9 +210,9 @@ Architectural concern:
 - The module currently looks like an extraction made to reduce `Mission.ts` size, not an independent domain concept.
 - Snapshot assembly can be Mission responsibility if it is just object composition.
 - Command descriptor building can live with the Entity that owns the commands.
-- A separate projection module is justified only if it models a stable read contract with rules of its own.
+- A separate control-view module is justified only if it models a stable read contract with rules of its own.
 
-### `MissionStatusProjection.ts`
+### `MissionStatusView.ts`
 
 Current role:
 
@@ -259,7 +259,7 @@ Architectural concern:
 Current role:
 
 - `Mission.svelte.ts` wraps generic remotes in Mission and child command gateways.
-- Browser child Entity wrappers call `executeCommand` and refresh the Mission after mutations.
+- Browser child Entity wrappers call the child Entity `command` mutation and refresh the Mission after mutations.
 - `EntityCommandbar.svelte` renders `commands`, tracks command pending/error state, requests command confirmation, and calls `executeCommand(commandId, input)` on the browser Entity wrapper.
 - Mission, Task, Artifact, and AgentSession wrappers now use Commandbar naming and `onCommandExecuted` callbacks.
 
@@ -367,9 +367,9 @@ sequenceDiagram
     Operator->>Bar: choose stage.generateTasks
     Bar->>StageClient: executeCommand(commandId, input)
     StageClient->>MissionClient: child command gateway
-    MissionClient->>Remote: command({ entity: Stage, method: executeCommand, payload })
+    MissionClient->>Remote: command({ entity: Stage, method: command, payload })
     Remote->>Daemon: forward command
-    Daemon->>Stage: executeCommand(payload, registry)
+    Daemon->>Stage: command(payload, registry)
     Stage->>Registry: loadRequiredMission(missionId)
     Registry-->>Stage: Mission
     Stage->>Mission: generateTasksForStage(stageId)
@@ -400,9 +400,9 @@ sequenceDiagram
 
     Operator->>Bar: choose task.start or task.rework
     Bar->>TaskClient: executeCommand(commandId, input)
-    TaskClient->>Remote: command({ entity: Task, method: executeCommand, payload })
+    TaskClient->>Remote: command({ entity: Task, method: command, payload })
     Remote->>Daemon: forward command
-    Daemon->>Task: executeCommand(payload, registry)
+    Daemon->>Task: command(payload, registry)
     Task->>Registry: loadRequiredMission(missionId)
     Registry-->>Task: Mission
     Task->>Mission: startTask/completeTask/reworkTask/etc.
@@ -447,7 +447,7 @@ sequenceDiagram
     Daemon-->>ArtifactClient: parsed result
 ```
 
-Current drift: Artifact advertises an `executeCommand` mutation but no Artifact commands exist. Target state should either remove it or implement real Artifact-owned commands.
+Artifact remains command-light: it exposes read/write document behavior and no command mutation until a real Artifact-owned command exists.
 
 ### AgentSession Lifecycle Command
 
@@ -465,9 +465,9 @@ sequenceDiagram
 
     Operator->>Bar: choose agentSession.cancel
     Bar->>SessionClient: executeCommand(commandId, input)
-    SessionClient->>Remote: command({ entity: AgentSession, method: executeCommand, payload })
+    SessionClient->>Remote: command({ entity: AgentSession, method: command, payload })
     Remote->>Daemon: forward command
-    Daemon->>Session: executeCommand(payload, registry)
+    Daemon->>Session: command(payload, registry)
     Session->>Registry: loadRequiredMission(missionId)
     Registry-->>Session: Mission
     Session->>Mission: cancelAgentSession/terminateAgentSession/completeAgentSession
@@ -555,7 +555,7 @@ Remove payload fields that repeat the operation under another name.
 
 ### 2. Move Command Id Ownership To The Owning Entity
 
-Status: still open. `MissionCommandDescriptors.ts` is still the central command id registry for Mission, Stage, Task, and AgentSession commands.
+Status: partially implemented. Stage, Task, and AgentSession now expose canonical `command` mutations; `MissionCommandDescriptors.ts` still builds the descriptor set for the Mission tree.
 
 Choose one ownership model and make it visible in files:
 
@@ -566,19 +566,19 @@ The preferred model matches the user's rule: everything that can be linked to an
 
 ### 3. Collapse Redundant Mission Read Models
 
-Status: still open. `MissionProjectionSnapshot` remains separate from `MissionSnapshot`.
+Status: still open. `MissionControlViewSnapshot` remains separate from `MissionSnapshot`.
 
-Review `MissionSnapshot` and `MissionProjectionSnapshot` together.
+Review `MissionSnapshot` and `MissionControlViewSnapshot` together.
 
-Delete `MissionProjectionSnapshot` if it only carries subsets of `MissionSnapshot`. Keep one authoritative snapshot and let Airport select fields locally.
+Delete `MissionControlViewSnapshot` if it only carries subsets of `MissionSnapshot`. Keep one authoritative snapshot and let Airport select fields locally.
 
-Keep a separate projection only if it has a stable, named domain contract that is not just a smaller snapshot.
+Keep a separate control view only if it has a stable, named domain contract that is not just a smaller snapshot.
 
 ### 4. Move Tower/Status Presentation Out Of Core Mission
 
-Status: still open. `MissionStatusProjection.ts` remains in core and should be renamed, moved, or explicitly justified as an operator read model.
+Status: still open. `MissionStatusView.ts` remains in core and should be renamed, moved, or explicitly justified as an operator read model.
 
-`MissionStatusProjection.ts` should become one of these:
+`MissionStatusView.ts` should become one of these:
 
 - an Airport read-model module, if it exists for browser/operator layout;
 - an explicit `MissionOperatorView` contract, if core intentionally publishes operator views;
@@ -616,14 +616,14 @@ This preserves the registry boundary without creating another Mission authority.
 1. Should `sendPrompt`, `sendCommand`, and terminal input become Entity commands, or remain typed runtime input methods?
 2. Should core publish an operator view, or should Airport own all tower/tree/status presentation?
 3. Should child command ids live in each child contract or in one Mission-tree command registry?
-4. Should `Artifact.executeCommand` be removed until Artifact has real commands?
+4. What Artifact-owned command should justify adding an Artifact `command` mutation?
 5. Should `MissionSnapshot` become the only Mission read model?
 
 ## Recommended Next Implementation Order
 
 1. Move child command ids/input schemas into child Entity schema/contract files.
-2. Remove or hide `Artifact.executeCommand` until Artifact has real commands.
-3. Collapse `MissionProjectionSnapshot` into `MissionSnapshot` or rename it as an intentional operator view.
-4. Move or rename `MissionStatusProjection.ts` so Airport presentation is not mistaken for Mission runtime truth.
+2. Keep Artifact command-light until Artifact has real commands.
+3. Collapse `MissionControlViewSnapshot` into `MissionSnapshot` or rename it as an intentional operator view.
+4. Move or rename `MissionStatusView.ts` so Airport presentation is not mistaken for Mission runtime truth.
 5. Narrow `MissionRegistry` handles so the registry loads and scopes Missions without becoming another Mission authority.
 6. Decide whether AgentSession prompt/runtime command/terminal input remain explicit input channels or become typed Entity commands.

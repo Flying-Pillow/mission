@@ -3,7 +3,7 @@ import { Stage } from './Stage.js';
 import {
     stageEntityName,
     StageLocatorSchema,
-    StageExecuteCommandInputSchema,
+    StageCommandInputSchema,
     StageStorageSchema,
     StageDataSchema,
     StageCommandAcknowledgementSchema,
@@ -23,9 +23,9 @@ export const StageContract: EntityContractType = {
             result: StageDataSchema,
             execution: 'class'
         },
-        executeCommand: {
+        command: {
             kind: 'mutation',
-            payload: StageExecuteCommandInputSchema,
+            payload: StageCommandInputSchema,
             result: StageCommandAcknowledgementSchema,
             execution: 'entity'
         }

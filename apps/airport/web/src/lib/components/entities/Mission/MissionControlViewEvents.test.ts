@@ -8,11 +8,11 @@ import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pil
 import type { TaskDataType, TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { MissionGatewayDependencies } from './Mission.svelte.js';
 
-describe('Mission projection reconciliation', () => {
+describe('Mission control view reconciliation', () => {
     it('reconciles targeted child entity snapshots without replacing unrelated mirrors', () => {
         const mission = createMission();
         mission.setRouteState({
-            projectionSnapshot: {
+            controlViewSnapshot: {
                 missionId: 'mission-29',
                 status: {
                     missionId: 'mission-29',
@@ -55,7 +55,7 @@ describe('Mission projection reconciliation', () => {
         expect(mission.getSession('session-1')?.lifecycleState).toBe('completed');
     });
 
-    it('reconciles Stage snapshots as authoritative stage child projections', () => {
+    it('reconciles Stage snapshots as authoritative stage child Entity snapshots', () => {
         const mission = createMission();
 
         mission.applyStageSnapshot(createStageSnapshot({
@@ -101,10 +101,12 @@ describe('Mission projection reconciliation', () => {
         });
 
         mission.applyArtifactSnapshot({
+            id: 'artifact:mission-29/mission-29:prd',
             artifactId: 'mission-29:prd',
             kind: 'stage',
             label: 'Requirements',
             fileName: 'PRD.md',
+            mimeType: 'text/markdown',
             relativePath: 'PRD.md',
             stageId: 'prd'
         });
@@ -134,23 +136,26 @@ function createMissionGatewayDependencies(readArtifactDocumentCalls: string[]): 
 }
 
 async function handleCommandInvocation(input: EntityCommandInvocation): Promise<EntityRemoteResult> {
-    if (input.entity === 'Stage' && input.method === 'executeCommand') {
+    if (input.entity === 'Stage' && input.method === 'command') {
         return createStageAcknowledgement();
     }
 
-    if (input.entity === 'Task' && input.method === 'executeCommand') {
+    if (input.entity === 'Task' && input.method === 'command') {
         return createTaskAcknowledgement();
     }
 
     if (input.entity === 'Artifact' && input.method === 'writeDocument') {
         return {
             filePath: 'PRD.md',
-            content: '# PRD'
+            body: {
+                mimeType: 'text/markdown',
+                content: '# PRD'
+            }
         };
     }
 
-    if (input.entity === 'AgentSession' && input.method === 'executeCommand') {
-        return createAgentSessionAcknowledgement('executeCommand');
+    if (input.entity === 'AgentSession' && input.method === 'command') {
+        return createAgentSessionAcknowledgement('command');
     }
 
     if (input.entity === 'AgentSession' && input.method === 'sendPrompt') {
@@ -184,11 +189,14 @@ async function handleQueryInvocation(
         readArtifactDocumentCalls.push(payload.artifactId);
         return {
             filePath: 'PRD.md',
-            content: '# PRD'
+            body: {
+                mimeType: 'text/markdown',
+                content: '# PRD'
+            }
         };
     }
 
-    if (input.entity === 'Mission' && input.method === 'readProjection') {
+    if (input.entity === 'Mission' && input.method === 'readControlView') {
         return {
             missionId: 'mission-29'
         };
@@ -216,7 +224,7 @@ function createStageAcknowledgement(): StageCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Stage',
-        method: 'executeCommand',
+        method: 'command',
         id: 'stage-1',
         missionId: 'mission-29',
         stageId: 'stage-1',
@@ -228,7 +236,7 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Task',
-        method: 'executeCommand',
+        method: 'command',
         id: 'task-1',
         missionId: 'mission-29',
         taskId: 'task-1',
@@ -244,7 +252,7 @@ function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledg
         id: 'session-1',
         missionId: 'mission-29',
         sessionId: 'session-1',
-        ...(method === 'executeCommand' ? { commandId: 'agentSession.cancel' } : {})
+        ...(method === 'command' ? { commandId: 'agentSession.cancel' } : {})
     };
 }
 
@@ -268,6 +276,7 @@ function createMissionSnapshot(): MissionSnapshotType {
     })];
     return {
         mission: {
+            id: 'mission:mission-29',
             missionId: 'mission-29',
             title: 'Mission 29',
             type: 'task',
@@ -305,6 +314,7 @@ function createStageSnapshot(input: {
     tasks: TaskDataType[];
 }): StageDataType {
     return {
+        id: 'stage:mission-29/implementation',
         stageId: 'implementation',
         lifecycle: input.lifecycle,
         isCurrentStage: true,
@@ -315,6 +325,7 @@ function createStageSnapshot(input: {
 
 function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
     return {
+        id: `task:mission-29/${taskId}`,
         taskId,
         stageId: 'implementation',
         sequence: taskId === 'task-1' ? 1 : 2,
@@ -330,10 +341,12 @@ function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
 
 function createArtifactSnapshot(artifactId: string, label: string): ArtifactDataType {
     return {
+        id: `artifact:mission-29/${artifactId}`,
         artifactId,
         kind: 'mission',
         label,
         fileName: 'VERIFY.md',
+        mimeType: 'text/markdown',
         relativePath: 'VERIFY.md'
     };
 }
@@ -343,9 +356,12 @@ function createSessionSnapshot(
     lifecycleState: AgentSessionDataType['lifecycleState']
 ): AgentSessionDataType {
     return {
+        id: `agent_session:mission-29/${sessionId}`,
         sessionId,
         runnerId: 'copilot-cli',
         runnerLabel: 'Copilot CLI',
-        lifecycleState
+        lifecycleState,
+        context: { artifacts: [], instructions: [] },
+        runtimeMessages: []
     };
 }

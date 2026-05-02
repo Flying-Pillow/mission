@@ -25,15 +25,15 @@ afterEach(async () => {
 });
 
 describe('Mission', () => {
-    it('builds mission snapshots and projections from the Mission instance', async () => {
+    it('builds mission snapshots and control views from the Mission instance', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(200, 'Mission owned projections'),
-                branchRef: adapter.deriveMissionBranchName(200, 'Mission owned projections')
+                brief: createBrief(200, 'Mission owned control views'),
+                branchRef: adapter.deriveMissionBranchName(200, 'Mission owned control views')
             }, createWorkflowBindings(runner));
 
             try {
@@ -41,11 +41,11 @@ describe('Mission', () => {
                 const missionId = mission.getRecord().id;
 
                 const snapshot = await mission.buildMissionSnapshot();
-                const projection = await mission.buildMissionProjectionSnapshot();
+                const controlView = await mission.buildMissionControlViewSnapshot();
 
                 expect(snapshot.mission.missionId).toBe(missionId);
                 expect(snapshot.mission.commands).toEqual(expect.any(Array));
-                expect(projection.missionId).toBe(missionId);
+                expect(controlView.missionId).toBe(missionId);
                 expect(snapshot.mission.commands?.length).toBeGreaterThan(0);
             } finally {
                 mission.dispose();

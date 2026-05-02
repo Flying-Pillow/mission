@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
     EntityCommandDescriptorSchema,
+    EntityIdSchema,
     EntityEventEnvelopeSchema
 } from '../Entity/EntitySchema.js';
 import {
@@ -164,6 +165,7 @@ export const MissionStatusSnapshotSchema = z.object({
 }).strict();
 
 export const MissionStorageSchema = z.object({
+    id: EntityIdSchema,
     missionId: z.string().trim().min(1),
     title: z.string().trim().min(1),
     issueId: z.number().int().positive().optional(),
@@ -220,7 +222,7 @@ export const MissionSnapshotSchema = z.object({
     worktree: MissionWorktreeSnapshotSchema.optional()
 }).strict();
 
-export const MissionProjectionSnapshotSchema = z.object({
+export const MissionControlViewSnapshotSchema = z.object({
     missionId: z.string().trim().min(1),
     status: MissionStatusSnapshotSchema.optional(),
     workflow: MissionWorkflowSnapshotSchema.optional(),
@@ -311,7 +313,7 @@ export const MissionDocumentWriteAcknowledgementSchema = EntityCommandAcknowledg
 export const missionRemoteQueryInputSchemas = {
     find: MissionFindSchema,
     read: MissionLocatorSchema,
-    readProjection: MissionLocatorSchema,
+    readControlView: MissionLocatorSchema,
     readDocument: MissionReadDocumentInputSchema,
     readWorktree: MissionLocatorSchema,
     readTerminal: MissionLocatorSchema
@@ -327,7 +329,7 @@ export const missionRemoteCommandInputSchemas = {
 export const missionRemoteQueryResultSchemas = {
     find: z.array(MissionCatalogEntrySchema),
     read: MissionSnapshotSchema,
-    readProjection: MissionProjectionSnapshotSchema,
+    readControlView: MissionControlViewSnapshotSchema,
     readDocument: MissionDocumentSnapshotSchema,
     readWorktree: MissionWorktreeSnapshotSchema,
     readTerminal: MissionTerminalSnapshotSchema
@@ -353,7 +355,7 @@ export type MissionSendTerminalInputType = z.infer<typeof MissionSendTerminalInp
 export type MissionCommandInputType = z.infer<typeof MissionCommandInputSchema>;
 export type MissionWriteDocumentInputType = z.infer<typeof MissionWriteDocumentInputSchema>;
 export type MissionSnapshotType = z.infer<typeof MissionSnapshotSchema>;
-export type MissionProjectionSnapshotType = z.infer<typeof MissionProjectionSnapshotSchema>;
+export type MissionControlViewSnapshotType = z.infer<typeof MissionControlViewSnapshotSchema>;
 export type MissionRuntimeEventEnvelopeType = z.infer<typeof MissionRuntimeEventEnvelopeSchema>;
 export type MissionStorageType = z.infer<typeof MissionStorageSchema>;
 export type MissionDataType = z.infer<typeof MissionDataSchema>;

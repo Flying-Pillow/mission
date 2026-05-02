@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
@@ -50,7 +50,6 @@ import {
 	type MissionTaskArtifactReference,
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
-import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import { toAgentSession } from '../AgentSession/AgentSession.js';
@@ -58,18 +57,15 @@ import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow
 import {
 	createMissionArtifact,
 	createTaskArtifact
-} from '../Artifact/Artifact.js';
+} from '../Artifact/ArtifactFactory.js';
 import { Task, toTask } from '../Task/Task.js';
 import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
 import type { TaskDataType } from '../Task/TaskSchema.js';
-import { TaskCommandIds } from '../Task/TaskSchema.js';
 import {
 	createStage,
 	isMissionDelivered,
 } from '../Stage/Stage.js';
 import type { StageDataType } from '../Stage/StageSchema.js';
-import { StageCommandIds } from '../Stage/StageSchema.js';
-import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import {
 	MissionCommandAcknowledgementSchema,
 	MissionCommandInputSchema,
@@ -96,22 +92,18 @@ import {
 } from '../../workflow/engine/types.js';
 import {
 	MissionCommandIds,
-	missionCommand,
-	ownedAgentSessionCommand,
-	ownedMissionCommand,
-	ownedStageCommand,
-	ownedTaskCommand,
 	type MissionAvailableCommandSnapshot,
 	type MissionOwnedCommandDescriptor
 } from './MissionCommandDescriptors.js';
+import { buildMissionAvailableCommands } from './MissionAvailableCommands.js';
 import {
-	buildMissionProjectionSnapshot,
+	buildMissionControlViewSnapshot,
 	buildMissionSnapshot
-} from './MissionProjection.js';
+} from './MissionControlView.js';
 import {
-	buildMissionStatusProjection,
+	buildMissionStatusView,
 	resolveCurrentMissionStage
-} from './MissionStatusProjection.js';
+} from './MissionStatusView.js';
 
 export type MissionWorkflowBindings = {
 	workflow: WorkflowDefinition;
@@ -161,10 +153,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.buildMissionSnapshot();
 	}
 
-	public async readProjection(payload: unknown, _context: EntityExecutionContext) {
+	public async readControlView(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionLocatorSchema.parse(payload);
 		this.assertResolvedMissionId(input.missionId);
-		return this.buildMissionProjectionSnapshot();
+		return this.buildMissionControlViewSnapshot();
 	}
 
 	public async readDocument(payload: unknown, context: EntityExecutionContext) {
@@ -519,9 +511,9 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	public async buildMissionProjectionSnapshot() {
+	public async buildMissionControlViewSnapshot() {
 		const snapshot = await this.buildMissionSnapshot();
-		return buildMissionProjectionSnapshot({
+		return buildMissionControlViewSnapshot({
 			snapshot
 		});
 	}
@@ -820,7 +812,7 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private async buildStatus(document?: MissionStateData): Promise<OperatorStatus> {
 		const persistedDocument = document ?? await this.workflowController.getPersistedDocument();
-		return buildMissionStatusProjection({
+		return buildMissionStatusView({
 			adapter: this.adapter,
 			missionDir: this.missionDir,
 			descriptor: this.descriptor,
@@ -1104,6 +1096,7 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private createTask(task: MissionTaskState): Task {
 		return new Task({
+			missionId: this.descriptor.missionId,
 			isMissionDelivered: () => isMissionDelivered(this.lastKnownStatus?.stages ?? []),
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
@@ -1523,7 +1516,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public get id(): string {
-		return this.missionId;
+		return this.data.id;
 	}
 
 	public get missionId(): string {
@@ -1628,6 +1621,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			}
 
 			artifacts.push(createMissionArtifact({
+				missionId,
 				artifactKey,
 				filePath,
 				...(missionRootDir ? { missionRootDir } : {})
@@ -1638,6 +1632,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
 				.map((artifactKey) => productFiles[artifactKey]
 					? createMissionArtifact({
+						missionId,
 						artifactKey,
 						filePath: productFiles[artifactKey],
 						stageId: stage.stage,
@@ -1646,9 +1641,10 @@ export class Mission extends Entity<MissionDataType, string> {
 					: undefined)
 				.filter((artifact): artifact is ArtifactDataType => artifact !== undefined);
 			const tasks: TaskDataType[] = stage.tasks.map((task) => {
-				const entity = toTask(task);
+				const entity = toTask(task, missionId);
 				if (task.filePath) {
 					artifacts.push(createTaskArtifact({
+						missionId,
 						taskId: task.taskId,
 						stageId: task.stage,
 						fileName: task.fileName,
@@ -1659,6 +1655,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				return entity;
 			});
 			return createStage({
+				id: createEntityId('stage', `${missionId}/${stage.stage}`),
 				stageId: stage.stage,
 				lifecycle: stage.status,
 				isCurrentStage: currentStageId === stage.stage,
@@ -1668,6 +1665,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 
 		return MissionDataSchema.parse({
+			id: createEntityId('mission', missionId),
 			missionId,
 			title: requireTrimmedString(status.title, 'Mission status title'),
 			...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
@@ -1701,6 +1699,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		descriptor: MissionDossierDescriptor
 	): MissionDataType {
 		return MissionDataSchema.parse({
+			id: createEntityId('mission', descriptor.missionId),
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {}),
@@ -1727,303 +1726,6 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 }
 
-
-type MissionAvailableCommandsInput = {
-	missionId: string;
-	configuration: MissionStateData['configuration'];
-	runtime: MissionStateData['runtime'];
-	sessions: AgentSessionRecord[];
-};
-
-
-function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor[] {
-	const eligibleStageId = resolveEligibleStageId(input);
-	const commands: MissionOwnedCommandDescriptor[] = [
-		buildPauseMissionCommand(input),
-		buildResumeMissionCommand(input),
-		buildPanicStopCommand(input),
-		buildClearPanicCommand(input),
-		buildRestartLaunchQueueCommand(input),
-		buildDeliverMissionCommand(input)
-	];
-
-	if (eligibleStageId) {
-		const generationCommand = buildGenerationCommand(input, eligibleStageId);
-		if (generationCommand) {
-			commands.push(generationCommand);
-		}
-	}
-
-	for (const task of getOrderedTasks(input)) {
-		commands.push(buildTaskStartCommand(input, task));
-		commands.push(buildTaskDoneCommand(input, task));
-		commands.push(buildTaskReopenCommand(input, task));
-		commands.push(buildTaskReworkCommand(input, task));
-		commands.push(...buildTaskLaunchPolicyCommands(input, task));
-	}
-
-	for (const session of getOrderedSessions(input)) {
-		commands.push(buildSessionCancelCommand(session));
-		commands.push(buildSessionTerminateCommand(session));
-	}
-
-	return commands;
-}
-
-function buildAvailability(
-	enabled: boolean,
-	reason?: string
-): { disabled: boolean; disabledReason?: string; description?: string } {
-	if (enabled) {
-		return { disabled: false };
-	}
-	const disabledReason = reason ?? 'Command is unavailable.';
-	return { disabled: true, disabledReason, description: disabledReason };
-}
-
-function buildPauseMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const enabled = input.runtime.lifecycle === 'running';
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.pause,
-		label: 'Pause Mission',
-		...buildAvailability(enabled, describePauseUnavailable(input)),
-		requiresConfirmation: false
-	}));
-}
-
-function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'mission.resumed' });
-	const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.resume,
-		label: 'Resume Mission',
-		...buildAvailability(enabled, describeResumeUnavailable(input, errors)),
-		requiresConfirmation: false
-	}));
-}
-
-function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
-	const enabled =
-		input.runtime.lifecycle !== 'draft'
-		&& input.runtime.lifecycle !== 'completed'
-		&& input.runtime.lifecycle !== 'delivered'
-		&& !input.runtime.panic.active
-		&& errors.length === 0;
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.panic,
-		label: 'Panic Stop',
-		...buildAvailability(enabled, describePanicUnavailable(input, errors)),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Stop all active mission work immediately?',
-		variant: 'destructive'
-	}));
-}
-
-function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
-	const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.clearPanic,
-		label: 'Clear Panic',
-		...buildAvailability(enabled, describeClearPanicUnavailable(input, errors)),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Clear the mission panic state?'
-	}));
-}
-
-function buildRestartLaunchQueueCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'mission.launch-queue.restarted' });
-	const enabled = errors.length === 0;
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.restartQueue,
-		label: 'Restart Launch Queue',
-		...buildAvailability(enabled, describeRestartLaunchQueueUnavailable(input, errors)),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Clear stale launch requests and retry queued tasks now?'
-	}));
-}
-
-function buildDeliverMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'mission.delivered' });
-	const delivered = isRuntimeDelivered(input.runtime);
-	return ownedMissionCommand(missionCommand({
-		commandId: MissionCommandIds.deliver,
-		label: 'Deliver Mission',
-		...buildAvailability(!delivered && errors.length === 0, delivered ? 'Mission already delivered.' : errors[0]),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Deliver this mission now?'
-	}));
-}
-
-function buildGenerationCommand(
-	input: MissionAvailableCommandsInput,
-	stageId: MissionStageId
-): MissionOwnedCommandDescriptor | undefined {
-	const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
-	if (
-		!generationRule
-		|| (!generationRule.artifactTasks && generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
-	) {
-		return undefined;
-	}
-	if (input.runtime.tasks.some((task) => task.stageId === stageId)) {
-		return undefined;
-	}
-	if (resolveEligibleStageId(input) !== stageId) {
-		return undefined;
-	}
-	const displayName = input.configuration.workflow.stages[stageId]?.displayName ?? stageId;
-	return ownedStageCommand(stageId, missionCommand({
-		commandId: StageCommandIds.generateTasks,
-		label: `Generate ${displayName} Tasks`,
-		...buildAvailability(true),
-		requiresConfirmation: false
-	}));
-}
-
-function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'task.queued', taskId: task.taskId });
-	const enabled = task.lifecycle === 'ready' && errors.length === 0;
-	return ownedTaskCommand(task.taskId, missionCommand({
-		commandId: TaskCommandIds.start,
-		label: 'Start Ready Task',
-		...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
-		requiresConfirmation: false
-	}));
-}
-
-function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
-	return ownedTaskCommand(task.taskId, missionCommand({
-		commandId: TaskCommandIds.complete,
-		label: 'Mark Task Done',
-		...buildAvailability(errors.length === 0, errors[0]),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Mark this task done?'
-	}));
-}
-
-function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
-	const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
-	return ownedTaskCommand(task.taskId, missionCommand({
-		commandId: TaskCommandIds.reopen,
-		label: 'Reopen Task',
-		...buildAvailability(errors.length === 0, errors[0]),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Reopen this task and invalidate downstream stage progress?'
-	}));
-}
-
-function buildTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
-	const verificationCommand = buildVerificationDerivedTaskReworkCommand(input, task);
-	if (verificationCommand) {
-		return verificationCommand;
-	}
-
-	const errors = getValidationErrors(input, {
-		type: 'task.reworked',
-		taskId: task.taskId,
-		actor: 'human',
-		reasonCode: 'manual.rework',
-		summary: 'Manual corrective rework requested.',
-		artifactRefs: []
-	});
-	return ownedTaskCommand(task.taskId, missionCommand({
-		commandId: TaskCommandIds.rework,
-		label: 'Instruct',
-		...buildAvailability(errors.length === 0, errors[0]),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Restart this task with corrective guidance?',
-		input: {
-			kind: 'text',
-			label: 'Instruction',
-			placeholder: 'Explain what was wrong and how the next attempt should correct it.',
-			required: true,
-			multiline: true
-		}
-	}));
-}
-
-function buildVerificationDerivedTaskReworkCommand(
-	input: MissionAvailableCommandsInput,
-	task: MissionStateData['runtime']['tasks'][number]
-): MissionOwnedCommandDescriptor | undefined {
-	const targetTask = resolveVerificationReworkTargetTask(input.runtime.tasks, task);
-	if (!targetTask) {
-		return undefined;
-	}
-
-	const errors = getValidationErrors(input, {
-		type: 'task.reworked',
-		taskId: targetTask.taskId,
-		actor: 'workflow',
-		reasonCode: 'verification.failed',
-		summary: `Verification task '${task.title}' requested corrective rework for '${targetTask.title}'.`,
-		sourceTaskId: task.taskId,
-		artifactRefs: []
-	});
-
-	return ownedTaskCommand(task.taskId, missionCommand({
-		commandId: TaskCommandIds.reworkFromVerification,
-		label: 'Send Back',
-		...buildAvailability(errors.length === 0, errors[0]),
-		requiresConfirmation: true,
-		confirmationPrompt: `Send '${targetTask.title}' back for fixes using the evidence captured by verification task '${task.title}'?`
-	}));
-}
-
-function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor[] {
-	const commands: MissionOwnedCommandDescriptor[] = [];
-	const changeErrors = (autostart: boolean) => getValidationErrors(input, {
-		type: 'task.launch-policy.changed',
-		taskId: task.taskId,
-		autostart
-	});
-
-	if (task.runtime.autostart) {
-		const errors = changeErrors(false);
-		commands.push(ownedTaskCommand(task.taskId, missionCommand({
-			commandId: TaskCommandIds.disableAutostart,
-			label: 'Disable Autostart',
-			...buildAvailability(errors.length === 0, errors[0]),
-			requiresConfirmation: false
-		})));
-	} else {
-		const errors = changeErrors(true);
-		commands.push(ownedTaskCommand(task.taskId, missionCommand({
-			commandId: TaskCommandIds.enableAutostart,
-			label: 'Enable Autostart',
-			...buildAvailability(errors.length === 0, errors[0]),
-			requiresConfirmation: false
-		})));
-	}
-
-	return commands;
-}
-
-function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
-	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
-	return ownedAgentSessionCommand(session.sessionId, missionCommand({
-		commandId: AgentSessionCommandIds.cancel,
-		label: 'Stop Running Agent',
-		...buildAvailability(enabled, 'Session is not active.'),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Stop the running agent session?'
-	}));
-}
-
-function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
-	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
-	return ownedAgentSessionCommand(session.sessionId, missionCommand({
-		commandId: AgentSessionCommandIds.terminate,
-		label: 'Force Stop Agent',
-		...buildAvailability(enabled, 'Session is not active.'),
-		requiresConfirmation: true,
-		confirmationPrompt: 'Force stop this agent session?',
-		variant: 'destructive'
-	}));
-}
 
 function cloneMissionAgentConsoleState(
 	state: MissionAgentConsoleState
@@ -2055,26 +1757,6 @@ function createEmptyMissionAgentConsoleState(
 	};
 }
 
-function resolveVerificationReworkTargetTask(
-	tasks: Array<{ taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined }>,
-	task: { taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined }
-) {
-	if (task.taskKind !== 'verification' || !task.pairedTaskId) {
-		return undefined;
-	}
-
-	return tasks.find((candidate) => candidate.taskId === task.pairedTaskId && candidate.taskKind === 'implementation');
-}
-
-function describePauseUnavailable(input: MissionAvailableCommandsInput): string {
-	switch (input.runtime.lifecycle) {
-		case 'paused': return 'Mission is already paused.';
-		case 'panicked': return 'Mission is panicked.';
-		case 'delivered': return 'Mission already delivered.';
-		default: return 'Mission is not running.';
-	}
-}
-
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		const timeout = setTimeout(() => {
@@ -2094,101 +1776,10 @@ function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<
 	});
 }
 
-function describeResumeUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-	if (input.runtime.panic.active) {
-		return 'Clear panic before resuming the mission.';
-	}
-	if (input.runtime.lifecycle !== 'paused') {
-		return 'Mission is not paused.';
-	}
-	return errors[0] ?? 'Mission cannot be resumed.';
-}
-
-function describePanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-	if (input.runtime.panic.active) {
-		return 'Mission is already in panic state.';
-	}
-	if (input.runtime.lifecycle === 'draft') {
-		return 'Start the workflow before using panic stop.';
-	}
-	if (input.runtime.lifecycle === 'completed') {
-		return 'Mission is already completed.';
-	}
-	if (input.runtime.lifecycle === 'delivered') {
-		return 'Mission already delivered.';
-	}
-	return errors[0] ?? 'Mission cannot enter panic state.';
-}
-
-function describeClearPanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-	if (!input.runtime.panic.active) {
-		return 'Mission is not panicked.';
-	}
-	return errors[0] ?? 'Panic cannot be cleared right now.';
-}
-
-function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-	if (input.runtime.panic.active || input.runtime.lifecycle === 'panicked') {
-		return 'Clear panic before restarting the launch queue.';
-	}
-	if (input.runtime.pause.paused || input.runtime.lifecycle !== 'running') {
-		return 'Mission must be running to restart the launch queue.';
-	}
-	const hasQueuedWork =
-		input.runtime.launchQueue.length > 0
-		|| input.runtime.tasks.some((task) => task.lifecycle === 'queued');
-	if (!hasQueuedWork) {
-		return 'There are no queued tasks to restart.';
-	}
-	return errors[0] ?? 'Launch queue cannot be restarted right now.';
-}
-
-function describeTaskStartUnavailable(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number], errors: string[]): string {
-	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
-		return 'Clear panic before starting new work.';
-	}
-	if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
-		return 'Resume the mission before starting new work.';
-	}
-	switch (task.lifecycle) {
-		case 'pending':
-			return task.waitingOnTaskIds.length > 0 ? `Waiting on ${task.waitingOnTaskIds.join(', ')}.` : 'Waiting for an earlier stage to become eligible.';
-		case 'queued': return 'Task is already queued.';
-		case 'running': return 'Task is already running.';
-		case 'completed': return 'Task is already completed.';
-		case 'failed':
-		case 'cancelled':
-			return 'Reopen the task before starting it again.';
-		default:
-			return errors[0] ?? 'Task is not ready to start.';
-	}
-}
-
 function isActiveAgentSession(lifecycleState: MissionAgentLifecycleState): boolean {
 	return lifecycleState === 'starting'
 		|| lifecycleState === 'running'
 		|| lifecycleState === 'awaiting-input';
-}
-
-function getValidationErrors(
-	input: MissionAvailableCommandsInput,
-	event:
-		| { type: 'mission.resumed' }
-		| { type: 'mission.panic.requested' }
-		| { type: 'mission.panic.cleared' }
-		| { type: 'mission.launch-queue.restarted' }
-		| { type: 'mission.delivered' }
-		| { type: 'task.queued'; taskId: string }
-		| { type: 'task.completed'; taskId: string }
-		| { type: 'task.reopened'; taskId: string }
-		| { type: 'task.reworked'; taskId: string; actor: 'human' | 'system' | 'workflow'; reasonCode: string; summary: string; sourceTaskId?: string; sourceSessionId?: string; artifactRefs: Array<{ path: string; title?: string }> }
-		| { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean }
-): string[] {
-	return getMissionWorkflowEventValidationErrors(
-		input.runtime,
-		{ eventId: `${input.missionId}:command`, occurredAt: input.runtime.updatedAt, source: 'human', ...event } as MissionWorkflowEvent,
-		input.configuration
-	);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2212,35 +1803,5 @@ function requireArray<T>(value: T[] | undefined, fieldName: string): T[] {
 
 function missionEntityTypeSchemaFromStatus(value: MissionType | undefined): MissionType {
 	return MissionEntityTypeSchema.parse(value);
-}
-
-function getOrderedTasks(input: MissionAvailableCommandsInput) {
-	return [...input.runtime.tasks].sort((left, right) => {
-		const leftStageIndex = input.configuration.workflow.stageOrder.indexOf(left.stageId);
-		const rightStageIndex = input.configuration.workflow.stageOrder.indexOf(right.stageId);
-		if (leftStageIndex !== rightStageIndex) {
-			return leftStageIndex - rightStageIndex;
-		}
-		return left.taskId.localeCompare(right.taskId);
-	});
-}
-
-function getOrderedSessions(input: MissionAvailableCommandsInput) {
-	return [...input.sessions].sort((left, right) => left.sessionId.localeCompare(right.sessionId));
-}
-
-function resolveEligibleStageId(input: MissionAvailableCommandsInput): MissionStageId | undefined {
-	for (const stageId of input.configuration.workflow.stageOrder) {
-		const stageTasks = input.runtime.tasks.filter((task) => task.stageId === stageId);
-		const completed = stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed');
-		if (!completed) {
-			return stageId as MissionStageId;
-		}
-	}
-	return input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined;
-}
-
-function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
-	return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
 }
 

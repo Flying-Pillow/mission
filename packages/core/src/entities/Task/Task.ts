@@ -2,7 +2,7 @@ import type {
 	MissionTaskArtifactReference
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
-import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import type { AgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
@@ -20,7 +20,7 @@ import type { MissionStateData } from '../../workflow/engine/index.js';
 import {
 	TaskDataSchema,
 	TaskCommandAcknowledgementSchema,
-	TaskExecuteCommandInputSchema,
+	TaskCommandInputSchema,
 	TaskLocatorSchema,
 	TaskCommandIds,
 	taskEntityName,
@@ -28,8 +28,13 @@ import {
 } from './TaskSchema.js';
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
-export function toTask(task: MissionTaskState): TaskDataType {
+export function createTaskEntityId(missionId: string, taskId: string): string {
+	return createEntityId('task', `${missionId}/${taskId}`);
+}
+
+export function toTask(task: MissionTaskState, missionId: string): TaskDataType {
 	return TaskDataSchema.parse({
+		id: createTaskEntityId(missionId, task.taskId),
 		taskId: task.taskId,
 		stageId: task.stage,
 		sequence: task.sequence,
@@ -53,6 +58,7 @@ export type TaskLaunchPolicy = {
 };
 
 export type TaskOwner = {
+	missionId: string;
 	isMissionDelivered(): boolean;
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
 	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string }): Promise<void>;
@@ -111,7 +117,7 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Task> {
-		const input = TaskExecuteCommandInputSchema.parse(payload);
+		const input = TaskCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -215,8 +221,9 @@ export class Task extends Entity<TaskDataType, string> {
 	public constructor(owner: TaskOwner, state: MissionTaskState);
 	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: MissionTaskState) {
 		if (state) {
-			super(toTask(state));
-			this.owner = ownerOrData as TaskOwner;
+			const owner = ownerOrData as TaskOwner;
+			super(toTask(state, owner.missionId));
+			this.owner = owner;
 			this.state = state;
 			return;
 		}
@@ -227,7 +234,7 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	public get id(): string {
-		return this.taskId;
+		return this.data.id;
 	}
 
 	public get taskId(): string {
@@ -335,8 +342,8 @@ export class Task extends Entity<TaskDataType, string> {
 		}
 	}
 
-	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = TaskExecuteCommandInputSchema.parse(payload);
+	public async command(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const terminalSessionName = service.getTerminalSessionName(input.input);
 		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
@@ -375,7 +382,7 @@ export class Task extends Entity<TaskDataType, string> {
 			return TaskCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'Task',
-				method: 'executeCommand',
+				method: 'command',
 				id: input.taskId,
 				missionId: input.missionId,
 				taskId: input.taskId,
@@ -416,7 +423,7 @@ export class Task extends Entity<TaskDataType, string> {
 	private async refresh(): Promise<void> {
 		const state = this.requireState();
 		this.state = await this.requireOwner().refreshTaskState(state.taskId);
-		this.updateFromData(toTask(this.state));
+		this.updateFromData(toTask(this.state, this.requireOwner().missionId));
 	}
 
 	private requireOwner(): TaskOwner {

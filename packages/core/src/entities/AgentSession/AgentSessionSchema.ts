@@ -1,7 +1,9 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema
+    EntityCommandDescriptorSchema,
+    EntityCommandInputDescriptorSchema,
+    EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
 export const agentSessionEntityName = 'AgentSession' as const;
@@ -67,7 +69,7 @@ export const AgentSessionEventSubjectSchema = AgentSessionLocatorSchema.extend({
     entity: z.literal(agentSessionEntityName)
 }).strict();
 
-export const AgentSessionExecuteCommandInputSchema = AgentSessionLocatorSchema.extend({
+export const AgentSessionCommandInputSchema = AgentSessionLocatorSchema.extend({
     commandId: AgentSessionCommandIdSchema,
     input: z.unknown().optional()
 }).strict();
@@ -175,6 +177,40 @@ export const AgentSessionTerminalSocketServerMessageSchema = z.discriminatedUnio
     }).strict()
 ]);
 
+export const AgentSessionContextArtifactRoleSchema = z.enum([
+    'instruction',
+    'reference',
+    'evidence',
+    'output'
+]);
+
+export const AgentSessionContextArtifactSchema = z.object({
+    artifactId: z.string().trim().min(1),
+    role: AgentSessionContextArtifactRoleSchema,
+    order: z.number().int().nonnegative(),
+    title: z.string().trim().min(1).optional()
+}).strict();
+
+export const AgentSessionContextInstructionSchema = z.object({
+    instructionId: z.string().trim().min(1),
+    text: z.string(),
+    order: z.number().int().nonnegative()
+}).strict();
+
+export const AgentSessionContextSchema = z.object({
+    artifacts: z.array(AgentSessionContextArtifactSchema),
+    instructions: z.array(AgentSessionContextInstructionSchema)
+}).strict();
+
+export const AgentRuntimeMessageDescriptorSchema = z.object({
+    type: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    description: z.string().trim().min(1).optional(),
+    delivery: z.enum(['best-effort']),
+    mutatesContext: z.boolean(),
+    input: EntityCommandInputDescriptorSchema.optional()
+}).strict();
+
 export type AgentSessionTerminalRouteParamsType = z.infer<typeof AgentSessionTerminalRouteParamsSchema>;
 export type AgentSessionTerminalQueryType = z.infer<typeof AgentSessionTerminalQuerySchema>;
 export type AgentSessionTerminalInputType = z.infer<typeof AgentSessionTerminalInputSchema>;
@@ -182,8 +218,14 @@ export type AgentSessionTerminalSnapshotType = z.infer<typeof AgentSessionTermin
 export type AgentSessionTerminalSocketClientMessageType = z.infer<typeof AgentSessionTerminalSocketClientMessageSchema>;
 export type AgentSessionTerminalOutputType = z.infer<typeof AgentSessionTerminalOutputSchema>;
 export type AgentSessionTerminalSocketServerMessageType = z.infer<typeof AgentSessionTerminalSocketServerMessageSchema>;
+export type AgentSessionContextArtifactRoleType = z.infer<typeof AgentSessionContextArtifactRoleSchema>;
+export type AgentSessionContextArtifactType = z.infer<typeof AgentSessionContextArtifactSchema>;
+export type AgentSessionContextInstructionType = z.infer<typeof AgentSessionContextInstructionSchema>;
+export type AgentSessionContextType = z.infer<typeof AgentSessionContextSchema>;
+export type AgentRuntimeMessageDescriptorType = z.infer<typeof AgentRuntimeMessageDescriptorSchema>;
 
 export const AgentSessionStorageSchema = z.object({
+    id: EntityIdSchema,
     sessionId: z.string().trim().min(1),
     runnerId: z.string().trim().min(1),
     transportId: z.string().trim().min(1).optional(),
@@ -205,6 +247,8 @@ export const AgentSessionStorageSchema = z.object({
     workingDirectory: z.string().trim().min(1).optional(),
     currentTurnTitle: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1).optional(),
+    context: AgentSessionContextSchema,
+    runtimeMessages: z.array(AgentRuntimeMessageDescriptorSchema),
     scope: z.unknown().optional(),
     telemetry: z.unknown().optional(),
     failureMessage: z.string().trim().min(1).optional(),
@@ -219,7 +263,7 @@ export const AgentSessionDataSchema = z.object({
 
 export const AgentSessionCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(agentSessionEntityName),
-    method: z.enum(['executeCommand', 'sendPrompt', 'sendCommand']),
+    method: z.enum(['command', 'sendPrompt', 'sendCommand']),
     id: z.string().trim().min(1),
     missionId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
@@ -244,7 +288,7 @@ export const agentSessionRemoteQueryInputSchemas = {
 } as const;
 
 export const agentSessionRemoteCommandInputSchemas = {
-    executeCommand: AgentSessionExecuteCommandInputSchema,
+    command: AgentSessionCommandInputSchema,
     sendPrompt: AgentSessionSendPromptInputSchema,
     sendCommand: AgentSessionSendCommandInputSchema,
     sendTerminalInput: AgentSessionSendTerminalInputSchema
@@ -256,7 +300,7 @@ export const agentSessionRemoteQueryResultSchemas = {
 } as const;
 
 export const agentSessionRemoteCommandResultSchemas = {
-    executeCommand: AgentSessionCommandAcknowledgementSchema,
+    command: AgentSessionCommandAcknowledgementSchema,
     sendPrompt: AgentSessionCommandAcknowledgementSchema,
     sendCommand: AgentSessionCommandAcknowledgementSchema,
     sendTerminalInput: AgentSessionTerminalSnapshotSchema
@@ -265,7 +309,7 @@ export const agentSessionRemoteCommandResultSchemas = {
 export type AgentSessionLocatorType = z.infer<typeof AgentSessionLocatorSchema>;
 export type AgentSessionEventSubjectType = z.infer<typeof AgentSessionEventSubjectSchema>;
 export type AgentSessionCommandIdType = z.infer<typeof AgentSessionCommandIdSchema>;
-export type AgentSessionExecuteCommandInputType = z.infer<typeof AgentSessionExecuteCommandInputSchema>;
+export type AgentSessionCommandInputType = z.infer<typeof AgentSessionCommandInputSchema>;
 export type AgentSessionSendPromptInputType = z.infer<typeof AgentSessionSendPromptInputSchema>;
 export type AgentSessionSendCommandInputType = z.infer<typeof AgentSessionSendCommandInputSchema>;
 export type AgentSessionSendTerminalInputType = z.infer<typeof AgentSessionSendTerminalInputSchema>;

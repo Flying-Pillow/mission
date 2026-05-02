@@ -1,11 +1,11 @@
-import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionStageId, MissionStageStatus } from '../../types.js';
 import { Task } from '../Task/Task.js';
 import type { MissionTaskState } from '../../types.js';
 import {
 	StageDataSchema,
 	StageCommandAcknowledgementSchema,
-	StageExecuteCommandInputSchema,
+	StageCommandInputSchema,
 	StageLocatorSchema,
 	StageCommandIds,
 	stageEntityName,
@@ -19,6 +19,10 @@ export function createStage(input: StageDataType): StageDataType {
 		artifacts: input.artifacts.map((artifact) => structuredClone(artifact)),
 		tasks: input.tasks.map((task) => structuredClone(task))
 	});
+}
+
+export function createStageEntityId(missionId: string, stageId: string): string {
+	return createEntityId('stage', `${missionId}/${stageId}`);
 }
 
 export class Stage extends Entity<StageDataType, string> {
@@ -52,7 +56,7 @@ export class Stage extends Entity<StageDataType, string> {
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Stage> {
-		const input = StageExecuteCommandInputSchema.parse(payload);
+		const input = StageCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -62,8 +66,8 @@ export class Stage extends Entity<StageDataType, string> {
 		}
 	}
 
-	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = StageExecuteCommandInputSchema.parse(payload);
+	public async command(payload: unknown, context: EntityExecutionContext) {
+		const input = StageCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
@@ -75,7 +79,7 @@ export class Stage extends Entity<StageDataType, string> {
 			return StageCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'Stage',
-				method: 'executeCommand',
+				method: 'command',
 				id: input.stageId,
 				missionId: input.missionId,
 				stageId: input.stageId,

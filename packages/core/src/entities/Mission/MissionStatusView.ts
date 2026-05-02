@@ -10,7 +10,7 @@ import {
 	type MissionStageId,
 	type MissionStageStatus,
 	type MissionTaskState,
-	type MissionTowerProjection,
+	type MissionTowerProjection as MissionTowerView,
 	type MissionTowerStageRailItem,
 	type MissionTowerTreeNode,
 	type OperatorStatus
@@ -23,7 +23,7 @@ import {
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
 import { getMissionStageDefinition } from '../../workflow/mission/manifest.js';
-import { collectArtifactFiles } from '../Artifact/Artifact.js';
+import { collectArtifactFiles } from '../Artifact/ArtifactFiles.js';
 import { Task } from '../Task/Task.js';
 import {
 	isMissionDelivered,
@@ -31,7 +31,7 @@ import {
 	resolveReadyStageTasks
 } from '../Stage/Stage.js';
 
-export type MissionStatusProjectionInput = {
+export type MissionStatusViewInput = {
 	adapter: FilesystemAdapter;
 	missionDir: string;
 	descriptor: MissionDescriptor;
@@ -41,9 +41,9 @@ export type MissionStatusProjectionInput = {
 	hydrateRuntimeTasksForActions(tasks: MissionStateData['runtime']['tasks']): Promise<MissionStateData['runtime']['tasks']>;
 };
 
-export async function buildMissionStatusProjection(input: MissionStatusProjectionInput): Promise<OperatorStatus> {
+export async function buildMissionStatusView(input: MissionStatusViewInput): Promise<OperatorStatus> {
 	if (!input.document) {
-		return buildDraftMissionStatusProjection(input);
+		return buildDraftMissionStatusView(input);
 	}
 
 	const hydratedWorkflowTasks = await input.hydrateRuntimeTasksForActions(input.document.runtime.tasks);
@@ -54,7 +54,7 @@ export async function buildMissionStatusProjection(input: MissionStatusProjectio
 	const activeTasks = resolveActiveStageTasks(currentStage);
 	const readyTasks = resolveReadyStageTasks(currentStage);
 	const productFiles = await collectArtifactFiles({ adapter: input.adapter, missionDir: input.missionDir });
-	const tower = buildTowerProjection(input.document.configuration, stages, input.sessions, productFiles);
+	const tower = buildTowerView(input.document.configuration, stages, input.sessions, productFiles);
 
 	return {
 		found: true,
@@ -93,9 +93,9 @@ export async function buildMissionStatusProjection(input: MissionStatusProjectio
 				waitingOnTaskIds: [...task.waitingOnTaskIds],
 				runtime: { ...task.runtime }
 			})),
-			gates: input.document.runtime.gates.map((gateProjection) => ({
-				...gateProjection,
-				reasons: [...gateProjection.reasons]
+			gates: input.document.runtime.gates.map((gateView) => ({
+				...gateView,
+				reasons: [...gateView.reasons]
 			})),
 			updatedAt: input.document.runtime.updatedAt
 		},
@@ -114,7 +114,7 @@ export function resolveCurrentMissionStage(document: MissionStateData): MissionS
 	) as MissionStageId);
 }
 
-async function buildDraftMissionStatusProjection(input: MissionStatusProjectionInput): Promise<OperatorStatus> {
+async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promise<OperatorStatus> {
 	const configuration = createMissionWorkflowConfigurationSnapshot({
 		createdAt: input.descriptor.createdAt,
 		workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -133,7 +133,7 @@ async function buildDraftMissionStatusProjection(input: MissionStatusProjectionI
 	}));
 	const currentStageId = (input.workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
 	const productFiles = await collectArtifactFiles({ adapter: input.adapter, missionDir: input.missionDir });
-	const tower = buildTowerProjection(configuration, stages, [], productFiles);
+	const tower = buildTowerView(configuration, stages, [], productFiles);
 
 	return {
 		found: true,
@@ -164,9 +164,9 @@ async function buildDraftMissionStatusProjection(input: MissionStatusProjectionI
 				completedTaskIds: [...stage.completedTaskIds]
 			})),
 			tasks: [],
-			gates: runtime.gates.map((gateProjection) => ({
-				...gateProjection,
-				reasons: [...gateProjection.reasons]
+			gates: runtime.gates.map((gateView) => ({
+				...gateView,
+				reasons: [...gateView.reasons]
 			})),
 			updatedAt: runtime.updatedAt
 		},
@@ -175,7 +175,7 @@ async function buildDraftMissionStatusProjection(input: MissionStatusProjectionI
 }
 
 async function buildWorkflowStageStatuses(
-	input: MissionStatusProjectionInput,
+	input: MissionStatusViewInput,
 	document: MissionStateData
 ): Promise<MissionStageStatus[]> {
 	return Promise.all(MISSION_STAGES.map(async (stageId) => {
@@ -231,12 +231,12 @@ async function buildWorkflowStageStatuses(
 	}));
 }
 
-function buildTowerProjection(
+function buildTowerView(
 	configuration: MissionStateData['configuration'],
 	stages: MissionStageStatus[],
 	sessions: AgentSessionRecord[],
 	productFiles: Partial<Record<MissionArtifactKey, string>>
-): MissionTowerProjection {
+): MissionTowerView {
 	return {
 		stageRail: stages.map((stage) => toTowerStageRailItem(stage, configuration)),
 		treeNodes: buildTowerTreeNodes(configuration, stages, sessions, productFiles)

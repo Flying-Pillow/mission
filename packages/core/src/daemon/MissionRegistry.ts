@@ -41,7 +41,7 @@ export type MissionHandle = Pick<
     | 'pauseMission'
     | 'read'
     | 'readDocument'
-    | 'readProjection'
+    | 'readControlView'
     | 'readTerminal'
     | 'readWorktree'
     | 'reopenTask'
@@ -352,7 +352,7 @@ export class MissionRegistry {
             pauseMission: mission.pauseMission.bind(mission),
             read: mission.read.bind(mission),
             readDocument: mission.readDocument.bind(mission),
-            readProjection: mission.readProjection.bind(mission),
+            readControlView: mission.readControlView.bind(mission),
             readTerminal: mission.readTerminal.bind(mission),
             readWorktree: mission.readWorktree.bind(mission),
             reopenTask: mission.reopenTask.bind(mission),

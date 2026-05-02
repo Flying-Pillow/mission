@@ -9,7 +9,7 @@ describe('Repository', () => {
         const repository = Repository.open('/tmp/mission-proof-of-concept');
 
         expect(repository.id).toMatch(/^repository:local\/mission-proof-of-concept\/[a-f0-9]{8}$/u);
-        expect(repository.toSchema().id).toBe(repository.id);
+        expect(repository.toStorage().id).toBe(repository.id);
         expect(repository.ownerId).toBe('local');
         expect(repository.repoName).toBe('mission-proof-of-concept');
         expect(repository.isInitialized).toBe(false);

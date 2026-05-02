@@ -24,7 +24,6 @@ import {
 	createDefaultRepositoryConfiguration,
 	GitHubIssueDetailSchema,
 	TrackedIssueSummarySchema,
-	type RepositoryPlatformKindType,
 	type RepositoryPlatformRepositoryType,
 	type RepositoryDataType,
 	type RepositoryStorageType,
@@ -343,30 +342,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return path.join(Repository.getMissionDaemonRoot(repositoryRootPath, options), 'settings.json');
 	}
 
-	public static readPlatform(
-		repositoryRootPath = process.cwd(),
-		options: { resolveWorkspaceRoot?: boolean } = {}
-	): RepositoryPlatformKindType | undefined {
-		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
-		try {
-			const content = fs.readFileSync(settingsPath, 'utf8').trim();
-			if (!content) {
-				return undefined;
-			}
-			const source = JSON.parse(content) as unknown;
-			if (!source || typeof source !== 'object' || Array.isArray(source)) {
-				return undefined;
-			}
-			const platform = (source as { platform?: unknown }).platform;
-			return platform === 'github' ? platform : undefined;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
-				return undefined;
-			}
-			throw error;
-		}
-	}
-
 	public static resolveSettingsDocument(input: unknown = {}): RepositorySettingsType {
 		return RepositorySettingsSchema.parse(input);
 	}
@@ -535,10 +510,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			isInitialized: value
 		});
 		return this;
-	}
-
-	public toSchema(): RepositoryStorageType {
-		return this.toStorage();
 	}
 
 	public toStorage(): RepositoryStorageType {

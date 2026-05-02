@@ -1,10 +1,14 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { ArtifactDocumentDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type {
+    ArtifactBodySnapshotType,
+    ArtifactBodyType
+} from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 
 export type ArtifactSnapshot = {
     artifactId: string;
     filePath: string;
+    mimeType: string;
     label?: string;
     stageId?: string;
     taskId?: string;
@@ -12,8 +16,8 @@ export type ArtifactSnapshot = {
 };
 
 export type ArtifactDependencies = {
-    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentDataType>;
-    writeDocument(filePath: string, content: string): Promise<ArtifactDocumentDataType>;
+    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactBodySnapshotType>;
+    writeDocument(filePath: string, body: ArtifactBodyType): Promise<ArtifactBodySnapshotType>;
 };
 
 export type ArtifactReadOptions = {
@@ -62,6 +66,10 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return this.snapshot.filePath;
     }
 
+    public get mimeType(): string {
+        return this.snapshot.mimeType;
+    }
+
     public get label(): string {
         return this.snapshot.label ?? basename(this.snapshot.filePath) ?? this.snapshot.filePath;
     }
@@ -78,12 +86,15 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return structuredClone($state.snapshot(this.snapshot.commands ?? []));
     }
 
-    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentDataType> {
+    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactBodySnapshotType> {
         return this.dependencies.readDocument(this.filePath, input);
     }
 
-    public async write(content: string): Promise<ArtifactDocumentDataType> {
-        return this.dependencies.writeDocument(this.filePath, content);
+    public async write(content: string): Promise<ArtifactBodySnapshotType> {
+        return this.dependencies.writeDocument(this.filePath, {
+            mimeType: this.mimeType,
+            content
+        });
     }
 
     public updateFromData(snapshot: ArtifactSnapshot): this {

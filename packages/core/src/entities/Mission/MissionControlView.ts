@@ -1,6 +1,6 @@
 import type { MissionStageId } from '../../types.js';
 import {
-    MissionProjectionSnapshotSchema,
+    MissionControlViewSnapshotSchema,
     MissionSnapshotSchema,
     type MissionDataType,
     type MissionSnapshotType
@@ -25,10 +25,10 @@ export function buildMissionSnapshot(input: {
     });
 }
 
-export function buildMissionProjectionSnapshot(input: {
+export function buildMissionControlViewSnapshot(input: {
     snapshot: MissionSnapshotType;
 }) {
-    return MissionProjectionSnapshotSchema.parse({
+    return MissionControlViewSnapshotSchema.parse({
         missionId: input.snapshot.mission.missionId,
         ...(input.snapshot.status ? { status: input.snapshot.status } : {}),
         ...(input.snapshot.workflow ? { workflow: input.snapshot.workflow } : {}),

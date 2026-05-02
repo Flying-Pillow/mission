@@ -3,10 +3,10 @@ import { Artifact } from './Artifact.js';
 import {
     artifactEntityName,
     ArtifactLocatorSchema,
-    ArtifactWriteDocumentInputSchema,
+    ArtifactWriteInputSchema,
     ArtifactStorageSchema,
     ArtifactDataSchema,
-    ArtifactDocumentDataSchema,
+    ArtifactBodySnapshotSchema,
     ArtifactSnapshotChangedEventSchema
 } from './ArtifactSchema.js';
 
@@ -26,13 +26,13 @@ export const ArtifactContract: EntityContractType = {
         readDocument: {
             kind: 'query',
             payload: ArtifactLocatorSchema,
-            result: ArtifactDocumentDataSchema,
+            result: ArtifactBodySnapshotSchema,
             execution: 'class'
         },
         writeDocument: {
             kind: 'mutation',
-            payload: ArtifactWriteDocumentInputSchema,
-            result: ArtifactDocumentDataSchema,
+            payload: ArtifactWriteInputSchema,
+            result: ArtifactBodySnapshotSchema,
             execution: 'class'
         }
     },

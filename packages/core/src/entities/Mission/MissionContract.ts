@@ -13,7 +13,7 @@ import {
     MissionDocumentSnapshotSchema,
     MissionWorktreeSnapshotSchema,
     MissionSnapshotSchema,
-    MissionProjectionSnapshotSchema,
+    MissionControlViewSnapshotSchema,
     MissionReadDocumentInputSchema,
     MissionLocatorSchema,
     MissionSendTerminalInputSchema,
@@ -50,10 +50,10 @@ export const MissionContract: EntityContractType = {
             result: MissionSnapshotSchema,
             execution: 'entity'
         },
-        readProjection: {
+        readControlView: {
             kind: 'query',
             payload: MissionLocatorSchema,
-            result: MissionProjectionSnapshotSchema,
+            result: MissionControlViewSnapshotSchema,
             execution: 'entity'
         },
         readDocument: {

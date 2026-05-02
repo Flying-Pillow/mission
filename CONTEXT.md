@@ -95,8 +95,12 @@ A derived Mission phase whose status comes from the progress of its Mission task
 _Avoid_: folder, independent state, milestone
 
 **Mission artifact**:
-A tracked human-readable file produced or consumed by a Mission at mission, stage, or task level.
+A tracked operator-facing file produced or consumed by a Mission at mission, stage, or task level.
 _Avoid_: document, file, output
+
+**Artifact body**:
+The transferable payload of a Mission artifact, interpreted according to the artifact MIME type.
+_Avoid_: document content, file content, output body
 
 **Mission-level artifact**:
 A Mission artifact that belongs directly to a Mission, such as `BRIEF.md`.

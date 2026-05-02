@@ -3,7 +3,7 @@ import { AgentSession } from './AgentSession.js';
 import {
     agentSessionEntityName,
     AgentSessionLocatorSchema,
-    AgentSessionExecuteCommandInputSchema,
+    AgentSessionCommandInputSchema,
     AgentSessionSendPromptInputSchema,
     AgentSessionSendCommandInputSchema,
     AgentSessionSendTerminalInputSchema,
@@ -35,9 +35,9 @@ export const AgentSessionContract: EntityContractType = {
             result: AgentSessionTerminalSnapshotSchema,
             execution: 'class'
         },
-        executeCommand: {
+        command: {
             kind: 'mutation',
-            payload: AgentSessionExecuteCommandInputSchema,
+            payload: AgentSessionCommandInputSchema,
             result: AgentSessionCommandAcknowledgementSchema,
             execution: 'entity'
         },
