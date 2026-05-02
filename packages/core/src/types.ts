@@ -440,8 +440,7 @@ export type AgentSessionContext = {
 	lifecycleState: string;
 	promptTitle?: string;
 	transportId?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionRecord['terminalHandle'];
 	createdAt?: string;
 	lastUpdatedAt?: string;
 };

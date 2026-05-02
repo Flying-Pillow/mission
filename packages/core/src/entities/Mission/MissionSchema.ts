@@ -10,8 +10,7 @@ import {
     AgentSessionTerminalHandleSchema,
     AgentSessionDataSchema,
     AgentSessionDataChangedSchema,
-    AgentSessionEventSchema,
-    AgentSessionLifecycleEventSchema
+    AgentSessionLifecycleStateSchema
 } from '../AgentSession/AgentSessionSchema.js';
 import {
     ArtifactEventLocatorSchema,
@@ -30,12 +29,30 @@ import {
 } from '../Task/TaskSchema.js';
 export const missionEntityName = 'Mission' as const;
 
+export const MissionCommandIds = {
+    pause: 'mission.pause',
+    resume: 'mission.resume',
+    panic: 'mission.panic',
+    clearPanic: 'mission.clearPanic',
+    restartQueue: 'mission.restartQueue',
+    deliver: 'mission.deliver'
+} as const;
+
+export const MissionCommandIdSchema = z.enum([
+    MissionCommandIds.pause,
+    MissionCommandIds.resume,
+    MissionCommandIds.panic,
+    MissionCommandIds.clearPanic,
+    MissionCommandIds.restartQueue,
+    MissionCommandIds.deliver
+]);
+
 export const MissionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
 export const MissionAgentRunnerSchema = z.enum(['copilot-cli', 'pi']);
 export const MissionDefaultAgentModeSchema = z.enum(['interactive', 'autonomous']);
 
 export const MissionCommandInvocationSchema = z.object({
-    commandId: z.string().trim().min(1),
+    commandId: MissionCommandIdSchema,
     input: z.unknown().optional()
 }).strict();
 
@@ -186,8 +203,35 @@ export const MissionStorageSchema = z.object({
 }).strict();
 
 export const MissionDataSchema = z.object({
-    ...MissionStorageSchema.shape,
-    commands: z.array(EntityCommandDescriptorSchema).optional()
+    ...MissionStorageSchema.shape
+}).strict();
+
+export const MissionCommandOwnerSchema = z.discriminatedUnion('entity', [
+    z.object({
+        entity: z.literal('Mission')
+    }).strict(),
+    z.object({
+        entity: z.literal('Stage'),
+        stageId: z.string().trim().min(1)
+    }).strict(),
+    z.object({
+        entity: z.literal('Task'),
+        taskId: z.string().trim().min(1)
+    }).strict(),
+    z.object({
+        entity: z.literal('AgentSession'),
+        sessionId: z.string().trim().min(1)
+    }).strict()
+]);
+
+export const MissionOwnedCommandDescriptorSchema = z.object({
+    owner: MissionCommandOwnerSchema,
+    command: EntityCommandDescriptorSchema
+}).strict();
+
+export const MissionCommandViewSnapshotSchema = z.object({
+    commands: z.array(MissionOwnedCommandDescriptorSchema),
+    revision: z.string().trim().min(1)
 }).strict();
 
 export type MissionWorktreeNodeData = {
@@ -214,6 +258,7 @@ export const MissionWorktreeSnapshotSchema = z.object({
 
 export const MissionSnapshotSchema = z.object({
     mission: MissionDataSchema,
+    commandView: MissionCommandViewSnapshotSchema.optional(),
     status: MissionStatusSnapshotSchema.optional(),
     workflow: MissionWorkflowSnapshotSchema.optional(),
     stages: z.array(StageDataSchema),
@@ -234,6 +279,11 @@ export const MissionControlViewSnapshotSchema = z.object({
 export const MissionSnapshotChangedEventSchema = z.object({
     reference: MissionEventSubjectSchema,
     snapshot: MissionSnapshotSchema
+}).strict();
+
+export const MissionAgentSessionLifecycleNotificationSchema = z.object({
+    phase: z.enum(['spawned', 'active', 'terminated']),
+    lifecycleState: AgentSessionLifecycleStateSchema
 }).strict();
 
 const MissionRuntimeEventEnvelopeBaseSchema = EntityEventEnvelopeSchema.omit({
@@ -268,11 +318,11 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('session.event'),
-        payload: AgentSessionEventSchema
+        payload: AgentSessionDataSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('session.lifecycle'),
-        payload: AgentSessionLifecycleEventSchema
+        payload: MissionAgentSessionLifecycleNotificationSchema
     })
 ]);
 
@@ -326,6 +376,10 @@ export type MissionWriteDocumentInputType = z.infer<typeof MissionWriteDocumentI
 export type MissionSnapshotType = z.infer<typeof MissionSnapshotSchema>;
 export type MissionControlViewSnapshotType = z.infer<typeof MissionControlViewSnapshotSchema>;
 export type MissionRuntimeEventEnvelopeType = z.infer<typeof MissionRuntimeEventEnvelopeSchema>;
+export type MissionCommandOwnerType = z.infer<typeof MissionCommandOwnerSchema>;
+export type MissionOwnedCommandDescriptorType = z.infer<typeof MissionOwnedCommandDescriptorSchema>;
+export type MissionCommandViewSnapshotType = z.infer<typeof MissionCommandViewSnapshotSchema>;
+export type MissionCommandIdType = z.infer<typeof MissionCommandIdSchema>;
 export type MissionStorageType = z.infer<typeof MissionStorageSchema>;
 export type MissionDataType = z.infer<typeof MissionDataSchema>;
 export type MissionStatusSnapshotType = z.infer<typeof MissionStatusSnapshotSchema>;

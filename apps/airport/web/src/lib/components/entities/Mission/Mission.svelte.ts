@@ -18,10 +18,12 @@ import {
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import {
     MissionCommandAcknowledgementSchema,
+    MissionCommandIds,
     MissionDocumentSnapshotSchema,
     MissionControlViewSnapshotSchema,
     MissionWorktreeSnapshotSchema,
     type MissionCommandAcknowledgementType,
+    type MissionCommandOwnerType,
     type MissionControlViewSnapshotType,
     type MissionDocumentSnapshotType,
     type MissionSnapshotType,
@@ -383,12 +385,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     }
 
     public get commands(): EntityCommandDescriptorType[] {
-        const commands = this.snapshot.mission.commands;
-        if (commands) {
-            return structuredClone($state.snapshot(commands));
-        }
-
-        return [];
+        return this.resolveCommandsForOwner({ entity: 'Mission' });
     }
 
     public setRouteState(input: {
@@ -406,27 +403,27 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     }
 
     public async pause(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.pause' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.pause }));
     }
 
     public async resume(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.resume' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.resume }));
     }
 
     public async panic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.panic' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.panic }));
     }
 
     public async clearPanic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.clearPanic' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.clearPanic }));
     }
 
     public async restartQueue(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.restartQueue' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.restartQueue }));
     }
 
     public async deliver(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.deliver' }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.deliver }));
     }
 
     public async getControlViewSnapshot(input: {
@@ -667,6 +664,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
             taskSnapshots,
             (taskSnapshot) => taskSnapshot.task.taskId,
             (taskSnapshot) => new Task(taskSnapshot, {
+                resolveCommands: (taskId) => this.resolveCommandsForOwner({ entity: 'Task', taskId }),
                 executeCommand: async (taskId, commandId, input) => {
                     await this.childCommands.executeTaskCommand({
                         missionId: this.missionId,
@@ -714,6 +712,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
             taskSnapshots,
             (taskSnapshot) => taskSnapshot.task.taskId,
             (taskSnapshot) => new Task(taskSnapshot, {
+                resolveCommands: (taskId) => this.resolveCommandsForOwner({ entity: 'Task', taskId }),
                 executeCommand: async (taskId, commandId, input) => {
                     await this.childCommands.executeTaskCommand({
                         missionId: this.missionId,
@@ -736,6 +735,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
             stages,
             (stage) => stage.stageId,
             (stage) => new Stage(stage, {
+                resolveCommands: (stageId) => this.resolveCommandsForOwner({ entity: 'Stage', stageId }),
                 resolveTask: (taskId) => this.tasks.get(taskId),
                 executeCommand: async (stageId, commandId, input) => {
                     await this.childCommands.executeStageCommand({
@@ -756,6 +756,16 @@ export class Mission implements EntityModel<MissionSnapshotType> {
 
     private applyArtifactDataList(artifacts: ArtifactDataType[]): void {
         this.reconcileArtifactData(artifacts);
+    }
+
+    private resolveCommandsForOwner(owner: MissionCommandOwnerType): EntityCommandDescriptorType[] {
+        const commandView = this.snapshot.commandView;
+        if (!commandView) {
+            return [];
+        }
+        return commandView.commands
+            .filter((candidate) => matchesCommandOwner(candidate.owner, owner))
+            .map((candidate) => structuredClone($state.snapshot(candidate.command)));
     }
 
     private applyArtifactDataForStage(stage: StageDataType): void {
@@ -927,6 +937,22 @@ function buildMissionPayload(missionId: string, repositoryRootPath?: string): { 
         missionId,
         ...(repositoryRootPath ? { repositoryRootPath } : {})
     };
+}
+
+function matchesCommandOwner(candidate: MissionCommandOwnerType, owner: MissionCommandOwnerType): boolean {
+    if (candidate.entity !== owner.entity) {
+        return false;
+    }
+    if (candidate.entity === 'Stage' && owner.entity === 'Stage') {
+        return candidate.stageId === owner.stageId;
+    }
+    if (candidate.entity === 'Task' && owner.entity === 'Task') {
+        return candidate.taskId === owner.taskId;
+    }
+    if (candidate.entity === 'AgentSession' && owner.entity === 'AgentSession') {
+        return candidate.sessionId === owner.sessionId;
+    }
+    return candidate.entity === 'Mission';
 }
 
 function sendMissionCommand(

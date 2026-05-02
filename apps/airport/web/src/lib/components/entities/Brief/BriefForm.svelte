@@ -1,11 +1,7 @@
 <!-- /apps/airport/web/src/lib/components/entities/Brief/BriefForm.svelte: Brief creation form with mission type selector and body input. -->
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import DatabaseIcon from "@tabler/icons-svelte/icons/database";
-    import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
-    import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
-    import SettingsIcon from "@tabler/icons-svelte/icons/settings";
+    import Icon from "@iconify/svelte";
     import { MissionFromBriefInputSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { inferFlattenedErrors, z } from "zod/v4";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
@@ -121,35 +117,44 @@
                     value="feature"
                     class="justify-start gap-2 data-[state=on]:border-sky-300/70 data-[state=on]:bg-sky-500/10 data-[state=on]:text-sky-700"
                 >
-                    <DashboardIcon class="size-4 text-sky-500" />
+                    <Icon
+                        icon="lucide:layout-dashboard"
+                        class="size-4 text-sky-500"
+                    />
                     Feature
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="fix"
                     class="justify-start gap-2 data-[state=on]:border-rose-300/70 data-[state=on]:bg-rose-500/10 data-[state=on]:text-rose-700"
                 >
-                    <SettingsIcon class="size-4 text-rose-500" />
+                    <Icon icon="lucide:settings" class="size-4 text-rose-500" />
                     Fix
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="docs"
                     class="justify-start gap-2 data-[state=on]:border-amber-300/70 data-[state=on]:bg-amber-500/10 data-[state=on]:text-amber-700"
                 >
-                    <FileDescriptionIcon class="size-4 text-amber-500" />
+                    <Icon
+                        icon="lucide:file-text"
+                        class="size-4 text-amber-500"
+                    />
                     Docs
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="refactor"
                     class="justify-start gap-2 data-[state=on]:border-violet-300/70 data-[state=on]:bg-violet-500/10 data-[state=on]:text-violet-700"
                 >
-                    <DatabaseIcon class="size-4 text-violet-500" />
+                    <Icon
+                        icon="lucide:database"
+                        class="size-4 text-violet-500"
+                    />
                     Refactor
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="task"
                     class="justify-start gap-2 data-[state=on]:border-emerald-300/70 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700"
                 >
-                    <ListDetailsIcon class="size-4 text-emerald-500" />
+                    <Icon icon="lucide:list" class="size-4 text-emerald-500" />
                     Task
                 </ToggleGroup.Item>
             </ToggleGroup.Root>

@@ -24,11 +24,7 @@ import {
 } from '../../workflow/engine/index.js';
 import { getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Task } from '../Task/Task.js';
-import {
-	isMissionDelivered,
-	resolveActiveStageTasks,
-	resolveReadyStageTasks
-} from '../Stage/Stage.js';
+import { Stage } from '../Stage/Stage.js';
 
 export type MissionStatusViewInput = {
 	adapter: FilesystemAdapter;
@@ -50,8 +46,8 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 	const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
 	const currentStageId = resolveCurrentMissionStage(input.document);
 	const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
-	const activeTasks = resolveActiveStageTasks(currentStage);
-	const readyTasks = resolveReadyStageTasks(currentStage);
+	const activeTasks = Stage.resolveActiveTasks(currentStage);
+	const readyTasks = Stage.resolveReadyTasks(currentStage);
 	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
 	const tower = buildTowerView(input.document.configuration, stages, input.sessions, productFiles);
 
@@ -452,7 +448,7 @@ function buildRecommendedAction(
 	readyTasks: MissionTaskState[],
 	stages: MissionStageStatus[]
 ): string {
-	if (isMissionDelivered(stages)) {
+	if (Stage.isMissionDelivered(stages)) {
 		return 'Mission delivered.';
 	}
 

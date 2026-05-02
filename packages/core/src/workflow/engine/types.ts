@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { AgentSessionTerminalHandleSchema, type AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import {
     WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
@@ -190,8 +191,7 @@ export const AgentSessionRuntimeStateSchema = z.object({
     runnerId: nonEmptyStringSchema,
     transportId: nonEmptyStringSchema.optional(),
     sessionLogPath: nonEmptyStringSchema.optional(),
-    terminalSessionName: nonEmptyStringSchema.optional(),
-    terminalPaneId: nonEmptyStringSchema.optional(),
+    terminalHandle: AgentSessionTerminalHandleSchema.optional(),
     lifecycle: z.enum(MISSION_AGENT_SESSION_LIFECYCLE_STATES),
     launchedAt: nonEmptyStringSchema,
     updatedAt: nonEmptyStringSchema,
@@ -359,8 +359,7 @@ export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     runnerId: string;
     transportId?: string;
     sessionLogPath?: string;
-    terminalSessionName?: string;
-    terminalPaneId?: string;
+    terminalHandle?: AgentSessionTerminalHandleType;
 }
 
 export interface AgentSessionLaunchFailedEvent extends MissionWorkflowEventBase {

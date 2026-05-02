@@ -1,7 +1,5 @@
 <script lang="ts">
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
-    import PlugConnectedXIcon from "@tabler/icons-svelte/icons/plug-connected-x";
+    import Icon from "@iconify/svelte";
     import NavUser from "$lib/components/nav-user.svelte";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
@@ -43,9 +41,9 @@
                     title={daemonBadge.detail}
                 >
                     {#if app.daemon.running}
-                        <PlugConnectedIcon class="size-4" />
+                        <Icon icon="lucide:plug" class="size-4" />
                     {:else}
-                        <PlugConnectedXIcon class="size-4" />
+                        <Icon icon="lucide:unplug" class="size-4" />
                     {/if}
                 </span>
             </div>
@@ -57,7 +55,7 @@
                 title="Open Mission on GitHub"
                 class="text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-full border border-transparent transition-colors hover:border-border hover:bg-muted/60"
             >
-                <BrandGithubIcon class="size-4" />
+                <Icon icon="lucide:github" class="size-4" />
             </a>
             <div class="w-56 max-w-[calc(100vw-8rem)]">
                 <NavUser contentSide="bottom" />

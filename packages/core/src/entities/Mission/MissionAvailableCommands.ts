@@ -5,8 +5,8 @@ import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/v
 import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import { StageCommandIds } from '../Stage/StageSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
+import { MissionCommandIds } from './MissionSchema.js';
 import {
-    MissionCommandIds,
     missionCommand,
     ownedAgentSessionCommand,
     ownedMissionCommand,

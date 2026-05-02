@@ -3,8 +3,7 @@
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
-    import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
-    import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
+    import Icon from "@iconify/svelte";
     import type { MissionRuntimeEventEnvelopeType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { ArtifactDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { AgentSessionDataSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
@@ -853,9 +852,9 @@
                             }}
                         >
                             {#if progressCollapsed}
-                                <ChevronDownIcon />
+                                <Icon icon="lucide:chevron-down" />
                             {:else}
-                                <ChevronUpIcon />
+                                <Icon icon="lucide:chevron-up" />
                             {/if}
                             <span class="sr-only">
                                 {progressCollapsed

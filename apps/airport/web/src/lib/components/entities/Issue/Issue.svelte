@@ -1,7 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import EyeIcon from "@tabler/icons-svelte/icons/eye";
-    import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
+    import Icon from "@iconify/svelte";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -76,7 +75,7 @@
                 onclick={() => onViewIssue(issue.number)}
                 disabled={issueLoadingNumber === issue.number}
             >
-                <EyeIcon class="size-4" />
+                <Icon icon="lucide:eye" class="size-4" />
                 {issueLoadingNumber === issue.number
                     ? "Loading..."
                     : "View issue"}
@@ -86,7 +85,7 @@
                 onclick={() => void startFromIssue()}
                 disabled={missionCreationPending}
             >
-                <PlayerPlayIcon class="size-4" />
+                <Icon icon="lucide:play" class="size-4" />
                 {missionCreationPending ? "Starting..." : "Start mission"}
             </Button>
         </div>

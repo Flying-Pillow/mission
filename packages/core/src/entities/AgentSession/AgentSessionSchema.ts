@@ -109,7 +109,7 @@ export const AgentSessionTerminalQuerySchema = z.object({
     missionId: z.string().trim().min(1)
 }).strict();
 
-export const AgentSessionTerminalInputSchema = z.object({
+export const AgentSessionTerminalRouteInputSchema = z.object({
     missionId: z.string().trim().min(1),
     data: z.string().optional(),
     literal: z.boolean().optional(),
@@ -213,7 +213,7 @@ export const AgentRuntimeMessageDescriptorSchema = z.object({
 
 export type AgentSessionTerminalRouteParamsType = z.infer<typeof AgentSessionTerminalRouteParamsSchema>;
 export type AgentSessionTerminalQueryType = z.infer<typeof AgentSessionTerminalQuerySchema>;
-export type AgentSessionTerminalInputType = z.infer<typeof AgentSessionTerminalInputSchema>;
+export type AgentSessionTerminalRouteInputType = z.infer<typeof AgentSessionTerminalRouteInputSchema>;
 export type AgentSessionTerminalSnapshotType = z.infer<typeof AgentSessionTerminalSnapshotSchema>;
 export type AgentSessionTerminalSocketClientMessageType = z.infer<typeof AgentSessionTerminalSocketClientMessageSchema>;
 export type AgentSessionTerminalOutputType = z.infer<typeof AgentSessionTerminalOutputSchema>;
@@ -224,6 +224,18 @@ export type AgentSessionContextInstructionType = z.infer<typeof AgentSessionCont
 export type AgentSessionContextType = z.infer<typeof AgentSessionContextSchema>;
 export type AgentRuntimeMessageDescriptorType = z.infer<typeof AgentRuntimeMessageDescriptorSchema>;
 
+export const AgentSessionLifecycleStateSchema = z.enum([
+    'starting',
+    'running',
+    'awaiting-input',
+    'completed',
+    'failed',
+    'cancelled',
+    'terminated'
+]);
+
+export type AgentSessionLifecycleStateType = z.infer<typeof AgentSessionLifecycleStateSchema>;
+
 export const AgentSessionStorageSchema = z.object({
     id: EntityIdSchema,
     sessionId: z.string().trim().min(1),
@@ -231,17 +243,7 @@ export const AgentSessionStorageSchema = z.object({
     transportId: z.string().trim().min(1).optional(),
     runnerLabel: z.string().trim().min(1),
     sessionLogPath: z.string().trim().min(1).optional(),
-    lifecycleState: z.enum([
-        'starting',
-        'running',
-        'awaiting-input',
-        'completed',
-        'failed',
-        'cancelled',
-        'terminated'
-    ]),
-    terminalSessionName: z.string().trim().min(1).optional(),
-    terminalPaneId: z.string().trim().min(1).optional(),
+    lifecycleState: AgentSessionLifecycleStateSchema,
     terminalHandle: AgentSessionTerminalHandleSchema.optional(),
     assignmentLabel: z.string().trim().min(1).optional(),
     workingDirectory: z.string().trim().min(1).optional(),
@@ -275,13 +277,6 @@ export const AgentSessionDataChangedSchema = z.object({
     data: AgentSessionDataSchema
 }).strict();
 
-export const AgentSessionEventSchema = AgentSessionDataSchema;
-
-export const AgentSessionLifecycleEventSchema = z.object({
-    phase: z.enum(['spawned', 'active', 'terminated']),
-    lifecycleState: AgentSessionDataSchema.shape.lifecycleState
-}).strict();
-
 export type AgentSessionLocatorType = z.infer<typeof AgentSessionLocatorSchema>;
 export type AgentSessionEventSubjectType = z.infer<typeof AgentSessionEventSubjectSchema>;
 export type AgentSessionCommandIdType = z.infer<typeof AgentSessionCommandIdSchema>;
@@ -296,6 +291,4 @@ export type AgentSessionStorageType = z.infer<typeof AgentSessionStorageSchema>;
 export type AgentSessionDataType = z.infer<typeof AgentSessionDataSchema>;
 export type AgentSessionCommandAcknowledgementType = z.infer<typeof AgentSessionCommandAcknowledgementSchema>;
 export type AgentSessionDataChangedType = z.infer<typeof AgentSessionDataChangedSchema>;
-export type AgentSessionEventType = z.infer<typeof AgentSessionEventSchema>;
-export type AgentSessionLifecycleEventType = z.infer<typeof AgentSessionLifecycleEventSchema>;
 

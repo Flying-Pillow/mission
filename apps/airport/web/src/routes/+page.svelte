@@ -1,10 +1,5 @@
 <script lang="ts">
-	import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
-	import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-	import GitBranchIcon from "@tabler/icons-svelte/icons/git-branch";
-	import PlayerPauseIcon from "@tabler/icons-svelte/icons/player-pause";
-	import ShieldCheckIcon from "@tabler/icons-svelte/icons/shield-check";
-	import Terminal2Icon from "@tabler/icons-svelte/icons/terminal-2";
+	import Icon from "@iconify/svelte";
 	import { asset } from "$app/paths";
 	import { Badge } from "$lib/components/ui/badge";
 	import { Button } from "$lib/components/ui/button";
@@ -199,7 +194,7 @@
 					aria-label="Open the Mission GitHub repository"
 					title="Open on GitHub"
 				>
-					<BrandGithubIcon class="size-4" />
+					<Icon icon="lucide:github" class="size-4" />
 				</Button>
 				<Button
 					href="/airport"
@@ -207,7 +202,7 @@
 					class="bg-slate-950 text-white hover:bg-slate-800"
 				>
 					Open Airport
-					<ArrowRightIcon data-icon="inline-end" />
+					<Icon icon="lucide:arrow-right" data-icon="inline-end" />
 				</Button>
 			</div>
 		</div>
@@ -255,7 +250,10 @@
 							class="bg-fuchsia-500 text-white hover:bg-fuchsia-400"
 						>
 							Read the developer guide
-							<ArrowRightIcon data-icon="inline-end" />
+							<Icon
+								icon="lucide:arrow-right"
+								data-icon="inline-end"
+							/>
 						</Button>
 						<Button
 							href="/airport"
@@ -271,15 +269,24 @@
 						class="mt-8 grid max-w-2xl gap-3 text-sm text-slate-300 sm:grid-cols-3"
 					>
 						<div class="flex items-center gap-2">
-							<BrandGithubIcon class="size-4 text-white" />
+							<Icon
+								icon="lucide:github"
+								class="size-4 text-white"
+							/>
 							Issue to PR flow
 						</div>
 						<div class="flex items-center gap-2">
-							<ShieldCheckIcon class="size-4 text-white" />
+							<Icon
+								icon="lucide:shield-check"
+								class="size-4 text-white"
+							/>
 							Isolated worktrees
 						</div>
 						<div class="flex items-center gap-2">
-							<Terminal2Icon class="size-4 text-white" />
+							<Icon
+								icon="lucide:terminal"
+								class="size-4 text-white"
+							/>
 							Agent runtime boundary
 						</div>
 					</div>
@@ -316,7 +323,7 @@
 								<div
 									class="flex items-center gap-2 text-sm font-medium text-white"
 								>
-									<BrandGithubIcon class="size-4" />
+									<Icon icon="lucide:github" class="size-4" />
 									GitHub intake
 								</div>
 								<div
@@ -350,7 +357,8 @@
 											Copilot CLI in bounded task session
 										</p>
 									</div>
-									<PlayerPauseIcon
+									<Icon
+										icon="lucide:pause"
 										class="size-5 text-fuchsia-200"
 									/>
 								</div>
@@ -607,7 +615,10 @@
 							<span
 								class="flex size-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800"
 							>
-								<ShieldCheckIcon class="size-5" />
+								<Icon
+									icon="lucide:shield-check"
+									class="size-5"
+								/>
 							</span>
 							<Card.Title>Safety and governance</Card.Title>
 						</div>
@@ -639,7 +650,7 @@
 							<span
 								class="flex size-10 items-center justify-center rounded-lg bg-fuchsia-100 text-fuchsia-800"
 							>
-								<GitBranchIcon class="size-5" />
+								<Icon icon="lucide:git-branch" class="size-5" />
 							</span>
 							<Card.Title>Airport control surface</Card.Title>
 						</div>

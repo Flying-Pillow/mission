@@ -95,7 +95,7 @@ export const RepositoryContract: EntityContractType = {
             ui: {
                 label: 'Clone Repository',
                 variant: 'default',
-                iconHint: 'folder-plus',
+                icon: 'folder-plus',
                 presentationOrder: 0
             }
         },
@@ -107,7 +107,7 @@ export const RepositoryContract: EntityContractType = {
             ui: {
                 label: 'Remove Repository',
                 variant: 'destructive',
-                iconHint: 'trash-2',
+                icon: 'trash-2',
                 confirmation: {
                     required: true,
                     prompt: 'Remove this Repository from Mission and delete its Repository root from disk? This cannot be undone.'
@@ -123,7 +123,7 @@ export const RepositoryContract: EntityContractType = {
             ui: {
                 label: 'Prepare Repository',
                 variant: 'ghost',
-                iconHint: 'git-pull-request-create',
+                icon: 'git-pull-request-create',
                 presentationOrder: 5
             }
         },
@@ -135,7 +135,7 @@ export const RepositoryContract: EntityContractType = {
             ui: {
                 variant: 'outline',
                 label: 'Fetch External State',
-                iconHint: 'refresh-cw',
+                icon: 'refresh-cw',
                 presentationOrder: 20
             }
         },
@@ -147,7 +147,7 @@ export const RepositoryContract: EntityContractType = {
             ui: {
                 label: 'Fast-Forward From External',
                 variant: 'default',
-                iconHint: 'git-pull-request-arrow',
+                icon: 'git-pull-request-arrow',
                 confirmation: {
                     required: true,
                     prompt: 'Fast-forward this Repository from its external tracking branch? This updates the local checkout without merging divergent local commits.'

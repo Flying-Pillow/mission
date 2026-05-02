@@ -1,29 +1,12 @@
 import type { EntityCommandDescriptorType } from '../Entity/EntitySchema.js';
+import type {
+	MissionCommandViewSnapshotType,
+	MissionOwnedCommandDescriptorType
+} from './MissionSchema.js';
 
-export const MissionCommandIds = {
-	pause: 'mission.pause',
-	resume: 'mission.resume',
-	panic: 'mission.panic',
-	clearPanic: 'mission.clearPanic',
-	restartQueue: 'mission.restartQueue',
-	deliver: 'mission.deliver'
-} as const;
+export type MissionOwnedCommandDescriptor = MissionOwnedCommandDescriptorType;
 
-export type MissionCommandOwner =
-	| { entity: 'Mission' }
-	| { entity: 'Stage'; stageId: string }
-	| { entity: 'Task'; taskId: string }
-	| { entity: 'AgentSession'; sessionId: string };
-
-export type MissionOwnedCommandDescriptor = {
-	owner: MissionCommandOwner;
-	command: EntityCommandDescriptorType;
-};
-
-export type MissionAvailableCommandSnapshot = {
-	commands: MissionOwnedCommandDescriptor[];
-	revision: string;
-};
+export type MissionAvailableCommandSnapshot = MissionCommandViewSnapshotType;
 
 export function missionCommand(input: {
 	commandId: string;

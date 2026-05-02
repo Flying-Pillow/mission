@@ -52,16 +52,14 @@ import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
-import { Task, toTask } from '../Task/Task.js';
+import { Task } from '../Task/Task.js';
 import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
 import type { TaskDataType } from '../Task/TaskSchema.js';
-import {
-	createStage,
-	isMissionDelivered,
-} from '../Stage/Stage.js';
+import { Stage } from '../Stage/Stage.js';
 import type { StageDataType } from '../Stage/StageSchema.js';
 import {
 	MissionCommandAcknowledgementSchema,
+	MissionCommandIds,
 	MissionCommandInputSchema,
 	MissionDataSchema,
 	MissionDocumentSnapshotSchema,
@@ -86,7 +84,6 @@ import {
 	MissionStateDataSchema
 } from '../../workflow/engine/types.js';
 import {
-	MissionCommandIds,
 	type MissionAvailableCommandSnapshot,
 	type MissionOwnedCommandDescriptor
 } from './MissionCommandDescriptors.js';
@@ -133,7 +130,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		if (!context) {
 			throw new Error('Mission entity resolution requires a daemon context.');
 		}
-		const inputRecord = isRecord(payload) ? payload : {};
+		const inputRecord = Mission.isRecord(payload) ? payload : {};
 		const input = MissionLocatorSchema.parse({
 			missionId: inputRecord['missionId'],
 			...(typeof inputRecord['repositoryRootPath'] === 'string' ? { repositoryRootPath: inputRecord['repositoryRootPath'] } : {})
@@ -506,11 +503,11 @@ export class Mission extends Entity<MissionDataType, string> {
 	public async buildMissionSnapshot() {
 		const missionId = this.descriptor.missionId;
 		const entity = await this.toEntity();
-		const commands = (await this.listAvailableCommandSnapshot()).commands;
+		const commandView = await this.listAvailableCommandSnapshot();
 		return buildMissionSnapshot({
 			missionId,
 			mission: MissionSnapshotSchema.shape.mission.parse(entity.toData()),
-			commands
+			commandView
 		});
 	}
 
@@ -555,14 +552,14 @@ export class Mission extends Entity<MissionDataType, string> {
 		terminalSessionName: string,
 	): AgentSessionRecord | undefined {
 		const record = this.sessionRecords.find(
-			(candidate) => candidate.terminalSessionName === terminalSessionName,
+			(candidate) => candidate.terminalHandle?.sessionName === terminalSessionName,
 		);
 		return record ? AgentSession.cloneRecord(record) : undefined;
 	}
 
 	public getAgentConsoleState(sessionId: string): MissionAgentConsoleState | undefined {
 		const state = this.consoleStates.get(sessionId);
-		return state ? cloneMissionAgentConsoleState(state) : undefined;
+		return state ? Mission.cloneAgentConsoleState(state) : undefined;
 	}
 
 	public async launchAgentSession(
@@ -575,7 +572,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		await this.status();
 
 		const existingSession = this.sessionRecords.find(
-			(candidate) => candidate.taskId === request.taskId && isActiveAgentSession(candidate.lifecycleState)
+			(candidate) => candidate.taskId === request.taskId && Mission.isActiveAgentSession(candidate.lifecycleState)
 		);
 		if (existingSession) {
 			if (!(await AgentSession.isCompatibleForLaunch({
@@ -655,12 +652,12 @@ export class Mission extends Entity<MissionDataType, string> {
 			?? await this.workflowController.attachRuntimeSession({
 				runnerId: session.runnerId,
 				sessionId: session.sessionId,
-				...(session.transportId === 'terminal' || session.terminalSessionName || session.terminalPaneId
+				...(session.transportId === 'terminal' || session.terminalHandle
 					? {
 						transport: {
 							kind: 'terminal',
-							terminalSessionName: session.terminalSessionName ?? session.sessionId,
-							...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+							terminalSessionName: session.terminalHandle?.sessionName ?? session.sessionId,
+							...(session.terminalHandle?.paneId ? { paneId: session.terminalHandle.paneId } : {})
 						}
 					}
 					: {})
@@ -675,7 +672,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		const gateIntent = intent === 'commit' ? 'implement' : intent;
 		const gate = status.workflow?.gates.find((candidate: { intent: GateIntent }) => candidate.intent === gateIntent);
 
-		if (isMissionDelivered(status.stages ?? [])) {
+		if (Stage.isMissionDelivered(status.stages ?? [])) {
 			errors.push('This mission has already been delivered.');
 		}
 
@@ -988,8 +985,14 @@ export class Mission extends Entity<MissionDataType, string> {
 			runnerId: snapshot.runnerId,
 			sessionLogPath: this.adapter.getMissionSessionLogRelativePath(snapshot.sessionId),
 			...(snapshot.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
-			...(snapshot.transport?.kind === 'terminal' ? { terminalSessionName: snapshot.transport.terminalSessionName } : {}),
-			...(snapshot.transport?.kind === 'terminal' && snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
+			...(snapshot.transport?.kind === 'terminal'
+				? {
+					terminalHandle: {
+						sessionName: snapshot.transport.terminalSessionName,
+						paneId: snapshot.transport.paneId ?? snapshot.transport.terminalSessionName
+					}
+				}
+				: {})
 		});
 		await this.refresh();
 		this.emitSyntheticSessionStart(snapshot);
@@ -1100,7 +1103,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	private createTask(task: MissionTaskState): Task {
 		return new Task({
 			missionId: this.descriptor.missionId,
-			isMissionDelivered: () => isMissionDelivered(this.lastKnownStatus?.stages ?? []),
+			isMissionDelivered: () => Stage.isMissionDelivered(this.lastKnownStatus?.stages ?? []),
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
@@ -1135,12 +1138,12 @@ export class Mission extends Entity<MissionDataType, string> {
 		await this.workflowController.attachRuntimeSession({
 			runnerId: record.runnerId,
 			sessionId: record.sessionId,
-			...(record.transportId === 'terminal' || record.terminalSessionName || record.terminalPaneId
+			...(record.transportId === 'terminal' || record.terminalHandle
 				? {
 					transport: {
 						kind: 'terminal',
-						terminalSessionName: record.terminalSessionName ?? record.sessionId,
-						...(record.terminalPaneId ? { paneId: record.terminalPaneId } : {})
+						terminalSessionName: record.terminalHandle?.sessionName ?? record.sessionId,
+						...(record.terminalHandle?.paneId ? { paneId: record.terminalHandle.paneId } : {})
 					}
 				}
 				: {})
@@ -1184,7 +1187,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		const activeSessionIds = new Set(this.sessionRecords.map((session) => session.sessionId));
 		for (const record of this.sessionRecords) {
 			if (!this.consoleStates.has(record.sessionId)) {
-				this.consoleStates.set(record.sessionId, createEmptyMissionAgentConsoleState({
+				this.consoleStates.set(record.sessionId, Mission.createEmptyAgentConsoleState({
 					awaitingInput: record.lifecycleState === 'awaiting-input',
 					runnerId: record.runnerId,
 					runnerLabel: record.runnerLabel,
@@ -1223,7 +1226,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				runnerLabel:
 					this.agentRunners.get(event.snapshot.runnerId)?.displayName ?? event.snapshot.runnerId
 			});
-		const currentConsole = this.consoleStates.get(event.snapshot.sessionId) ?? createEmptyMissionAgentConsoleState({
+		const currentConsole = this.consoleStates.get(event.snapshot.sessionId) ?? Mission.createEmptyAgentConsoleState({
 			awaitingInput: state.lifecycleState === 'awaiting-input',
 			runnerId: state.runnerId,
 			runnerLabel: state.runnerLabel,
@@ -1238,7 +1241,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			case 'session.started':
 			case 'session.attached':
 			case 'session.updated': {
-				const nextState = cloneMissionAgentConsoleState({
+				const nextState = Mission.cloneAgentConsoleState({
 					...currentConsole,
 					awaitingInput: state.lifecycleState === 'awaiting-input',
 					...(state.currentTurnTitle ? { title: state.currentTurnTitle } : {})
@@ -1251,7 +1254,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				return;
 			}
 			case 'session.message': {
-				const nextState = cloneMissionAgentConsoleState({
+				const nextState = Mission.cloneAgentConsoleState({
 					...currentConsole,
 					lines: [...currentConsole.lines, event.text],
 					awaitingInput: state.lifecycleState === 'awaiting-input'
@@ -1271,7 +1274,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				return;
 			}
 			case 'session.awaiting-input': {
-				const nextState = cloneMissionAgentConsoleState({
+				const nextState = Mission.cloneAgentConsoleState({
 					...currentConsole,
 					awaitingInput: true
 				});
@@ -1369,7 +1372,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			return currentDocument;
 		}
 		try {
-			return await promiseWithTimeout(
+			return await Mission.promiseWithTimeout(
 				this.workflowController.reconcileSessions(),
 				Mission.SESSION_RECONCILE_TIMEOUT_MS
 			);
@@ -1379,7 +1382,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private hasActiveAgentSessions(): boolean {
-		return this.sessionRecords.some((session) => isActiveAgentSession(session.lifecycleState));
+		return this.sessionRecords.some((session) => Mission.isActiveAgentSession(session.lifecycleState));
 	}
 
 	private invalidateCachedMissionSnapshots(): void {
@@ -1399,7 +1402,7 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private async completeTaskExecution(taskId: string): Promise<void> {
 		const activeSessions = this.sessionRecords.filter(
-			(candidate) => candidate.taskId === taskId && isActiveAgentSession(candidate.lifecycleState)
+			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentSession(candidate.lifecycleState)
 		);
 		for (const session of activeSessions) {
 			await this.ensureAgentSessionAttached(session.sessionId);
@@ -1612,9 +1615,9 @@ export class Mission extends Entity<MissionDataType, string> {
 			throw new Error('Mission entity construction requires an OperatorStatus with missionId.');
 		}
 
-		const missionRootDir = requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir');
+		const missionRootDir = Mission.requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir');
 		const productFiles = status.productFiles ?? {};
-		const currentStageId = requireTrimmedString(status.workflow?.currentStageId, 'Mission status workflow.currentStageId') as MissionStageId;
+		const currentStageId = Mission.requireTrimmedString(status.workflow?.currentStageId, 'Mission status workflow.currentStageId') as MissionStageId;
 		const artifacts: ArtifactDataType[] = [];
 
 		for (const artifactKey of MISSION_ARTIFACT_KEYS) {
@@ -1631,7 +1634,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			}));
 		}
 
-		const stages: StageDataType[] = requireArray(status.stages, 'Mission status stages').map((stage) => {
+		const stages: StageDataType[] = Mission.requireArray(status.stages, 'Mission status stages').map((stage) => {
 			const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
 				.map((artifactKey) => productFiles[artifactKey]
 					? Artifact.createMissionArtifact({
@@ -1644,7 +1647,7 @@ export class Mission extends Entity<MissionDataType, string> {
 					: undefined)
 				.filter((artifact): artifact is ArtifactDataType => artifact !== undefined);
 			const tasks: TaskDataType[] = stage.tasks.map((task) => {
-				const entity = toTask(task, missionId);
+				const entity = Task.toDataFromState(task, missionId);
 				if (task.filePath) {
 					artifacts.push(Artifact.createTaskArtifact({
 						missionId,
@@ -1657,8 +1660,8 @@ export class Mission extends Entity<MissionDataType, string> {
 				}
 				return entity;
 			});
-			return createStage({
-				id: createEntityId('stage', `${missionId}/${stage.stage}`),
+			return Stage.create({
+				id: Stage.createEntityId(missionId, stage.stage),
 				stageId: stage.stage,
 				lifecycle: stage.status,
 				isCurrentStage: currentStageId === stage.stage,
@@ -1670,19 +1673,19 @@ export class Mission extends Entity<MissionDataType, string> {
 		return MissionDataSchema.parse({
 			id: createEntityId('mission', missionId),
 			missionId,
-			title: requireTrimmedString(status.title, 'Mission status title'),
+			title: Mission.requireTrimmedString(status.title, 'Mission status title'),
 			...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
-			type: missionEntityTypeSchemaFromStatus(status.type),
+			type: Mission.parseEntityTypeFromStatus(status.type),
 			...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
-			branchRef: requireTrimmedString(status.branchRef, 'Mission status branchRef'),
-			missionDir: requireTrimmedString(status.missionDir, 'Mission status missionDir'),
-			missionRootDir: requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir'),
+			branchRef: Mission.requireTrimmedString(status.branchRef, 'Mission status branchRef'),
+			missionDir: Mission.requireTrimmedString(status.missionDir, 'Mission status missionDir'),
+			missionRootDir: Mission.requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir'),
 			...(status.workflow?.lifecycle ? { lifecycle: status.workflow.lifecycle } : {}),
 			...(status.workflow?.updatedAt ? { updatedAt: status.workflow.updatedAt } : {}),
 			...(currentStageId ? { currentStageId } : {}),
 			artifacts,
 			stages,
-			agentSessions: requireArray(status.agentSessions, 'Mission status agentSessions').map((session) => AgentSession.toDataFromRecord(session)),
+			agentSessions: Mission.requireArray(status.agentSessions, 'Mission status agentSessions').map((session) => AgentSession.toDataFromRecord(session)),
 			...(status.recommendedAction ? { recommendedAction: status.recommendedAction } : {})
 		});
 	}
@@ -1727,84 +1730,83 @@ export class Mission extends Entity<MissionDataType, string> {
 			payload: parsed.payload
 		};
 	}
-}
 
-
-function cloneMissionAgentConsoleState(
-	state: MissionAgentConsoleState
-): MissionAgentConsoleState {
-	return {
-		...(state.title ? { title: state.title } : {}),
-		lines: [...state.lines],
-		promptOptions: state.promptOptions ? [...state.promptOptions] : null,
-		awaitingInput: state.awaitingInput,
-		...(state.runnerId ? { runnerId: state.runnerId } : {}),
-		...(state.runnerLabel ? { runnerLabel: state.runnerLabel } : {}),
-		...(state.sessionId ? { sessionId: state.sessionId } : {})
-	};
-}
-
-function createEmptyMissionAgentConsoleState(
-	overrides: Partial<MissionAgentConsoleState> = {}
-): MissionAgentConsoleState {
-	return {
-		...cloneMissionAgentConsoleState({
-			lines: overrides.lines ?? [],
-			promptOptions: overrides.promptOptions ?? null,
-			awaitingInput: overrides.awaitingInput ?? false,
-			...(overrides.title ? { title: overrides.title } : {}),
-			...(overrides.runnerId ? { runnerId: overrides.runnerId } : {}),
-			...(overrides.runnerLabel ? { runnerLabel: overrides.runnerLabel } : {}),
-			...(overrides.sessionId ? { sessionId: overrides.sessionId } : {})
-		})
-	};
-}
-
-function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timeout = setTimeout(() => {
-			reject(new Error(`Timed out after ${String(timeoutMs)}ms.`));
-		}, timeoutMs);
-
-		promise.then(
-			(value) => {
-				clearTimeout(timeout);
-				resolve(value);
-			},
-			(error) => {
-				clearTimeout(timeout);
-				reject(error);
-			}
-		);
-	});
-}
-
-function isActiveAgentSession(lifecycleState: MissionAgentLifecycleState): boolean {
-	return lifecycleState === 'starting'
-		|| lifecycleState === 'running'
-		|| lifecycleState === 'awaiting-input';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function requireTrimmedString(value: string | undefined, fieldName: string): string {
-	const normalized = value?.trim();
-	if (!normalized) {
-		throw new Error(`${fieldName} is required.`);
+	private static cloneAgentConsoleState(
+		state: MissionAgentConsoleState
+	): MissionAgentConsoleState {
+		return {
+			...(state.title ? { title: state.title } : {}),
+			lines: [...state.lines],
+			promptOptions: state.promptOptions ? [...state.promptOptions] : null,
+			awaitingInput: state.awaitingInput,
+			...(state.runnerId ? { runnerId: state.runnerId } : {}),
+			...(state.runnerLabel ? { runnerLabel: state.runnerLabel } : {}),
+			...(state.sessionId ? { sessionId: state.sessionId } : {})
+		};
 	}
-	return normalized;
-}
 
-function requireArray<T>(value: T[] | undefined, fieldName: string): T[] {
-	if (!value) {
-		throw new Error(`${fieldName} is required.`);
+	private static createEmptyAgentConsoleState(
+		overrides: Partial<MissionAgentConsoleState> = {}
+	): MissionAgentConsoleState {
+		return {
+			...Mission.cloneAgentConsoleState({
+				lines: overrides.lines ?? [],
+				promptOptions: overrides.promptOptions ?? null,
+				awaitingInput: overrides.awaitingInput ?? false,
+				...(overrides.title ? { title: overrides.title } : {}),
+				...(overrides.runnerId ? { runnerId: overrides.runnerId } : {}),
+				...(overrides.runnerLabel ? { runnerLabel: overrides.runnerLabel } : {}),
+				...(overrides.sessionId ? { sessionId: overrides.sessionId } : {})
+			})
+		};
 	}
-	return value;
-}
 
-function missionEntityTypeSchemaFromStatus(value: MissionType | undefined): MissionType {
-	return MissionEntityTypeSchema.parse(value);
+	private static promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+		return new Promise<T>((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				reject(new Error(`Timed out after ${String(timeoutMs)}ms.`));
+			}, timeoutMs);
+
+			promise.then(
+				(value) => {
+					clearTimeout(timeout);
+					resolve(value);
+				},
+				(error) => {
+					clearTimeout(timeout);
+					reject(error);
+				}
+			);
+		});
+	}
+
+	private static isActiveAgentSession(lifecycleState: MissionAgentLifecycleState): boolean {
+		return lifecycleState === 'starting'
+			|| lifecycleState === 'running'
+			|| lifecycleState === 'awaiting-input';
+	}
+
+	private static isRecord(value: unknown): value is Record<string, unknown> {
+		return typeof value === 'object' && value !== null && !Array.isArray(value);
+	}
+
+	private static requireTrimmedString(value: string | undefined, fieldName: string): string {
+		const normalized = value?.trim();
+		if (!normalized) {
+			throw new Error(`${fieldName} is required.`);
+		}
+		return normalized;
+	}
+
+	private static requireArray<T>(value: T[] | undefined, fieldName: string): T[] {
+		if (!value) {
+			throw new Error(`${fieldName} is required.`);
+		}
+		return value;
+	}
+
+	private static parseEntityTypeFromStatus(value: MissionType | undefined): MissionType {
+		return MissionEntityTypeSchema.parse(value);
+	}
 }
 

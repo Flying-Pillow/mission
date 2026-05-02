@@ -1,8 +1,5 @@
 <script lang="ts">
-    import ActivityIcon from "@tabler/icons-svelte/icons/activity";
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
-    import ServerIcon from "@tabler/icons-svelte/icons/server";
+    import Icon from "@iconify/svelte";
     import { page } from "$app/state";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
@@ -86,7 +83,10 @@
                     >
                         Daemon
                     </p>
-                    <PlugConnectedIcon class="size-4 text-muted-foreground" />
+                    <Icon
+                        icon="lucide:plug"
+                        class="size-4 text-muted-foreground"
+                    />
                 </div>
                 <div class="mt-3 flex items-center gap-2">
                     <span
@@ -110,7 +110,10 @@
                     >
                         GitHub
                     </p>
-                    <BrandGithubIcon class="size-4 text-muted-foreground" />
+                    <Icon
+                        icon="lucide:github"
+                        class="size-4 text-muted-foreground"
+                    />
                 </div>
                 <div class="mt-3 flex items-center gap-2">
                     <span
@@ -134,10 +137,13 @@
                     >
                         System
                     </p>
-                    <ServerIcon class="size-4 text-muted-foreground" />
+                    <Icon
+                        icon="lucide:server"
+                        class="size-4 text-muted-foreground"
+                    />
                 </div>
                 <div class="mt-3 flex items-center gap-2">
-                    <ActivityIcon class="size-4 text-primary" />
+                    <Icon icon="lucide:activity" class="size-4 text-primary" />
                     <p class="text-sm font-medium text-foreground">
                         {systemState ? "Schema available" : "Waiting"}
                     </p>
@@ -153,7 +159,7 @@
                     size="lg"
                     class="sm:col-span-3 2xl:col-span-1"
                 >
-                    <BrandGithubIcon class="size-4" />
+                    <Icon icon="lucide:github" class="size-4" />
                     Login with GitHub
                 </Button>
             {/if}

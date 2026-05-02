@@ -623,7 +623,7 @@ type EntityCommandDescriptor = {
   disabled: boolean;
   disabledReason?: string;
   variant?: "default" | "destructive";
-  iconHint?: string;
+  icon?: string;
   confirmation?: {
     required: boolean;
     prompt?: string;

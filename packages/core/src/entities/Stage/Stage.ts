@@ -13,26 +13,42 @@ import {
 } from './StageSchema.js';
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
-export function createStage(input: StageDataType): StageDataType {
-	return StageDataSchema.parse({
-		...input,
-		artifacts: input.artifacts.map((artifact) => structuredClone(artifact)),
-		tasks: input.tasks.map((task) => structuredClone(task))
-	});
-}
-
-export function createStageEntityId(missionId: string, stageId: string): string {
-	return createEntityId('stage', `${missionId}/${stageId}`);
-}
-
 export class Stage extends Entity<StageDataType, string> {
 	public static override readonly entityName = stageEntityName;
+
+	public static create(input: StageDataType): StageDataType {
+		return StageDataSchema.parse({
+			...input,
+			artifacts: input.artifacts.map((artifact) => structuredClone(artifact)),
+			tasks: input.tasks.map((task) => structuredClone(task))
+		});
+	}
+
+	public static createEntityId(missionId: string, stageId: string): string {
+		return createEntityId('stage', `${missionId}/${stageId}`);
+	}
+
+	public static isMissionDelivered(stages: MissionStageStatus[]): boolean {
+		return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'completed');
+	}
+
+	public static resolveActiveTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
+		return stage ? stage.tasks.filter((task) => Task.isActive(task)) : [];
+	}
+
+	public static resolveReadyTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
+		return stage ? stage.tasks.filter((task) => Task.isReady(task)) : [];
+	}
 
 	public constructor(data: StageDataType) {
 		super(StageDataSchema.parse(data));
 	}
 
 	public get id(): string {
+		return this.data.id;
+	}
+
+	public get stageId(): string {
 		return this.data.stageId;
 	}
 
@@ -95,16 +111,4 @@ export class Stage extends Entity<StageDataType, string> {
 async function loadMissionRegistry(context: EntityExecutionContext) {
 	const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
 	return requireMissionRegistry(context);
-}
-
-export function isMissionDelivered(stages: MissionStageStatus[]): boolean {
-	return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'completed');
-}
-
-export function resolveActiveStageTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
-	return stage ? stage.tasks.filter((task) => Task.isActive(task)) : [];
-}
-
-export function resolveReadyStageTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
-	return stage ? stage.tasks.filter((task) => Task.isReady(task)) : [];
 }

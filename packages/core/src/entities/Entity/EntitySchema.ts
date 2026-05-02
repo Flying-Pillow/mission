@@ -110,7 +110,7 @@ export const EntityCommandDescriptorSchema = z.object({
     disabled: z.boolean(),
     disabledReason: z.string().trim().min(1).optional(),
     variant: EntityCommandButtonVariantSchema.optional(),
-    iconHint: z.string().trim().min(1).optional(),
+    icon: z.string().trim().min(1).optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
@@ -130,7 +130,7 @@ export const EntityMethodUiSchema = z.object({
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
     variant: EntityCommandButtonVariantSchema.optional(),
-    iconHint: z.string().trim().min(1).optional(),
+    icon: z.string().trim().min(1).optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()

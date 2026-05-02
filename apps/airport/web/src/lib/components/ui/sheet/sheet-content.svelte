@@ -8,8 +8,7 @@
 	import SheetPortal from "./sheet-portal.svelte";
 	import SheetOverlay from "./sheet-overlay.svelte";
 	import { Button } from "$lib/components/ui/button/index.js";
-	import { HugeiconsIcon } from "@hugeicons/svelte";
-	import { Cancel01Icon } from "@hugeicons/core-free-icons";
+	import Icon from "@iconify/svelte";
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 	import type { ComponentProps } from "svelte";
 
@@ -53,7 +52,7 @@
 						size="icon-sm"
 						{...props}
 					>
-						<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+						<Icon icon="lucide:x" />
 						<span class="sr-only">Close</span>
 					</Button>
 				{/snippet}

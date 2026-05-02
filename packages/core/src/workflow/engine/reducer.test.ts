@@ -6,7 +6,7 @@ import {
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { reduceMissionWorkflowEvent } from './reducer.js';
 import { validateMissionWorkflowEvent } from './validation.js';
-import type { MissionWorkflowEvent } from './types.js';
+import { AgentSessionRuntimeStateSchema, type MissionWorkflowEvent } from './types.js';
 
 function createWorkflowSettingsWithoutTaskAutostart() {
     const workflow = createDefaultWorkflowSettings();
@@ -57,8 +57,10 @@ describe('workflow reducer delivery completion', () => {
             taskId: 'implementation/01',
             runnerId: 'copilot-cli',
             transportId: 'terminal',
-            terminalSessionName: 'airport-terminal-session',
-            terminalPaneId: 'terminal_44'
+            terminalHandle: {
+                sessionName: 'airport-terminal-session',
+                paneId: 'terminal_44'
+            }
         };
 
         validateMissionWorkflowEvent(runtime, event, configuration);
@@ -66,9 +68,15 @@ describe('workflow reducer delivery completion', () => {
 
         expect(runtime.sessions).toContainEqual(expect.objectContaining({
             sessionId: 'session-1',
-            terminalSessionName: 'airport-terminal-session',
-            terminalPaneId: 'terminal_44'
+            terminalHandle: {
+                sessionName: 'airport-terminal-session',
+                paneId: 'terminal_44'
+            }
         }));
+        expect(() => AgentSessionRuntimeStateSchema.parse({
+            ...runtime.sessions[0],
+            terminalSessionName: 'airport-terminal-session'
+        })).toThrow();
     });
 
     it('queues and emits session launch requests for ready autostart tasks', () => {

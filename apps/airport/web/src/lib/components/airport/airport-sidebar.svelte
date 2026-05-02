@@ -2,13 +2,7 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { asset } from "$app/paths";
-    import BookIcon from "@tabler/icons-svelte/icons/book";
-    import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
-    import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import FolderIcon from "@tabler/icons-svelte/icons/folder";
-    import HelpIcon from "@tabler/icons-svelte/icons/help";
-    import SearchIcon from "@tabler/icons-svelte/icons/search";
-    import SettingsIcon from "@tabler/icons-svelte/icons/settings";
+    import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { getAirportSidebarNavigation } from "./airport-sidebar-navigation";
     import NavSecondary from "$lib/components/nav-secondary.svelte";
@@ -18,7 +12,6 @@
         getRepositoryDisplayDescription,
         getRepositoryDisplayName,
     } from "$lib/components/entities/Repository/Repository.svelte.js";
-    import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
     import type { MissionCatalogEntryType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import type { SidebarRepositoryData } from "$lib/components/entities/types";
@@ -32,19 +25,19 @@
         {
             title: "Settings",
             url: "https://github.com/Flying-Pillow/mission",
-            icon: SettingsIcon,
+            icon: "lucide:settings",
         },
         {
             title: "Get Help",
             url: "https://github.com/Flying-Pillow/mission/issues",
-            icon: HelpIcon,
+            icon: "lucide:circle-help",
         },
         {
             title: "Search",
             url: "https://github.com/Flying-Pillow/mission/search",
-            icon: SearchIcon,
+            icon: "lucide:search",
         },
-    ] satisfies { title: string; url: string; icon: Icon }[];
+    ] satisfies { title: string; url: string; icon: string }[];
 
     let { ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
@@ -76,7 +69,7 @@
                 ...repository,
                 displayName: getRepositoryDisplayName(repository),
                 displayDescription: getRepositoryDisplayDescription(repository),
-                icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
+                icon: isSelected ? "lucide:layout-dashboard" : "lucide:folder",
                 href: `/airport/${encodeURIComponent(repository.id)}`,
                 missions: (repository.missions ?? []).map(
                     (mission: MissionCatalogEntryType) => ({
@@ -130,7 +123,7 @@
                             <Sidebar.MenuButton isActive={item.isActive}>
                                 {#snippet child({ props })}
                                     <a href={item.href} {...props}>
-                                        <BookIcon />
+                                        <Icon icon="lucide:book-open" />
                                         <span>{item.title}</span>
                                     </a>
                                 {/snippet}
@@ -167,7 +160,7 @@
                                                 href={repository.href}
                                                 {...props}
                                             >
-                                                <repository.icon />
+                                                <Icon icon={repository.icon} />
                                                 <span
                                                     class="grid min-w-0 flex-1 text-left leading-tight"
                                                 >
@@ -199,7 +192,9 @@
                                                                 href={mission.href}
                                                                 {...props}
                                                             >
-                                                                <CalendarIcon />
+                                                                <Icon
+                                                                    icon="lucide:calendar"
+                                                                />
                                                                 <span>
                                                                     {mission.title?.trim() ||
                                                                         mission.missionId}

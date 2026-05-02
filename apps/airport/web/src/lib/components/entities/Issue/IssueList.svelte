@@ -1,6 +1,5 @@
 <script lang="ts">
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import PlusIcon from "@tabler/icons-svelte/icons/plus";
+    import Icon from "@iconify/svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
@@ -79,7 +78,7 @@
     <div class="border-b bg-muted/25 px-5 py-4">
         <div class="min-w-0 space-y-3">
             <div class="flex items-center gap-2 text-muted-foreground">
-                <BrandGithubIcon class="size-4" />
+                <Icon icon="lucide:github" class="size-4" />
                 <p class="text-xs font-medium uppercase tracking-[0.16em]">
                     GitHub
                 </p>
@@ -107,7 +106,7 @@
                     <Dialog.Trigger>
                         {#snippet child({ props })}
                             <Button type="button" size="sm" {...props}>
-                                <PlusIcon class="size-4" />
+                                <Icon icon="lucide:plus" class="size-4" />
                                 New issue
                             </Button>
                         {/snippet}
@@ -120,7 +119,7 @@
                                 <div
                                     class="flex items-center gap-2 text-muted-foreground"
                                 >
-                                    <PlusIcon class="size-4" />
+                                    <Icon icon="lucide:plus" class="size-4" />
                                     <p
                                         class="text-xs font-medium uppercase tracking-[0.16em]"
                                     >

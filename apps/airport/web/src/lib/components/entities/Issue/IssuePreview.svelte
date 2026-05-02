@@ -1,8 +1,6 @@
 <script lang="ts">
     import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
-    import ExternalLinkIcon from "@tabler/icons-svelte/icons/external-link";
-    import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
-    import XIcon from "@tabler/icons-svelte/icons/x";
+    import Icon from "@iconify/svelte";
     import { enhance } from "$app/forms";
     import { onMount, type Component } from "svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
@@ -35,7 +33,7 @@
     <div class="border-b bg-muted/25 px-5 py-4">
         <div class="min-w-0 space-y-3">
             <div class="flex items-center gap-2 text-muted-foreground">
-                <ExternalLinkIcon class="size-4" />
+                <Icon icon="lucide:external-link" class="size-4" />
                 <p class="text-xs font-medium uppercase tracking-[0.16em]">
                     GitHub
                 </p>
@@ -68,7 +66,7 @@
                             rel="noreferrer"
                             variant="outline"
                         >
-                            <ExternalLinkIcon class="size-4" />
+                            <Icon icon="lucide:external-link" class="size-4" />
                             Open on GitHub
                         </Button>
                     {/if}
@@ -79,7 +77,7 @@
                             value={selectedIssue.number}
                         />
                         <Button type="submit">
-                            <PlayerPlayIcon class="size-4" />
+                            <Icon icon="lucide:play" class="size-4" />
                             Start mission
                         </Button>
                     </form>
@@ -90,7 +88,7 @@
                         aria-label="Close issue preview"
                         title="Close issue preview"
                     >
-                        <XIcon class="size-4" />
+                        <Icon icon="lucide:x" class="size-4" />
                         Close
                     </Button>
                 </div>

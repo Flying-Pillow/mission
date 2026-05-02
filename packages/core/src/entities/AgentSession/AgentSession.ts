@@ -28,6 +28,7 @@ import {
 	agentSessionEntityName,
 	type AgentRuntimeMessageDescriptorType,
 	type AgentSessionContextType,
+	type AgentSessionTerminalHandleType,
 	type AgentSessionDataType
 } from './AgentSessionSchema.js';
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
@@ -45,8 +46,7 @@ type AgentSessionLaunchRecord = {
 	runnerId: string;
 	transportId?: string | undefined;
 	sessionLogPath?: string | undefined;
-	terminalSessionName?: string | undefined;
-	terminalPaneId?: string | undefined;
+	terminalHandle?: AgentSessionTerminalHandleType | undefined;
 	taskId: string;
 	lifecycle: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
 	launchedAt: string;
@@ -70,16 +70,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
 			runnerLabel: record.runnerLabel,
 			lifecycleState: record.lifecycleState,
-			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
-			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
-			...(record.terminalSessionName && record.terminalPaneId
-				? {
-					terminalHandle: {
-						sessionName: record.terminalSessionName,
-						paneId: record.terminalPaneId
-					}
-				}
-				: {}),
+			...(record.terminalHandle ? { terminalHandle: { ...record.terminalHandle } } : {}),
 			...(record.taskId ? { taskId: record.taskId } : {}),
 			...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
 			...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
@@ -127,10 +118,9 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	public static async readTerminal(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentSessionLocatorSchema.parse(payload);
 		const { readAgentSessionTerminalState } = await import('../../daemon/AgentSessionTerminal.js');
+		const data = await AgentSession.requireDataForLocator(input, context);
 		const state = await readAgentSessionTerminalState({
-			surfacePath: context.surfacePath,
-			selector: { missionId: input.missionId },
-			sessionId: input.sessionId
+			record: AgentSession.createTerminalRuntimeRecord(context.surfacePath, input.missionId, data)
 		});
 		if (!state) {
 			throw new Error(`AgentSession terminal for '${input.sessionId}' is not available.`);
@@ -225,9 +215,9 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentSessionSendTerminalInputSchema.parse(payload);
 		const { sendAgentSessionTerminalInput } = await import('../../daemon/AgentSessionTerminal.js');
+		const data = await AgentSession.requireDataForLocator(input, context);
 		const state = await sendAgentSessionTerminalInput({
-			surfacePath: context.surfacePath,
-			selector: { missionId: input.missionId },
+			record: AgentSession.createTerminalRuntimeRecord(context.surfacePath, input.missionId, data),
 			terminalInput: {
 				sessionId: input.sessionId,
 				...(input.data !== undefined ? { data: input.data } : {}),
@@ -337,22 +327,17 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		const scope = input.task
 			? AgentSession.buildTaskScope(input.task, input.missionId, input.missionDir)
 			: undefined;
-		const transport = getTransportFields(input.snapshot);
+		const terminalFields = getTerminalRuntimeFields(input.snapshot);
 
 		return AgentSession.cloneRecord({
 			sessionId: input.launch.sessionId,
 			runnerId: input.launch.runnerId,
-			...(transport.transportId ? { transportId: transport.transportId } : input.launch.transportId ? { transportId: input.launch.transportId } : {}),
+			...(terminalFields.transportId ? { transportId: terminalFields.transportId } : input.launch.transportId ? { transportId: input.launch.transportId } : {}),
 			...(input.launch.sessionLogPath ? { sessionLogPath: input.launch.sessionLogPath } : {}),
-			...(transport.terminalSessionName
-				? { terminalSessionName: transport.terminalSessionName }
-				: input.launch.terminalSessionName
-					? { terminalSessionName: input.launch.terminalSessionName }
-					: {}),
-			...(transport.terminalPaneId
-				? { terminalPaneId: transport.terminalPaneId }
-				: input.launch.terminalPaneId
-					? { terminalPaneId: input.launch.terminalPaneId }
+			...(terminalFields.terminalHandle
+				? { terminalHandle: terminalFields.terminalHandle }
+				: input.launch.terminalHandle
+					? { terminalHandle: { ...input.launch.terminalHandle } }
 					: {}),
 			runnerLabel: input.runnerLabel,
 			lifecycleState: AgentSession.toLifecycleState(input.snapshot?.status ?? input.launch.lifecycle),
@@ -373,22 +358,17 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		record?: AgentSessionRecord;
 	}): AgentSessionState {
 		const { snapshot, runnerLabel, record } = input;
-		const transport = getTransportFields(snapshot);
+		const terminalFields = getTerminalRuntimeFields(snapshot);
 		return AgentSession.cloneState({
 			runnerId: snapshot.runnerId,
-			...(transport.transportId ? { transportId: transport.transportId } : {}),
+			...(terminalFields.transportId ? { transportId: terminalFields.transportId } : {}),
 			runnerLabel,
 			sessionId: snapshot.sessionId,
 			...(record?.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
-			...(transport.terminalSessionName
-				? { terminalSessionName: transport.terminalSessionName }
-				: record?.terminalSessionName
-					? { terminalSessionName: record.terminalSessionName }
-					: {}),
-			...(transport.terminalPaneId
-				? { terminalPaneId: transport.terminalPaneId }
-				: record?.terminalPaneId
-					? { terminalPaneId: record.terminalPaneId }
+			...(terminalFields.terminalHandle
+				? { terminalHandle: terminalFields.terminalHandle }
+				: record?.terminalHandle
+					? { terminalHandle: { ...record.terminalHandle } }
 					: {}),
 			lifecycleState: AgentSession.toLifecycleState(snapshot.status),
 			lastUpdatedAt: snapshot.updatedAt,
@@ -414,8 +394,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
 			...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
-			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
-			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
+			...(record.terminalHandle ? { terminalHandle: { ...record.terminalHandle } } : {}),
 			runnerLabel: record.runnerLabel,
 			lifecycleState: record.lifecycleState,
 			createdAt: record.createdAt,
@@ -438,8 +417,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			runnerLabel: state.runnerLabel,
 			sessionId: state.sessionId,
 			...(state.sessionLogPath ? { sessionLogPath: state.sessionLogPath } : {}),
-			...(state.terminalSessionName ? { terminalSessionName: state.terminalSessionName } : {}),
-			...(state.terminalPaneId ? { terminalPaneId: state.terminalPaneId } : {}),
+			...(state.terminalHandle ? { terminalHandle: { ...state.terminalHandle } } : {}),
 			lifecycleState: state.lifecycleState,
 			lastUpdatedAt: state.lastUpdatedAt,
 			...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
@@ -526,8 +504,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				...(record.transportId ? { transportId: record.transportId } : {}),
 				runnerLabel: record.runnerLabel,
 				sessionId: record.sessionId,
-				...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
-				...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
+				...(record.terminalHandle ? { terminalHandle: { ...record.terminalHandle } } : {}),
 				lifecycleState: record.lifecycleState,
 				lastUpdatedAt: record.lastUpdatedAt,
 				...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
@@ -682,20 +659,67 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		}
 		return missionId;
 	}
+
+	private static async requireDataForLocator(
+		input: { missionId: string; sessionId: string },
+		context: EntityExecutionContext
+	): Promise<AgentSessionDataType> {
+		const service = await loadMissionRegistry(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	private static createTerminalRuntimeRecord(
+		workspaceRoot: string,
+		missionId: string,
+		data: AgentSessionDataType
+	) {
+		const terminalHandle = AgentSession.requireTerminalHandle(data);
+		const missionDir = AgentSession.resolveMissionDir(data);
+		return {
+			workspaceRoot,
+			missionId,
+			sessionId: data.sessionId,
+			terminalHandle,
+			...(data.sessionLogPath ? { sessionLogPath: data.sessionLogPath } : {}),
+			...(missionDir ? { missionDir } : {})
+		};
+	}
+
+	private static requireTerminalHandle(data: AgentSessionDataType): AgentSessionTerminalHandleType {
+		if (!data.terminalHandle) {
+			throw new Error(`AgentSession '${data.sessionId}' is not backed by a terminal runtime.`);
+		}
+		return data.terminalHandle;
+	}
+
+	private static resolveMissionDir(data: AgentSessionDataType): string | undefined {
+		const scope = data.scope;
+		if (!scope || typeof scope !== 'object' || !('missionDir' in scope)) {
+			return undefined;
+		}
+		const missionDir = scope.missionDir;
+		return typeof missionDir === 'string' && missionDir.trim() ? missionDir.trim() : undefined;
+	}
 }
 
-function getTransportFields(snapshot: AgentSessionSnapshot | undefined): {
+function getTerminalRuntimeFields(snapshot: AgentSessionSnapshot | undefined): {
 	transportId?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionTerminalHandleType;
 } {
 	if (snapshot?.transport?.kind !== 'terminal') {
 		return {};
 	}
 	return {
 		transportId: 'terminal',
-		terminalSessionName: snapshot.transport.terminalSessionName,
-		...(snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
+		terminalHandle: {
+			sessionName: snapshot.transport.terminalSessionName,
+			paneId: snapshot.transport.paneId ?? snapshot.transport.terminalSessionName
+		}
 	};
 }
 

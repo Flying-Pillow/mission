@@ -1,11 +1,5 @@
 <script lang="ts">
-    import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
-    import DatabaseIcon from "@tabler/icons-svelte/icons/database";
-    import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
-    import LoaderIcon from "@tabler/icons-svelte/icons/loader";
-    import OctagonIcon from "@tabler/icons-svelte/icons/octagon";
-    import type { Icon } from "@tabler/icons-svelte";
+    import Icon from "@iconify/svelte";
     import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -210,18 +204,18 @@
         return color ? `color: ${color};` : undefined;
     }
 
-    function sessionIcon(node: MissionTowerTreeNode): Icon {
+    function sessionIcon(node: MissionTowerTreeNode): string {
         const status = normalizeStatusLabel(node.statusLabel);
 
         if (status === "terminated") {
-            return OctagonIcon;
+            return "lucide:octagon";
         }
 
         if (status === "running") {
-            return LoaderIcon;
+            return "lucide:loader-circle";
         }
 
-        return DatabaseIcon;
+        return "lucide:database";
     }
 
     function sessionIconClass(node: MissionTowerTreeNode): string {
@@ -340,7 +334,10 @@
                         onclick={() => onSelectNode(artifact.node.id)}
                     >
                         {#snippet icon()}
-                            <FileDescriptionIcon class="size-4 shrink-0" />
+                            <Icon
+                                icon="lucide:file-text"
+                                class="size-4 shrink-0"
+                            />
                         {/snippet}
                     </TreeView.File>
                 {/each}
@@ -361,7 +358,10 @@
                             }
                         >
                             {#snippet icon({ open })}
-                                <CalendarIcon class="size-4 shrink-0" />
+                                <Icon
+                                    icon="lucide:calendar"
+                                    class="size-4 shrink-0"
+                                />
                             {/snippet}
 
                             {#each stage.tasks as task (task.node.id)}
@@ -384,7 +384,8 @@
                                         }
                                     >
                                         {#snippet icon({ open })}
-                                            <DashboardIcon
+                                            <Icon
+                                                icon="lucide:layout-dashboard"
                                                 class="size-4 shrink-0"
                                             />
                                         {/snippet}
@@ -400,7 +401,8 @@
                                                     onSelectNode(artifact.id)}
                                             >
                                                 {#snippet icon()}
-                                                    <FileDescriptionIcon
+                                                    <Icon
+                                                        icon="lucide:file-text"
                                                         class="size-4 shrink-0"
                                                     />
                                                 {/snippet}
@@ -410,7 +412,7 @@
                                         {#each task.sessions as session (session.id)}
                                             {@const selected =
                                                 activeNodeId === session.id}
-                                            {@const SessionIcon =
+                                            {@const sessionIconName =
                                                 sessionIcon(session)}
                                             <TreeView.File
                                                 name={nodeLabel(session)}
@@ -420,7 +422,8 @@
                                                     onSelectNode(session.id)}
                                             >
                                                 {#snippet icon()}
-                                                    <SessionIcon
+                                                    <Icon
+                                                        icon={sessionIconName}
                                                         class={cn(
                                                             "size-4 shrink-0",
                                                             sessionIconClass(
@@ -441,7 +444,8 @@
                                             onSelectNode(task.node.id)}
                                     >
                                         {#snippet icon()}
-                                            <DashboardIcon
+                                            <Icon
+                                                icon="lucide:layout-dashboard"
                                                 class="size-4 shrink-0"
                                             />
                                         {/snippet}
@@ -458,7 +462,8 @@
                                     onclick={() => onSelectNode(artifact.id)}
                                 >
                                     {#snippet icon()}
-                                        <FileDescriptionIcon
+                                        <Icon
+                                            icon="lucide:file-text"
                                             class="size-4 shrink-0"
                                         />
                                     {/snippet}
@@ -473,7 +478,10 @@
                             onclick={() => onSelectNode(stage.node.id)}
                         >
                             {#snippet icon()}
-                                <CalendarIcon class="size-4 shrink-0" />
+                                <Icon
+                                    icon="lucide:calendar"
+                                    class="size-4 shrink-0"
+                                />
                             {/snippet}
                         </TreeView.File>
                     {/if}

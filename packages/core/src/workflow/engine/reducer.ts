@@ -382,8 +382,7 @@ class MissionWorkflowTransitionEngine {
                     runnerId: event.runnerId,
                     ...(event.transportId ? { transportId: event.transportId } : {}),
                     ...(event.sessionLogPath ? { sessionLogPath: event.sessionLogPath } : {}),
-                    ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {}),
-                    ...(event.terminalPaneId ? { terminalPaneId: event.terminalPaneId } : {}),
+                    ...(event.terminalHandle ? { terminalHandle: { ...event.terminalHandle } } : {}),
                     lifecycle: 'running',
                     launchedAt: event.occurredAt,
                     updatedAt: event.occurredAt

@@ -70,7 +70,7 @@
     }
 
     function getCommandIcon(command: EntityCommandDescriptorType): string {
-        const explicitIcon = command.iconHint?.trim();
+        const explicitIcon = command.icon?.trim();
         if (explicitIcon) {
             return explicitIcon.includes(":")
                 ? explicitIcon

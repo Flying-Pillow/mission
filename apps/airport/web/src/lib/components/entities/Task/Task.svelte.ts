@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { TaskDataType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import { TaskCommandIds, type TaskDataType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskSnapshot = {
@@ -13,6 +13,7 @@ export type TaskStartOptions = {
 };
 
 export type TaskDependencies = {
+    resolveCommands(taskId: string): EntityCommandDescriptorType[];
     executeCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
@@ -75,11 +76,11 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public get commands(): EntityCommandDescriptorType[] {
-        return structuredClone($state.snapshot(this.snapshot.task.commands ?? []));
+        return this.dependencies.resolveCommands(this.taskId);
     }
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
-        await this.executeCommand('task.start', options);
+        await this.executeCommand(TaskCommandIds.start, options);
         return this;
     }
 
@@ -88,12 +89,12 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public async complete(): Promise<this> {
-        await this.executeCommand('task.complete');
+        await this.executeCommand(TaskCommandIds.complete);
         return this;
     }
 
     public async reopen(): Promise<this> {
-        await this.executeCommand('task.reopen');
+        await this.executeCommand(TaskCommandIds.reopen);
         return this;
     }
 

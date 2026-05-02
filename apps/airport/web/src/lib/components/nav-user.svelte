@@ -3,12 +3,7 @@
 	import { page } from "$app/state";
 	import { asset } from "$app/paths";
 	import { mode, toggleMode } from "mode-watcher";
-	import DotsVerticalIcon from "@tabler/icons-svelte/icons/dots-vertical";
-	import LoginIcon from "@tabler/icons-svelte/icons/login";
-	import LogoutIcon from "@tabler/icons-svelte/icons/logout";
-	import MoonStarsIcon from "@tabler/icons-svelte/icons/moon-stars";
-	import SunIcon from "@tabler/icons-svelte/icons/sun";
-	import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
+	import Icon from "@iconify/svelte";
 	import * as Avatar from "$lib/components/ui/avatar/index.js";
 	import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
 	import * as Sidebar from "$lib/components/ui/sidebar/index.js";
@@ -85,7 +80,10 @@
 								</span>
 							{/if}
 						</div>
-						<DotsVerticalIcon class="ms-auto size-4" />
+						<Icon
+							icon="lucide:ellipsis-vertical"
+							class="ms-auto size-4"
+						/>
 					</Sidebar.MenuButton>
 				{/snippet}
 			</DropdownMenu.Trigger>
@@ -121,7 +119,7 @@
 							<div
 								class="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"
 							>
-								<BrandGithubIcon class="size-3" />
+								<Icon icon="lucide:github" class="size-3" />
 								<span>GitHub {githubStatus}</span>
 							</div>
 						</div>
@@ -131,10 +129,10 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item onclick={toggleMode}>
 						{#if mode.current === "dark"}
-							<SunIcon />
+							<Icon icon="lucide:sun" />
 							Light mode
 						{:else}
-							<MoonStarsIcon />
+							<Icon icon="lucide:moon" />
 							Dark mode
 						{/if}
 					</DropdownMenu.Item>
@@ -151,7 +149,7 @@
 							type="submit"
 							class="focus:bg-destructive/10 dark:focus:bg-destructive/20 text-destructive focus:text-destructive flex w-full cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden"
 						>
-							<LogoutIcon class="size-4" />
+							<Icon icon="lucide:log-out" class="size-4" />
 							Log out
 						</button>
 					</form>
@@ -160,7 +158,7 @@
 						href={loginHref}
 						class="focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
 					>
-						<LoginIcon />
+						<Icon icon="lucide:log-in" />
 						Log in with GitHub
 					</a>
 				{/if}

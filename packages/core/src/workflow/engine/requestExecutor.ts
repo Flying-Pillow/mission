@@ -594,12 +594,12 @@ export class MissionWorkflowRequestExecutor {
 		return {
 			runnerId: session.runnerId,
 			sessionId: session.sessionId,
-			...(session.transportId === 'terminal' || session.terminalSessionName || session.terminalPaneId
+			...(session.transportId === 'terminal' || session.terminalHandle
 				? {
 					transport: {
 						kind: 'terminal',
-						terminalSessionName: session.terminalSessionName ?? session.sessionId,
-						...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+						terminalSessionName: session.terminalHandle?.sessionName ?? session.sessionId,
+						...(session.terminalHandle?.paneId ? { paneId: session.terminalHandle.paneId } : {})
 					}
 				}
 				: {})
@@ -751,16 +751,17 @@ function toAgentCommand(value: string): AgentCommand | undefined {
 
 function toTransportEventFields(snapshot: AgentSessionSnapshot): {
 	transportId?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionRuntimeState['terminalHandle'];
 } {
 	if (snapshot.transport?.kind !== 'terminal') {
 		return {};
 	}
 	return {
 		transportId: 'terminal',
-		terminalSessionName: snapshot.transport.terminalSessionName,
-		...(snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
+		terminalHandle: {
+			sessionName: snapshot.transport.terminalSessionName,
+			paneId: snapshot.transport.paneId ?? snapshot.transport.terminalSessionName
+		}
 	};
 }
 

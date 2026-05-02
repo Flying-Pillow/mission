@@ -11,9 +11,7 @@ import {
     AgentSessionDataSchema,
     AgentSessionTerminalSnapshotSchema,
     AgentSessionCommandAcknowledgementSchema,
-    AgentSessionDataChangedSchema,
-    AgentSessionEventSchema,
-    AgentSessionLifecycleEventSchema
+    AgentSessionDataChangedSchema
 } from './AgentSessionSchema.js';
 
 export const AgentSessionContract: EntityContractType = {
@@ -63,12 +61,6 @@ export const AgentSessionContract: EntityContractType = {
     events: {
         'data.changed': {
             payload: AgentSessionDataChangedSchema
-        },
-        event: {
-            payload: AgentSessionEventSchema
-        },
-        lifecycle: {
-            payload: AgentSessionLifecycleEventSchema
         }
     }
 };

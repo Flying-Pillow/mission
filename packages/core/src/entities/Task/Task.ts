@@ -21,37 +21,14 @@ import {
 	TaskDataSchema,
 	TaskCommandAcknowledgementSchema,
 	TaskCommandInputSchema,
+	TaskStartCommandOptionsSchema,
+	TaskReworkCommandInputSchema,
 	TaskLocatorSchema,
 	TaskCommandIds,
 	taskEntityName,
 	type TaskDataType
 } from './TaskSchema.js';
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
-
-export function createTaskEntityId(missionId: string, taskId: string): string {
-	return createEntityId('task', `${missionId}/${taskId}`);
-}
-
-export function toTask(task: MissionTaskState, missionId: string): TaskDataType {
-	return TaskDataSchema.parse({
-		id: createTaskEntityId(missionId, task.taskId),
-		taskId: task.taskId,
-		stageId: task.stage,
-		sequence: task.sequence,
-		title: task.subject,
-		instruction: task.instruction,
-		...(task.taskKind ? { taskKind: task.taskKind } : {}),
-		...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
-		lifecycle: task.status,
-		dependsOn: [...task.dependsOn],
-		waitingOnTaskIds: [...task.waitingOn],
-		agentRunner: task.agent,
-		retries: task.retries,
-		...(task.fileName ? { fileName: task.fileName } : {}),
-		...(task.filePath ? { filePath: task.filePath } : {}),
-		...(task.relativePath ? { relativePath: task.relativePath } : {})
-	});
-}
 
 export type TaskLaunchPolicy = {
 	autostart: boolean;
@@ -96,6 +73,31 @@ export type TaskVerificationReworkRequest = {
 
 export class Task extends Entity<TaskDataType, string> {
 	public static override readonly entityName = taskEntityName;
+
+	public static createEntityId(missionId: string, taskId: string): string {
+		return createEntityId('task', `${missionId}/${taskId}`);
+	}
+
+	public static toDataFromState(task: MissionTaskState, missionId: string): TaskDataType {
+		return TaskDataSchema.parse({
+			id: Task.createEntityId(missionId, task.taskId),
+			taskId: task.taskId,
+			stageId: task.stage,
+			sequence: task.sequence,
+			title: task.subject,
+			instruction: task.instruction,
+			...(task.taskKind ? { taskKind: task.taskKind } : {}),
+			...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
+			lifecycle: task.status,
+			dependsOn: [...task.dependsOn],
+			waitingOnTaskIds: [...task.waitingOn],
+			agentRunner: task.agent,
+			retries: task.retries,
+			...(task.fileName ? { fileName: task.fileName } : {}),
+			...(task.filePath ? { filePath: task.filePath } : {}),
+			...(task.relativePath ? { relativePath: task.relativePath } : {})
+		});
+	}
 
 	public static async read(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskLocatorSchema.parse(payload);
@@ -222,7 +224,7 @@ export class Task extends Entity<TaskDataType, string> {
 	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: MissionTaskState) {
 		if (state) {
 			const owner = ownerOrData as TaskOwner;
-			super(toTask(state, owner.missionId));
+			super(Task.toDataFromState(state, owner.missionId));
 			this.owner = owner;
 			this.state = state;
 			return;
@@ -345,13 +347,12 @@ export class Task extends Entity<TaskDataType, string> {
 	public async command(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
-		const terminalSessionName = service.getTerminalSessionName(input.input);
-		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
+		const mission = await service.loadRequiredMission(input, context);
 		try {
 			Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
 			switch (input.commandId) {
 				case TaskCommandIds.start:
-					await mission.startTask(input.taskId, terminalSessionName ? { terminalSessionName } : {});
+					await mission.startTask(input.taskId, Task.readStartCommandOptions(input.input));
 					break;
 				case TaskCommandIds.complete:
 					await mission.completeTask(input.taskId);
@@ -363,7 +364,7 @@ export class Task extends Entity<TaskDataType, string> {
 					await mission.reworkTask(input.taskId, {
 						actor: 'human',
 						reasonCode: 'manual.instruction',
-						summary: requireTextInput(input.input, input.commandId),
+						summary: TaskReworkCommandInputSchema.parse(input.input),
 						artifactRefs: []
 					});
 					break;
@@ -391,6 +392,11 @@ export class Task extends Entity<TaskDataType, string> {
 		} finally {
 			mission.dispose();
 		}
+	}
+
+	private static readStartCommandOptions(input: unknown): { terminalSessionName?: string } {
+		const options = TaskStartCommandOptionsSchema.optional().parse(input);
+		return options?.terminalSessionName ? { terminalSessionName: options.terminalSessionName } : {};
 	}
 
 	private assertCanTransition(intent: MissionTaskStatusIntent): void {
@@ -423,7 +429,7 @@ export class Task extends Entity<TaskDataType, string> {
 	private async refresh(): Promise<void> {
 		const state = this.requireState();
 		this.state = await this.requireOwner().refreshTaskState(state.taskId);
-		this.updateFromData(toTask(this.state, this.requireOwner().missionId));
+		this.updateFromData(Task.toDataFromState(this.state, this.requireOwner().missionId));
 	}
 
 	private requireOwner(): TaskOwner {
@@ -478,13 +484,6 @@ export class Task extends Entity<TaskDataType, string> {
 
 		return tasks.find((candidate) => candidate.taskId === task.pairedTaskId && candidate.taskKind === 'implementation');
 	}
-}
-
-function requireTextInput(input: unknown, commandId: string): string {
-	if (typeof input !== 'string' || !input.trim()) {
-		throw new Error(`Task command '${commandId}' requires non-empty text input.`);
-	}
-	return input.trim();
 }
 
 async function loadMissionRegistry(context: EntityExecutionContext) {

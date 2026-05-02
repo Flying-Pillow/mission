@@ -135,8 +135,7 @@ function deriveContextGraph(
 				...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
 				...(session.currentTurnTitle ? { promptTitle: session.currentTurnTitle } : {}),
 				...(session.transportId ? { transportId: session.transportId } : {}),
-				...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
-				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
+				...(session.terminalHandle ? { terminalHandle: { ...session.terminalHandle } } : {}),
 				...(session.createdAt ? { createdAt: session.createdAt } : {}),
 				...(session.lastUpdatedAt ? { lastUpdatedAt: session.lastUpdatedAt } : {})
 			};

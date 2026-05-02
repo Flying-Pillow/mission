@@ -44,9 +44,9 @@ describe('Mission', () => {
                 const controlView = await mission.buildMissionControlViewSnapshot();
 
                 expect(snapshot.mission.missionId).toBe(missionId);
-                expect(snapshot.mission.commands).toEqual(expect.any(Array));
+                expect(snapshot.commandView?.commands).toEqual(expect.any(Array));
                 expect(controlView.missionId).toBe(missionId);
-                expect(snapshot.mission.commands?.length).toBeGreaterThan(0);
+                expect(snapshot.commandView?.commands.length).toBeGreaterThan(0);
             } finally {
                 mission.dispose();
             }

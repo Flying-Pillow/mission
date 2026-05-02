@@ -72,11 +72,11 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
     }
 
     public get terminalSessionName(): string | undefined {
-        return this.data.terminalSessionName;
+        return this.data.terminalHandle?.sessionName;
     }
 
     public get terminalPaneId(): string | undefined {
-        return this.data.terminalPaneId;
+        return this.data.terminalHandle?.paneId;
     }
 
     public get terminalHandle(): AgentSessionDataType['terminalHandle'] {
@@ -91,7 +91,7 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
 
     public isTerminalBacked(): boolean {
         return this.transportId === 'terminal'
-            && Boolean(this.terminalHandle?.sessionName || this.terminalSessionName);
+            && Boolean(this.terminalHandle?.sessionName);
     }
 
     public hasPersistedTerminalLog(): boolean {

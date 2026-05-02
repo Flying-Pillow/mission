@@ -1,8 +1,7 @@
 <script lang="ts">
     import { browser } from "$app/environment";
-    import DeviceFloppyIcon from "@tabler/icons-svelte/icons/device-floppy";
+    import Icon from "@iconify/svelte";
     import type { Artifact } from "./Artifact.svelte.js";
-    import XIcon from "@tabler/icons-svelte/icons/x";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
@@ -534,7 +533,7 @@
                         !id ||
                         !isEditableTextArtifact}
                 >
-                    <DeviceFloppyIcon />
+                    <Icon icon="lucide:save" />
                     Save
                 </Button>
 
@@ -543,14 +542,14 @@
                     size="icon-sm"
                     onclick={handleCloseRequest}
                 >
-                    <XIcon />
+                    <Icon icon="lucide:x" />
                     <span class="sr-only">Close editor</span>
                 </Button>
             </div>
         </div>
 
         <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <DeviceFloppyIcon class="size-3.5" />
+            <Icon icon="lucide:save" class="size-3.5" />
             <span>{statusMessage}</span>
         </div>
 

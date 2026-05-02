@@ -1,27 +1,26 @@
-import type { MissionStageId } from '../../types.js';
 import {
     MissionControlViewSnapshotSchema,
     MissionSnapshotSchema,
     type MissionDataType,
+    type MissionCommandViewSnapshotType,
     type MissionSnapshotType
 } from './MissionSchema.js';
-import type { MissionOwnedCommandDescriptor } from './MissionCommandDescriptors.js';
 
 export function buildMissionSnapshot(input: {
     missionId: string;
     mission: MissionDataType;
-    commands: MissionOwnedCommandDescriptor[];
+    commandView: MissionCommandViewSnapshotType;
 }): MissionSnapshotType {
-    const commandSnapshot = withEntityCommands(input.mission, input.commands);
-    const workflow = toMissionWorkflowSnapshot(commandSnapshot);
+    const workflow = toMissionWorkflowSnapshot(input.mission);
     return MissionSnapshotSchema.parse({
-        mission: commandSnapshot,
-        status: toMissionStatusSnapshot(commandSnapshot, input.missionId, workflow),
+        mission: input.mission,
+        commandView: input.commandView,
+        status: toMissionStatusSnapshot(input.mission, input.missionId, workflow),
         ...(workflow ? { workflow } : {}),
-        stages: commandSnapshot.stages,
-        tasks: commandSnapshot.stages.flatMap((stage) => stage.tasks),
-        artifacts: commandSnapshot.artifacts,
-        agentSessions: commandSnapshot.agentSessions
+        stages: input.mission.stages,
+        tasks: input.mission.stages.flatMap((stage) => stage.tasks),
+        artifacts: input.mission.artifacts,
+        agentSessions: input.mission.agentSessions
     });
 }
 
@@ -67,62 +66,4 @@ function toMissionWorkflowSnapshot(snapshot: MissionDataType) {
         ...(snapshot.currentStageId ? { currentStageId: snapshot.currentStageId } : {}),
         ...(snapshot.stages.length > 0 ? { stages: snapshot.stages } : {})
     };
-}
-
-function withEntityCommands(
-    snapshot: MissionDataType,
-    commands: MissionOwnedCommandDescriptor[]
-): MissionDataType {
-    return {
-        ...snapshot,
-        commands: commandsForOwner(commands, { entity: 'Mission' }),
-        artifacts: snapshot.artifacts.map((artifact) => ({
-            ...artifact,
-            commands: []
-        })),
-        stages: snapshot.stages.map((stage) => ({
-            ...stage,
-            commands: commandsForOwner(commands, { entity: 'Stage', stageId: stage.stageId as MissionStageId }),
-            artifacts: stage.artifacts.map((artifact) => ({
-                ...artifact,
-                commands: []
-            })),
-            tasks: stage.tasks.map((task) => ({
-                ...task,
-                commands: commandsForOwner(commands, { entity: 'Task', taskId: task.taskId })
-            }))
-        })),
-        agentSessions: snapshot.agentSessions.map((session) => ({
-            ...session,
-            commands: commandsForOwner(commands, { entity: 'AgentSession', sessionId: session.sessionId })
-        }))
-    };
-}
-
-function commandsForOwner(
-    commands: MissionOwnedCommandDescriptor[],
-    owner: MissionOwnedCommandDescriptor['owner']
-) {
-    return commands
-        .filter((candidate) => matchesOwner(candidate.owner, owner))
-        .map((candidate) => candidate.command);
-}
-
-function matchesOwner(
-    candidate: MissionOwnedCommandDescriptor['owner'],
-    owner: MissionOwnedCommandDescriptor['owner']
-): boolean {
-    if (candidate.entity !== owner.entity) {
-        return false;
-    }
-    if (candidate.entity === 'Stage' && owner.entity === 'Stage') {
-        return candidate.stageId === owner.stageId;
-    }
-    if (candidate.entity === 'Task' && owner.entity === 'Task') {
-        return candidate.taskId === owner.taskId;
-    }
-    if (candidate.entity === 'AgentSession' && owner.entity === 'AgentSession') {
-        return candidate.sessionId === owner.sessionId;
-    }
-    return candidate.entity === 'Mission';
 }

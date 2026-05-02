@@ -1,7 +1,6 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema,
     EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
@@ -44,6 +43,12 @@ export const TaskCommandInputSchema = TaskLocatorSchema.extend({
     input: z.unknown().optional()
 }).strict();
 
+export const TaskStartCommandOptionsSchema = z.object({
+    terminalSessionName: z.string().trim().min(1).optional()
+}).strict();
+
+export const TaskReworkCommandInputSchema = z.string().trim().min(1);
+
 export const TaskStorageSchema = z.object({
     id: EntityIdSchema,
     taskId: TaskIdSchema,
@@ -64,8 +69,7 @@ export const TaskStorageSchema = z.object({
 }).strict();
 
 export const TaskDataSchema = z.object({
-    ...TaskStorageSchema.shape,
-    commands: z.array(EntityCommandDescriptorSchema).optional()
+    ...TaskStorageSchema.shape
 }).strict();
 
 export const TaskCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
@@ -86,6 +90,8 @@ export type TaskLocatorType = z.infer<typeof TaskLocatorSchema>;
 export type TaskEventSubjectType = z.infer<typeof TaskEventSubjectSchema>;
 export type TaskCommandIdType = z.infer<typeof TaskCommandIdSchema>;
 export type TaskCommandInputType = z.infer<typeof TaskCommandInputSchema>;
+export type TaskStartCommandOptionsType = z.infer<typeof TaskStartCommandOptionsSchema>;
+export type TaskReworkCommandInputType = z.infer<typeof TaskReworkCommandInputSchema>;
 export type TaskStorageType = z.infer<typeof TaskStorageSchema>;
 export type TaskDataType = z.infer<typeof TaskDataSchema>;
 export type TaskCommandAcknowledgementType = z.infer<typeof TaskCommandAcknowledgementSchema>;

@@ -90,7 +90,7 @@ export abstract class Entity<
 						disabled: !availability.available,
 						...(!availability.available && availability.reason ? { disabledReason: availability.reason } : {}),
 						...(method.ui!.variant ? { variant: method.ui!.variant } : {}),
-						...(method.ui!.iconHint ? { iconHint: method.ui!.iconHint } : {}),
+						...(method.ui!.icon ? { icon: method.ui!.icon } : {}),
 						...(method.ui!.confirmation ? { confirmation: method.ui!.confirmation } : {}),
 						...(method.ui!.input ? { input: method.ui!.input } : {}),
 						...(method.ui!.presentationOrder !== undefined ? { presentationOrder: method.ui!.presentationOrder } : {})

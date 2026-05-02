@@ -38,8 +38,8 @@ export class AgentSessionLogWriter {
         this.sessionIdsByTerminalName.clear();
         for (const session of sessions) {
             activeSessionIds.add(session.sessionId);
-            if (session.terminalSessionName) {
-                this.sessionIdsByTerminalName.set(session.terminalSessionName, session.sessionId);
+            if (session.terminalHandle) {
+                this.sessionIdsByTerminalName.set(session.terminalHandle.sessionName, session.sessionId);
             }
             const writer = this.ensureWriter(session);
             if (writer) {
@@ -60,8 +60,8 @@ export class AgentSessionLogWriter {
         if (this.disposed) {
             return;
         }
-        if (session.terminalSessionName) {
-            this.sessionIdsByTerminalName.set(session.terminalSessionName, session.sessionId);
+        if (session.terminalHandle) {
+            this.sessionIdsByTerminalName.set(session.terminalHandle.sessionName, session.sessionId);
         }
         const writer = this.ensureWriter(session);
         if (writer) {
@@ -108,7 +108,7 @@ export class AgentSessionLogWriter {
     }
 
     private ensureWriter(session: AgentSessionRecord): SessionLogWriterState | undefined {
-        if (!session.terminalSessionName || session.transportId !== 'terminal') {
+        if (!session.terminalHandle || session.transportId !== 'terminal') {
             return undefined;
         }
 

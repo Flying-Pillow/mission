@@ -11,7 +11,8 @@ import type {
 } from '../../entities/Entity/Entity.js';
 import type {
 	AgentSessionEventSubjectType,
-	AgentSessionDataType
+	AgentSessionDataType,
+	AgentSessionTerminalHandleType
 } from '../../entities/AgentSession/AgentSessionSchema.js';
 import type {
 	ArtifactEventLocatorType,
@@ -208,8 +209,7 @@ export type AgentSessionState = {
 	runnerLabel: string;
 	sessionId: string;
 	sessionLogPath?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionTerminalHandleType;
 	lifecycleState: MissionAgentLifecycleState;
 	workingDirectory?: string;
 	currentTurnTitle?: string;
@@ -226,8 +226,7 @@ export type AgentSessionRecord = {
 	transportId?: string;
 	runnerLabel: string;
 	sessionLogPath?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionTerminalHandleType;
 	lifecycleState: MissionAgentLifecycleState;
 	taskId?: string;
 	assignmentLabel?: string;

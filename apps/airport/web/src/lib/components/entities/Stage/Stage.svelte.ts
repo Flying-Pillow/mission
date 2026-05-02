@@ -5,6 +5,7 @@ import type { EntityModel } from '$lib/components/entities/shared/EntityModel.sv
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 
 export type StageDependencies = {
+    resolveCommands(stageId: string): EntityCommandDescriptorType[];
     resolveTask(taskId: string): Task | undefined;
     executeCommand(stageId: string, commandId: string, input?: unknown): Promise<void>;
 };
@@ -60,7 +61,7 @@ export class Stage implements EntityModel<StageDataType> {
     }
 
     public get commands(): EntityCommandDescriptorType[] {
-        return structuredClone($state.snapshot(this.snapshot.commands ?? []));
+        return this.dependencies.resolveCommands(this.stageId);
     }
 
     public listTasks(): Task[] {
