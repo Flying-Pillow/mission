@@ -1,37 +1,44 @@
 import { z } from 'zod/v4';
 import {
+    EntityCommandAcknowledgementSchema,
     EntityCommandDescriptorSchema,
     EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
 export const artifactEntityName = 'Artifact' as const;
 
+export const ArtifactCommandIds = {
+    body: 'artifact.body'
+} as const;
+
+export const ArtifactCommandIdSchema = z.enum([
+    ArtifactCommandIds.body
+]);
+
 export const ArtifactLocatorSchema = z.object({
     missionId: z.string().trim().min(1),
     repositoryRootPath: z.string().trim().min(1).optional(),
-    artifactId: z.string().trim().min(1)
+    id: z.string().trim().min(1)
 }).strict();
 
-export const ArtifactEventSubjectSchema = ArtifactLocatorSchema.extend({
+export const ArtifactEventLocatorSchema = ArtifactLocatorSchema.extend({
     entity: z.literal(artifactEntityName)
 }).strict();
 
 export const ArtifactBodySchema = z.object({
-    mimeType: z.string().trim().min(1),
-    content: z.string()
+    body: z.unknown()
 }).strict();
 
-export const ArtifactWriteInputSchema = ArtifactLocatorSchema.extend({
-    body: ArtifactBodySchema
+export const ArtifactCommandInputSchema = ArtifactLocatorSchema.extend({
+    commandId: ArtifactCommandIdSchema,
+    input: ArtifactBodySchema
 }).strict();
 
 export const ArtifactStorageSchema = z.object({
     id: EntityIdSchema,
-    artifactId: z.string().trim().min(1),
     kind: z.enum(['mission', 'stage', 'task']),
     label: z.string().trim().min(1),
     fileName: z.string().trim().min(1),
-    mimeType: z.string().trim().min(1),
     key: z.string().trim().min(1).optional(),
     stageId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1).optional(),
@@ -44,41 +51,26 @@ export const ArtifactDataSchema = z.object({
     commands: z.array(EntityCommandDescriptorSchema).optional()
 }).strict();
 
-export const ArtifactBodySnapshotSchema = z.object({
-    filePath: z.string().trim().min(1),
-    body: ArtifactBodySchema,
-    updatedAt: z.string().trim().min(1).optional()
+export const ArtifactCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(artifactEntityName),
+    method: z.literal('command'),
+    id: z.string().trim().min(1),
+    missionId: z.string().trim().min(1),
+    commandId: ArtifactCommandIdSchema
 }).strict();
 
-export const ArtifactSnapshotChangedEventSchema = z.object({
-    reference: ArtifactEventSubjectSchema,
-    snapshot: ArtifactDataSchema
+export const ArtifactDataChangedSchema = z.object({
+    artifactEventLocator: ArtifactEventLocatorSchema,
+    data: ArtifactDataSchema
 }).strict();
-
-export const artifactRemoteQueryInputSchemas = {
-    read: ArtifactLocatorSchema,
-    readDocument: ArtifactLocatorSchema
-} as const;
-
-export const artifactRemoteCommandInputSchemas = {
-    writeDocument: ArtifactWriteInputSchema
-} as const;
-
-export const artifactRemoteQueryResultSchemas = {
-    read: ArtifactDataSchema,
-    readDocument: ArtifactBodySnapshotSchema
-} as const;
-
-export const artifactRemoteCommandResultSchemas = {
-    writeDocument: ArtifactBodySnapshotSchema
-} as const;
 
 export type ArtifactLocatorType = z.infer<typeof ArtifactLocatorSchema>;
-export type ArtifactEventSubjectType = z.infer<typeof ArtifactEventSubjectSchema>;
+export type ArtifactEventLocatorType = z.infer<typeof ArtifactEventLocatorSchema>;
+export type ArtifactCommandIdType = z.infer<typeof ArtifactCommandIdSchema>;
 export type ArtifactBodyType = z.infer<typeof ArtifactBodySchema>;
-export type ArtifactWriteInputType = z.infer<typeof ArtifactWriteInputSchema>;
+export type ArtifactCommandInputType = z.infer<typeof ArtifactCommandInputSchema>;
 export type ArtifactStorageType = z.infer<typeof ArtifactStorageSchema>;
 export type ArtifactDataType = z.infer<typeof ArtifactDataSchema>;
-export type ArtifactBodySnapshotType = z.infer<typeof ArtifactBodySnapshotSchema>;
-export type ArtifactSnapshotChangedEventType = z.infer<typeof ArtifactSnapshotChangedEventSchema>;
+export type ArtifactCommandAcknowledgementType = z.infer<typeof ArtifactCommandAcknowledgementSchema>;
+export type ArtifactDataChangedType = z.infer<typeof ArtifactDataChangedSchema>;
 

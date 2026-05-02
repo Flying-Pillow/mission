@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
 import type { AgentSessionCommandAcknowledgementType, AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import type { MissionCommandAcknowledgementType, MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import type { TaskDataType, TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
@@ -17,7 +17,7 @@ describe('Mission control view reconciliation', () => {
                 status: {
                     missionId: 'mission-29',
                     title: 'Mission 29',
-                    artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
+                    artifacts: [createArtifactData('verify', 'VERIFY.md')],
                     workflow: {
                         lifecycle: 'running',
                         currentStageId: 'implementation',
@@ -45,20 +45,20 @@ describe('Mission control view reconciliation', () => {
             }
         });
 
-        mission.applyTaskSnapshot(createTaskSnapshot('task-1', 'completed'));
-        mission.applyArtifactSnapshot(createArtifactSnapshot('verify', 'Verification Evidence'));
-        mission.applyAgentSessionSnapshot(createSessionSnapshot('session-1', 'completed'));
+        mission.applyTaskData(createTaskSnapshot('task-1', 'completed'));
+        mission.applyArtifactData(createArtifactData('verify', 'Verification Evidence'));
+        mission.applyAgentSessionData(createSessionSnapshot('session-1', 'completed'));
 
         expect(mission.getTask('task-1')?.lifecycle).toBe('completed');
         expect(mission.getTask('task-2')?.lifecycle).toBe('pending');
-        expect(mission.getArtifact('VERIFY.md')?.label).toBe('Verification Evidence');
+        expect(mission.getArtifact('artifact:mission-29/verify')?.label).toBe('Verification Evidence');
         expect(mission.getSession('session-1')?.lifecycleState).toBe('completed');
     });
 
     it('reconciles Stage snapshots as authoritative stage child Entity snapshots', () => {
         const mission = createMission();
 
-        mission.applyStageSnapshot(createStageSnapshot({
+        mission.applyStageData(createStageSnapshot({
             lifecycle: 'completed',
             tasks: [createTaskSnapshot('task-1', 'completed')]
         }));
@@ -88,32 +88,59 @@ describe('Mission control view reconciliation', () => {
         ]);
     });
 
-    it('reads a preselected placeholder artifact with the reconciled artifact id', async () => {
-        const readArtifactDocumentCalls: string[] = [];
+    it('reads a selected Artifact with the reconciled id', async () => {
+        const artifactBodyCalls: string[] = [];
         const mission = createMission(
             createMissionSnapshot(),
-            createMissionGatewayDependencies(readArtifactDocumentCalls)
+            createMissionGatewayDependencies(artifactBodyCalls)
         );
-        const placeholderArtifact = mission.resolveArtifact({
-            filePath: 'PRD.md',
-            label: 'Requirements',
-            stageId: 'prd'
-        });
-
-        mission.applyArtifactSnapshot({
+        mission.applyArtifactData({
             id: 'artifact:mission-29/mission-29:prd',
-            artifactId: 'mission-29:prd',
             kind: 'stage',
             label: 'Requirements',
             fileName: 'PRD.md',
-            mimeType: 'text/markdown',
             relativePath: 'PRD.md',
             stageId: 'prd'
         });
+        const artifact = mission.getArtifact('artifact:mission-29/mission-29:prd');
 
-        await placeholderArtifact.read({ executionContext: 'render' });
+        if (!artifact) {
+            throw new Error('Expected PRD Artifact to be available.');
+        }
 
-        expect(readArtifactDocumentCalls).toEqual(['mission-29:prd']);
+        await artifact.read({ executionContext: 'render' });
+
+        expect(artifactBodyCalls).toEqual(['artifact:mission-29/mission-29:prd']);
+    });
+
+    it('saves a selected Artifact body through the Artifact command surface', async () => {
+        const artifactBodyCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot(),
+            createMissionGatewayDependencies([], artifactBodyCommandCalls)
+        );
+        const artifact = mission.getArtifact('artifact:mission-29/verify');
+
+        if (!artifact) {
+            throw new Error('Expected verification Artifact to be available.');
+        }
+
+        await artifact.saveBody('# Updated verification');
+
+        expect(artifactBodyCommandCalls).toEqual([
+            {
+                entity: 'Artifact',
+                method: 'command',
+                payload: {
+                    missionId: 'mission-29',
+                    id: 'artifact:mission-29/verify',
+                    commandId: ArtifactCommandIds.body,
+                    input: {
+                        body: '# Updated verification'
+                    }
+                }
+            }
+        ]);
     });
 });
 
@@ -128,14 +155,20 @@ function createMission(
     });
 }
 
-function createMissionGatewayDependencies(readArtifactDocumentCalls: string[]): MissionGatewayDependencies {
+function createMissionGatewayDependencies(
+    artifactBodyCalls: string[],
+    artifactBodyCommandCalls: EntityCommandInvocation[] = []
+): MissionGatewayDependencies {
     return {
-        commandRemote: async (input) => handleCommandInvocation(input),
-        queryRemote: async (input) => handleQueryInvocation(input, readArtifactDocumentCalls)
+        commandRemote: async (input) => handleCommandInvocation(input, artifactBodyCommandCalls),
+        queryRemote: async (input) => handleQueryInvocation(input, artifactBodyCalls)
     };
 }
 
-async function handleCommandInvocation(input: EntityCommandInvocation): Promise<EntityRemoteResult> {
+async function handleCommandInvocation(
+    input: EntityCommandInvocation,
+    artifactBodyCommandCalls: EntityCommandInvocation[]
+): Promise<EntityRemoteResult> {
     if (input.entity === 'Stage' && input.method === 'command') {
         return createStageAcknowledgement();
     }
@@ -144,13 +177,16 @@ async function handleCommandInvocation(input: EntityCommandInvocation): Promise<
         return createTaskAcknowledgement();
     }
 
-    if (input.entity === 'Artifact' && input.method === 'writeDocument') {
+    if (input.entity === 'Artifact' && input.method === 'command') {
+        const payload = input.payload as { id: string; commandId: string };
+        artifactBodyCommandCalls.push(input);
         return {
-            filePath: 'PRD.md',
-            body: {
-                mimeType: 'text/markdown',
-                content: '# PRD'
-            }
+            ok: true,
+            entity: 'Artifact',
+            method: 'command',
+            id: payload.id,
+            missionId: 'mission-29',
+            commandId: payload.commandId
         };
     }
 
@@ -182,17 +218,13 @@ async function handleCommandInvocation(input: EntityCommandInvocation): Promise<
 
 async function handleQueryInvocation(
     input: EntityQueryInvocation,
-    readArtifactDocumentCalls: string[]
+    artifactBodyCalls: string[]
 ): Promise<EntityRemoteResult> {
-    if (input.entity === 'Artifact' && input.method === 'readDocument') {
-        const payload = input.payload as { artifactId: string };
-        readArtifactDocumentCalls.push(payload.artifactId);
+    if (input.entity === 'Artifact' && input.method === 'body') {
+        const payload = input.payload as { id: string };
+        artifactBodyCalls.push(payload.id);
         return {
-            filePath: 'PRD.md',
-            body: {
-                mimeType: 'text/markdown',
-                content: '# PRD'
-            }
+            body: '# PRD'
         };
     }
 
@@ -283,14 +315,14 @@ function createMissionSnapshot(): MissionSnapshotType {
             branchRef: 'mission-29',
             missionDir: '/tmp/mission-29',
             missionRootDir: '/tmp/mission-29/.mission/mission-29',
-            artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
+            artifacts: [createArtifactData('verify', 'VERIFY.md')],
             stages,
             agentSessions: [createSessionSnapshot('session-1', 'running')]
         },
         status: {
             missionId: 'mission-29',
             title: 'Mission 29',
-            artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
+            artifacts: [createArtifactData('verify', 'VERIFY.md')],
             workflow: {
                 lifecycle: 'running',
                 currentStageId: 'implementation',
@@ -304,7 +336,7 @@ function createMissionSnapshot(): MissionSnapshotType {
         },
         stages,
         tasks: stages.flatMap((stage) => stage.tasks),
-        artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
+        artifacts: [createArtifactData('verify', 'VERIFY.md')],
         agentSessions: [createSessionSnapshot('session-1', 'running')]
     };
 }
@@ -318,7 +350,7 @@ function createStageSnapshot(input: {
         stageId: 'implementation',
         lifecycle: input.lifecycle,
         isCurrentStage: true,
-        artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
+        artifacts: [createArtifactData('verify', 'VERIFY.md')],
         tasks: input.tasks
     };
 }
@@ -339,14 +371,12 @@ function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
     };
 }
 
-function createArtifactSnapshot(artifactId: string, label: string): ArtifactDataType {
+function createArtifactData(id: string, label: string): ArtifactDataType {
     return {
-        id: `artifact:mission-29/${artifactId}`,
-        artifactId,
+        id: `artifact:mission-29/${id}`,
         kind: 'mission',
         label,
         fileName: 'VERIFY.md',
-        mimeType: 'text/markdown',
         relativePath: 'VERIFY.md'
     };
 }

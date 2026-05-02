@@ -57,26 +57,10 @@ export const StageCommandAcknowledgementSchema = EntityCommandAcknowledgementSch
     commandId: StageCommandIdSchema
 }).strict();
 
-export const StageSnapshotChangedEventSchema = z.object({
+export const StageDataChangedSchema = z.object({
     reference: StageEventSubjectSchema,
-    snapshot: StageDataSchema
+    data: StageDataSchema
 }).strict();
-
-export const stageRemoteQueryInputSchemas = {
-    read: StageLocatorSchema
-} as const;
-
-export const stageRemoteCommandInputSchemas = {
-    command: StageCommandInputSchema
-} as const;
-
-export const stageRemoteQueryResultSchemas = {
-    read: StageDataSchema
-} as const;
-
-export const stageRemoteCommandResultSchemas = {
-    command: StageCommandAcknowledgementSchema
-} as const;
 
 export type StageLocatorType = z.infer<typeof StageLocatorSchema>;
 export type StageEventSubjectType = z.infer<typeof StageEventSubjectSchema>;
@@ -85,5 +69,5 @@ export type StageCommandInputType = z.infer<typeof StageCommandInputSchema>;
 export type StageStorageType = z.infer<typeof StageStorageSchema>;
 export type StageDataType = z.infer<typeof StageDataSchema>;
 export type StageCommandAcknowledgementType = z.infer<typeof StageCommandAcknowledgementSchema>;
-export type StageSnapshotChangedEventType = z.infer<typeof StageSnapshotChangedEventSchema>;
+export type StageDataChangedType = z.infer<typeof StageDataChangedSchema>;
 

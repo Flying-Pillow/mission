@@ -270,14 +270,18 @@ function resolveNotificationAddress(event: Notification): NotificationAddress {
 			return missionAddress(event.missionId, 'status');
 		case 'mission.terminal':
 			return missionAddress(event.missionId, 'terminal');
-		case 'stage.snapshot.changed':
-			return childAddress('stage', event.missionId, event.reference.stageId, 'snapshot.changed');
-		case 'task.snapshot.changed':
-			return childAddress('task', event.missionId, event.reference.taskId, 'snapshot.changed');
-		case 'artifact.snapshot.changed':
-			return childAddress('artifact', event.missionId, event.reference.artifactId, 'snapshot.changed');
-		case 'agentSession.snapshot.changed':
-			return childAddress('agent_session', event.missionId, event.reference.sessionId, 'snapshot.changed');
+		case 'stage.data.changed':
+			return childAddress('stage', event.missionId, event.reference.stageId, 'data.changed');
+		case 'task.data.changed':
+			return childAddress('task', event.missionId, event.reference.taskId, 'data.changed');
+		case 'artifact.data.changed':
+			return {
+				entityId: event.artifactEventLocator.id,
+				eventName: 'data.changed',
+				missionEntityId: createEntityId('mission', event.missionId)
+			};
+		case 'agentSession.data.changed':
+			return childAddress('agent_session', event.missionId, event.reference.sessionId, 'data.changed');
 		case 'session.console':
 			return childAddress('agent_session', event.missionId, event.sessionId, 'console');
 		case 'session.terminal':
@@ -326,10 +330,10 @@ function resolveNotificationOccurredAt(event: Notification): string {
 			return event.status.workflow?.updatedAt ?? new Date().toISOString();
 		case 'session.event':
 			return event.session.lastUpdatedAt ?? new Date().toISOString();
-		case 'stage.snapshot.changed':
-		case 'task.snapshot.changed':
-		case 'artifact.snapshot.changed':
-		case 'agentSession.snapshot.changed':
+		case 'stage.data.changed':
+		case 'task.data.changed':
+		case 'artifact.data.changed':
+		case 'agentSession.data.changed':
 		case 'session.console':
 		case 'mission.terminal':
 		case 'session.terminal':

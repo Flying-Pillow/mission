@@ -8,8 +8,10 @@ import {
     type AgentSessionDataType
 } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import {
-    ArtifactBodySnapshotSchema,
-    type ArtifactBodySnapshotType,
+    ArtifactCommandAcknowledgementSchema,
+    ArtifactCommandIds,
+    type ArtifactCommandAcknowledgementType,
+    ArtifactBodySchema,
     type ArtifactBodyType,
     type ArtifactDataType
 } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
@@ -37,8 +39,7 @@ import {
 } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
 import {
-    Artifact,
-    type ArtifactSnapshot
+    Artifact
 } from '$lib/components/entities/Artifact/Artifact.svelte.js';
 import { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import { Stage } from '$lib/components/entities/Stage/Stage.svelte.js';
@@ -117,16 +118,16 @@ type MissionChildEntityCommandGateway = {
         sessionId: string;
         command: AgentSessionCommandType;
     }): Promise<AgentSessionCommandAcknowledgementType>;
-    readArtifactDocument(input: {
+    artifactBody(input: {
         missionId: string;
-        artifactId: string;
+        id: string;
         executionContext?: MissionQueryExecutionContext;
-    }): Promise<ArtifactBodySnapshotType>;
-    writeArtifactDocument(input: {
+    }): Promise<ArtifactBodyType>;
+    commandArtifactBody(input: {
         missionId: string;
-        artifactId: string;
+        id: string;
         body: ArtifactBodyType;
-    }): Promise<ArtifactBodySnapshotType>;
+    }): Promise<ArtifactCommandAcknowledgementType>;
 };
 
 export type MissionDependencies = {
@@ -279,28 +280,29 @@ function createMissionChildEntityCommandGateway(input: MissionGatewayDependencie
                 }
             }));
         },
-        readArtifactDocument: async ({ missionId, artifactId, executionContext }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'Artifact body queries require missionId and artifactId.');
-            const normalizedArtifactId = requireNonEmptyValue(artifactId, 'Artifact body queries require missionId and artifactId.');
-            return ArtifactBodySnapshotSchema.parse(await queryRemote({
+        artifactBody: async ({ missionId, id, executionContext }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Artifact body queries require missionId and id.');
+            const normalizedId = requireNonEmptyValue(id, 'Artifact body queries require missionId and id.');
+            return ArtifactBodySchema.parse(await queryRemote({
                 entity: artifactEntityName,
-                method: 'readDocument',
+                method: 'body',
                 payload: {
                     ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
-                    artifactId: normalizedArtifactId
+                    id: normalizedId
                 }
             }, executionContext));
         },
-        writeArtifactDocument: async ({ missionId, artifactId, body }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'Artifact body commands require missionId and artifactId.');
-            const normalizedArtifactId = requireNonEmptyValue(artifactId, 'Artifact body commands require missionId and artifactId.');
-            return ArtifactBodySnapshotSchema.parse(await commandRemote({
+        commandArtifactBody: async ({ missionId, id, body }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Artifact body commands require missionId and id.');
+            const normalizedId = requireNonEmptyValue(id, 'Artifact body commands require missionId and id.');
+            return ArtifactCommandAcknowledgementSchema.parse(await commandRemote({
                 entity: artifactEntityName,
-                method: 'writeDocument',
+                method: 'command',
                 payload: {
                     ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
-                    artifactId: normalizedArtifactId,
-                    body
+                    id: normalizedId,
+                    commandId: ArtifactCommandIds.body,
+                    input: body
                 }
             }));
         }
@@ -317,7 +319,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     private readonly sessions = new EntityRegistry<string, AgentSessionDataType, AgentSession>();
     private readonly stages = new EntityRegistry<string, StageDataType, Stage>();
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
-    private readonly artifacts = new EntityRegistry<string, ArtifactSnapshot, Artifact>();
+    private readonly artifacts = new EntityRegistry<string, ArtifactDataType, Artifact>();
 
     public constructor(input: MissionDependencies) {
         this.snapshot = input.snapshot;
@@ -327,7 +329,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         this.applySessionSnapshots(input.snapshot.agentSessions);
         this.applyTaskSnapshots(input.snapshot);
         this.applyStageSnapshots(input.snapshot);
-        this.applyArtifactSnapshots(input.snapshot);
+        this.applyArtifactDataFromMission(input.snapshot);
     }
 
     private get snapshot(): MissionSnapshotType {
@@ -509,24 +511,8 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.sessions.get(sessionId);
     }
 
-    public getArtifact(filePath: string): Artifact | undefined {
-        return this.artifacts.get(filePath);
-    }
-
-    public resolveArtifact(input: {
-        filePath: string;
-        label?: string;
-        stageId?: string;
-        taskId?: string;
-    }): Artifact {
-        const snapshot = toArtifactIdentitySnapshot(input);
-        const existingArtifact = this.getArtifact(snapshot.filePath);
-
-        if (existingArtifact) {
-            return existingArtifact;
-        }
-
-        return this.createArtifactEntity(snapshot);
+    public getArtifact(id: string): Artifact | undefined {
+        return this.artifacts.get(id);
     }
 
     public async refresh(): Promise<this> {
@@ -539,7 +525,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         this.applySessionSnapshots(snapshot.agentSessions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
-        this.applyArtifactSnapshots(snapshot);
+        this.applyArtifactDataFromMission(snapshot);
         return this;
     }
 
@@ -559,29 +545,29 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.applySnapshot(snapshot);
     }
 
-    public applyStageSnapshot(snapshot: StageDataType): this {
+    public applyStageData(data: StageDataType): this {
         const nextStages = upsertById(
             this.stages.values().map((stage) => stage.toData()),
-            snapshot,
+            data,
             (stage) => stage.stageId
         );
 
         this.applyStageSnapshotsFromStages(nextStages);
-        this.applyTaskSnapshotsForStage(snapshot);
-        this.applyArtifactDataSnapshotsForStage(snapshot);
-        this.updateControlViewStageSnapshot(snapshot);
+        this.applyTaskSnapshotsForStage(data);
+        this.applyArtifactDataForStage(data);
+        this.updateControlViewStageData(data);
         return this;
     }
 
-    public applyTaskSnapshot(snapshot: TaskDataType): this {
-        this.applyTaskDataSnapshot(snapshot);
-        this.updateControlViewTaskSnapshot(snapshot);
+    public applyTaskData(data: TaskDataType): this {
+        this.applyTaskDataToRegistry(data);
+        this.updateControlViewTaskData(data);
         return this;
     }
 
-    public applyArtifactSnapshot(snapshot: ArtifactDataType): this {
-        this.applyArtifactControlViewSnapshot(snapshot);
-        this.updateControlViewArtifactSnapshot(snapshot);
+    public applyArtifactData(data: ArtifactDataType): this {
+        this.applyArtifactControlViewData(data);
+        this.updateControlViewArtifactData(data);
         return this;
     }
 
@@ -597,19 +583,19 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         const artifactSnapshots = snapshot.status?.artifacts
             ?? stageSnapshots?.flatMap((stage) => stage.artifacts);
         if (artifactSnapshots) {
-            this.applyArtifactDataSnapshots(artifactSnapshots);
+            this.applyArtifactDataList(artifactSnapshots);
         }
 
         return this;
     }
 
-    public applyAgentSessionSnapshot(snapshot: AgentSessionDataType): this {
+    public applyAgentSessionData(data: AgentSessionDataType): this {
         const nextSessions = [
             ...this.sessions
                 .values()
                 .map((session) => session.toData())
-                .filter((session) => session.sessionId !== snapshot.sessionId),
-            snapshot
+                .filter((session) => session.sessionId !== data.sessionId),
+            data
         ];
 
         this.applySessionSnapshots(nextSessions);
@@ -709,7 +695,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         this.reconcileTaskSnapshots(taskSnapshots);
     }
 
-    private applyTaskDataSnapshot(task: TaskDataType): void {
+    private applyTaskDataToRegistry(task: TaskDataType): void {
         const nextTaskSnapshot: TaskSnapshot = {
             stageId: task.stageId,
             task
@@ -764,68 +750,65 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         );
     }
 
-    private applyArtifactSnapshots(snapshot: MissionSnapshotType): void {
-        this.applyArtifactDataSnapshots(snapshot.artifacts);
+    private applyArtifactDataFromMission(snapshot: MissionSnapshotType): void {
+        this.applyArtifactDataList(snapshot.artifacts);
     }
 
-    private applyArtifactDataSnapshots(artifacts: ArtifactDataType[]): void {
-        const artifactSnapshots: ArtifactSnapshot[] = artifacts.map(toArtifactSnapshot);
-
-        this.reconcileArtifactSnapshots(artifactSnapshots);
+    private applyArtifactDataList(artifacts: ArtifactDataType[]): void {
+        this.reconcileArtifactData(artifacts);
     }
 
-    private applyArtifactDataSnapshotsForStage(stage: StageDataType): void {
-        const artifactSnapshots = [
+    private applyArtifactDataForStage(stage: StageDataType): void {
+        const artifactsData = [
             ...this.artifacts
                 .values()
                 .map((artifact) => artifact.toData())
                 .filter((artifact) => artifact.stageId !== stage.stageId),
-            ...stage.artifacts.map(toArtifactSnapshot)
+            ...stage.artifacts
         ];
 
-        this.reconcileArtifactSnapshots(artifactSnapshots);
+        this.reconcileArtifactData(artifactsData);
     }
 
-    private applyArtifactControlViewSnapshot(snapshot: ArtifactDataType): void {
-        const artifactSnapshot = toArtifactSnapshot(snapshot);
-        const artifactSnapshots = upsertById(
+    private applyArtifactControlViewData(data: ArtifactDataType): void {
+        const artifactsData = upsertById(
             this.artifacts.values().map((artifact) => artifact.toData()),
-            artifactSnapshot,
-            (artifact) => artifact.artifactId
+            data,
+            (artifact) => artifact.id
         );
 
-        this.reconcileArtifactSnapshots(artifactSnapshots);
+        this.reconcileArtifactData(artifactsData);
     }
 
-    private reconcileArtifactSnapshots(artifactSnapshots: ArtifactSnapshot[]): void {
+    private reconcileArtifactData(artifactsData: ArtifactDataType[]): void {
         this.artifacts.reconcile(
-            artifactSnapshots,
-            (artifactSnapshot) => artifactSnapshot.filePath,
-            (artifactSnapshot) => this.createArtifactEntity(artifactSnapshot)
+            artifactsData,
+            (artifactData) => artifactData.id,
+            (artifactData) => this.createArtifactEntity(artifactData)
         );
     }
 
-    private updateControlViewStageSnapshot(snapshot: StageDataType): void {
-        this.updateControlViewWorkflowStages((stages) => upsertById(stages, snapshot, (stage) => stage.stageId));
+    private updateControlViewStageData(data: StageDataType): void {
+        this.updateControlViewWorkflowStages((stages) => upsertById(stages, data, (stage) => stage.stageId));
     }
 
-    private updateControlViewTaskSnapshot(snapshot: TaskDataType): void {
+    private updateControlViewTaskData(data: TaskDataType): void {
         this.updateControlViewWorkflowStages((stages) => stages.map((stage) => {
-            if (stage.stageId !== snapshot.stageId) {
+            if (stage.stageId !== data.stageId) {
                 return {
                     ...stage,
-                    tasks: stage.tasks.filter((task) => task.taskId !== snapshot.taskId)
+                    tasks: stage.tasks.filter((task) => task.taskId !== data.taskId)
                 };
             }
 
             return {
                 ...stage,
-                tasks: upsertById(stage.tasks, snapshot, (task) => task.taskId)
+                tasks: upsertById(stage.tasks, data, (task) => task.taskId)
             };
         }));
     }
 
-    private updateControlViewArtifactSnapshot(snapshot: ArtifactDataType): void {
+    private updateControlViewArtifactData(data: ArtifactDataType): void {
         const controlViewSnapshot = this.controlViewSnapshot;
         if (!controlViewSnapshot) {
             return;
@@ -839,8 +822,8 @@ export class Mission implements EntityModel<MissionSnapshotType> {
                     status: {
                         ...controlViewSnapshot.status,
                         artifacts: statusArtifacts
-                            ? upsertById(statusArtifacts, snapshot, (artifact) => artifact.artifactId)
-                            : [snapshot]
+                            ? upsertById(statusArtifacts, data, (artifact) => artifact.id)
+                            : [data]
                     }
                 }
                 : {})
@@ -885,21 +868,19 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         });
     }
 
-    private createArtifactEntity(snapshot: ArtifactSnapshot): Artifact {
-        return new Artifact(snapshot, {
-            readDocument: async (filePath, input) => {
-                const artifactId = this.getArtifact(filePath)?.artifactId ?? snapshot.artifactId;
-                return this.childCommands.readArtifactDocument({
+    private createArtifactEntity(data: ArtifactDataType): Artifact {
+        return new Artifact(data, {
+            body: async (id, input) => {
+                return this.childCommands.artifactBody({
                     missionId: this.missionId,
-                    artifactId,
+                    id,
                     ...(input?.executionContext ? { executionContext: input.executionContext } : {})
                 });
             },
-            writeDocument: async (filePath, body) => {
-                const artifactId = this.getArtifact(filePath)?.artifactId ?? snapshot.artifactId;
-                return this.childCommands.writeArtifactDocument({
+            commandBody: async (id, body) => {
+                return this.childCommands.commandArtifactBody({
                     missionId: this.missionId,
-                    artifactId,
+                    id,
                     body
                 });
             }
@@ -926,22 +907,6 @@ function upsertById<T>(dataItems: T[], snapshot: T, selectId: (snapshot: T) => s
     });
 
     return replaced ? nextSnapshots : [...nextSnapshots, snapshot];
-}
-
-function toArtifactIdentitySnapshot(input: {
-    filePath: string;
-    label?: string;
-    stageId?: string;
-    taskId?: string;
-}): ArtifactSnapshot {
-    return {
-        artifactId: input.filePath,
-        filePath: input.filePath,
-        mimeType: resolveArtifactMimeType(input.filePath),
-        ...(input.label?.trim() ? { label: input.label.trim() } : {}),
-        ...(input.stageId?.trim() ? { stageId: input.stageId.trim() } : {}),
-        ...(input.taskId?.trim() ? { taskId: input.taskId.trim() } : {})
-    };
 }
 
 function requireMissionId(missionId: string, message: string): string {
@@ -985,31 +950,5 @@ function sendMissionCommand(
             ...(input.input !== undefined ? { input: input.input } : {})
         }
     }));
-}
-
-function toArtifactSnapshot(artifact: ArtifactDataType): ArtifactSnapshot {
-    return {
-        artifactId: artifact.artifactId,
-        filePath: artifact.filePath ?? artifact.relativePath ?? artifact.artifactId,
-        mimeType: artifact.mimeType,
-        label: artifact.label,
-        ...(artifact.stageId ? { stageId: artifact.stageId } : {}),
-        ...(artifact.taskId ? { taskId: artifact.taskId } : {}),
-        ...(artifact.commands ? { commands: artifact.commands } : {})
-    };
-}
-
-function resolveArtifactMimeType(filePath: string): string {
-    const normalizedPath = filePath.toLowerCase();
-    if (normalizedPath.endsWith('.md') || normalizedPath.endsWith('.markdown')) {
-        return 'text/markdown';
-    }
-    if (normalizedPath.endsWith('.json')) {
-        return 'application/json';
-    }
-    if (normalizedPath.endsWith('.txt')) {
-        return 'text/plain';
-    }
-    return 'application/octet-stream';
 }
 

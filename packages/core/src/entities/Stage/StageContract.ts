@@ -7,7 +7,7 @@ import {
     StageStorageSchema,
     StageDataSchema,
     StageCommandAcknowledgementSchema,
-    StageSnapshotChangedEventSchema
+    StageDataChangedSchema
 } from './StageSchema.js';
 
 export const StageContract: EntityContractType = {
@@ -31,8 +31,8 @@ export const StageContract: EntityContractType = {
         }
     },
     events: {
-        'snapshot.changed': {
-            payload: StageSnapshotChangedEventSchema
+        'data.changed': {
+            payload: StageDataChangedSchema
         }
     }
 };

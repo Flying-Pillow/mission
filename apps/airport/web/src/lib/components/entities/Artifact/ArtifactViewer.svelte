@@ -4,9 +4,13 @@
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
-    import { ArtifactBodySnapshotSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
+    import { ArtifactBodySchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
+    import {
+        isArtifactTextEditable,
+        resolveArtifactViewerKind,
+    } from "./ArtifactPresentation.js";
     import { qry } from "../../../../routes/api/entities/remote/query.remote";
 
     let {
@@ -26,21 +30,33 @@
     const mission = $derived(missionScope.mission);
 
     const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
-    const artifactDocumentKey = $derived(
-        artifact ? `${artifact.artifactId}:${refreshNonce}` : "none",
+    const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
+    const viewerKind = $derived(
+        resolveArtifactViewerKind(artifactBodyLocation),
     );
-    const artifactDocumentQueryInput = $derived.by(() => {
+    const canEditArtifact = $derived(
+        isArtifactTextEditable(artifactBodyLocation),
+    );
+    const artifactBodyKey = $derived(
+        artifact ? `${artifact.id}:${refreshNonce}` : "none",
+    );
+    const artifactBodyQueryInput = $derived.by(() => {
         refreshNonce;
-        if (!artifact || !mission) {
+        if (
+            !artifact ||
+            !mission ||
+            viewerKind === "unsupported" ||
+            viewerKind === "image"
+        ) {
             return null;
         }
 
         return {
             entity: "Artifact",
-            method: "readDocument",
+            method: "body",
             payload: {
                 missionId: mission.missionId,
-                artifactId: artifact.artifactId,
+                id: artifact.id,
                 ...(mission.missionWorktreePath
                     ? { repositoryRootPath: mission.missionWorktreePath }
                     : {}),
@@ -63,7 +79,7 @@
             <TaskCommandbar {refreshNonce} {task} {onCommandExecuted} />
         </div>
 
-        {#if artifact}
+        {#if artifact && canEditArtifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
                 <PencilIcon />
                 Edit
@@ -73,24 +89,41 @@
 
     <div class="min-h-0 overflow-auto p-2">
         {#if artifact}
-            {#if artifactDocumentQueryInput}
-                {#key artifactDocumentKey}
-                    {#await qry(artifactDocumentQueryInput)}
+            {#if artifactBodyQueryInput}
+                {#key artifactBodyKey}
+                    {#await qry(artifactBodyQueryInput)}
                         <div
                             class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
                         >
-                            Loading artifact content...
+                            Loading artifact...
                         </div>
-                    {:then artifactDocumentResult}
-                        {@const artifactDocument =
-                            ArtifactBodySnapshotSchema.parse(
-                                artifactDocumentResult,
-                            )}
-                        <div class="bg-background/80">
-                            <MarkdownViewer
-                                source={artifactDocument.body.content}
-                            />
-                        </div>
+                    {:then artifactBodyResult}
+                        {@const artifactBody =
+                            ArtifactBodySchema.parse(artifactBodyResult)}
+                        {#if viewerKind === "markdown"}
+                            {#if typeof artifactBody.body !== "string"}
+                                <div
+                                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                                >
+                                    This artifact body is not text.
+                                </div>
+                            {:else}
+                                <div class="bg-background/80">
+                                    <MarkdownViewer
+                                        source={artifactBody.body}
+                                    />
+                                </div>
+                            {/if}
+                        {:else if typeof artifactBody.body !== "string"}
+                            <div
+                                class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                            >
+                                This artifact body is not text.
+                            </div>
+                        {:else}
+                            <pre
+                                class="min-h-[24rem] overflow-auto rounded border bg-background/80 p-4 font-mono text-sm leading-6 text-foreground whitespace-pre-wrap">{artifactBody.body}</pre>
+                        {/if}
                     {:catch loadError}
                         <div
                             class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
@@ -101,12 +134,22 @@
                         </div>
                     {/await}
                 {/key}
+            {:else}
+                <div
+                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                >
+                    {#if viewerKind === "image"}
+                        Image preview is selected for this artifact.
+                    {:else}
+                        Preview is unavailable for this artifact.
+                    {/if}
+                </div>
             {/if}
         {:else}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                Select a stage, task, or artifact row to resolve the document
+                Select a stage, task, or artifact row to resolve the artifact
                 that belongs in the operator viewer pane.
             </div>
         {/if}

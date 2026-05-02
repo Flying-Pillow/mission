@@ -23,7 +23,6 @@ import {
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
 import { getMissionStageDefinition } from '../../workflow/mission/manifest.js';
-import { collectArtifactFiles } from '../Artifact/ArtifactFiles.js';
 import { Task } from '../Task/Task.js';
 import {
 	isMissionDelivered,
@@ -53,7 +52,7 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 	const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
 	const activeTasks = resolveActiveStageTasks(currentStage);
 	const readyTasks = resolveReadyStageTasks(currentStage);
-	const productFiles = await collectArtifactFiles({ adapter: input.adapter, missionDir: input.missionDir });
+	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
 	const tower = buildTowerView(input.document.configuration, stages, input.sessions, productFiles);
 
 	return {
@@ -132,7 +131,7 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 		tasks: []
 	}));
 	const currentStageId = (input.workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
-	const productFiles = await collectArtifactFiles({ adapter: input.adapter, missionDir: input.missionDir });
+	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
 	const tower = buildTowerView(configuration, stages, [], productFiles);
 
 	return {
@@ -423,6 +422,28 @@ function sessionTone(state: string, fallbackColor: string): string {
 function toStatusLabel(state: string): string {
 	const normalized = state.trim();
 	return normalized.length > 0 ? normalized.replace(/[_-]+/g, ' ') : 'unknown';
+}
+
+async function collectMissionArtifactPaths(input: {
+	adapter: FilesystemAdapter;
+	missionDir: string;
+}): Promise<Partial<Record<MissionArtifactKey, string>>> {
+	const entries = await Promise.all(
+		(Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[]).map(async (artifact) => {
+			const record = await input.adapter.readArtifactRecord(input.missionDir, artifact);
+			const exists = await input.adapter.artifactExists(input.missionDir, artifact);
+			return exists && record?.filePath ? ([artifact, record.filePath] as const) : undefined;
+		})
+	);
+
+	const result: Partial<Record<MissionArtifactKey, string>> = {};
+	for (const entry of entries) {
+		if (!entry) {
+			continue;
+		}
+		result[entry[0]] = entry[1];
+	}
+	return result;
 }
 
 function buildRecommendedAction(

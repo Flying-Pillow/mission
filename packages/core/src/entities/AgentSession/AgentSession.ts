@@ -682,7 +682,7 @@ function requireRecordMissionId(record: AgentSessionRecord): string {
 function createAgentSessionContext(record: AgentSessionRecord): AgentSessionContextType {
 	return AgentSessionContextSchema.parse({
 		artifacts: record.assignmentLabel
-			? [{ artifactId: record.assignmentLabel, role: 'instruction', order: 0, title: record.currentTurnTitle ?? record.assignmentLabel }]
+			? [{ id: record.assignmentLabel, role: 'instruction', order: 0, title: record.currentTurnTitle ?? record.assignmentLabel }]
 			: [],
 		instructions: record.currentTurnTitle
 			? [{ instructionId: `${record.sessionId}:turn-title`, text: record.currentTurnTitle, order: 0 }]

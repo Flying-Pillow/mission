@@ -77,26 +77,10 @@ export const TaskCommandAcknowledgementSchema = EntityCommandAcknowledgementSche
     commandId: TaskCommandIdSchema
 }).strict();
 
-export const TaskSnapshotChangedEventSchema = z.object({
+export const TaskDataChangedSchema = z.object({
     reference: TaskEventSubjectSchema,
-    snapshot: TaskDataSchema
+    data: TaskDataSchema
 }).strict();
-
-export const taskRemoteQueryInputSchemas = {
-    read: TaskLocatorSchema
-} as const;
-
-export const taskRemoteCommandInputSchemas = {
-    command: TaskCommandInputSchema
-} as const;
-
-export const taskRemoteQueryResultSchemas = {
-    read: TaskDataSchema
-} as const;
-
-export const taskRemoteCommandResultSchemas = {
-    command: TaskCommandAcknowledgementSchema
-} as const;
 
 export type TaskLocatorType = z.infer<typeof TaskLocatorSchema>;
 export type TaskEventSubjectType = z.infer<typeof TaskEventSubjectSchema>;
@@ -105,5 +89,5 @@ export type TaskCommandInputType = z.infer<typeof TaskCommandInputSchema>;
 export type TaskStorageType = z.infer<typeof TaskStorageSchema>;
 export type TaskDataType = z.infer<typeof TaskDataSchema>;
 export type TaskCommandAcknowledgementType = z.infer<typeof TaskCommandAcknowledgementSchema>;
-export type TaskSnapshotChangedEventType = z.infer<typeof TaskSnapshotChangedEventSchema>;
+export type TaskDataChangedType = z.infer<typeof TaskDataChangedSchema>;
 

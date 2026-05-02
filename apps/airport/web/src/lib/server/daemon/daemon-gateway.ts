@@ -161,13 +161,21 @@ export class DaemonGateway {
     private toRuntimeEventPayload(event: AddressedNotification): unknown {
         switch (event.type) {
             case 'mission.snapshot.changed':
-            case 'stage.snapshot.changed':
-            case 'task.snapshot.changed':
-            case 'artifact.snapshot.changed':
-            case 'agentSession.snapshot.changed':
                 return {
                     reference: event.reference,
                     snapshot: event.snapshot
+                };
+            case 'stage.data.changed':
+            case 'task.data.changed':
+            case 'agentSession.data.changed':
+                return {
+                    reference: event.reference,
+                    data: event.data
+                };
+            case 'artifact.data.changed':
+                return {
+                    artifactEventLocator: event.artifactEventLocator,
+                    data: event.data
                 };
             case 'mission.status':
                 return event.status;

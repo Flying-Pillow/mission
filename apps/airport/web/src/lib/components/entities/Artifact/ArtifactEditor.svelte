@@ -5,6 +5,10 @@
     import XIcon from "@tabler/icons-svelte/icons/x";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import {
+        isArtifactTextEditable,
+        resolveMonacoLanguage,
+    } from "./ArtifactPresentation.js";
 
     const MONACO_VERSION = "0.52.2";
     const MONACO_BASE_URL = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
@@ -69,7 +73,7 @@
     let saveError = $state<string | null>(null);
     let lastSavedAt = $state<string | null>(null);
     let error = $state<string | null>(null);
-    let loadedPath = $state<string | null>(null);
+    let loadedId = $state<string | null>(null);
     let monacoContainer = $state<HTMLElement | null>(null);
     let editor = $state<MonacoEditorInstance | null>(null);
     let editorSubscription = $state<{ dispose(): void } | null>(null);
@@ -77,10 +81,14 @@
     let editorLanguage = $state<string | null>(null);
     let monacoReady = $state(false);
     let monacoLoadError = $state<string | null>(null);
-    const artifactPath = $derived(artifact?.filePath);
+    const id = $derived(artifact?.id);
+    const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
+    const isEditableTextArtifact = $derived(
+        isArtifactTextEditable(artifactBodyLocation),
+    );
     const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
     const hasUnsavedChanges = $derived(
-        artifactPath === loadedPath && content !== originalContent,
+        id === loadedId && content !== originalContent,
     );
     const statusMessage = $derived.by(() => {
         if (loading) {
@@ -102,10 +110,10 @@
     });
 
     $effect(() => {
-        if (!artifactPath) {
+        if (!id || !isEditableTextArtifact) {
             content = "";
             originalContent = "";
-            loadedPath = null;
+            loadedId = null;
             saveStatus = "idle";
             saveError = null;
             lastSavedAt = null;
@@ -113,15 +121,15 @@
             return;
         }
 
-        if (artifactPath === loadedPath) {
+        if (id === loadedId) {
             return;
         }
 
-        void loadArtifactDocument(artifactPath);
+        void loadArtifactBody();
     });
 
     $effect(() => {
-        if (!artifactPath) {
+        if (!id || !isEditableTextArtifact) {
             disposeEditor();
             monacoReady = false;
             monacoLoadError = null;
@@ -131,7 +139,8 @@
         if (
             !browser ||
             !monacoContainer ||
-            !artifactPath ||
+            !id ||
+            !isEditableTextArtifact ||
             editor ||
             monacoLoadError
         ) {
@@ -161,7 +170,7 @@
             return;
         }
 
-        const nextLanguage = inferMonacoLanguage(artifactPath);
+        const nextLanguage = resolveMonacoLanguage(artifactBodyLocation);
         if (editorModel && editorLanguage !== nextLanguage) {
             const replacementModel = (
                 window as unknown as MonacoLoaderWindow
@@ -215,7 +224,7 @@
         };
     });
 
-    async function loadArtifactDocument(path: string): Promise<void> {
+    async function loadArtifactBody(): Promise<void> {
         loading = true;
         error = null;
 
@@ -226,13 +235,20 @@
                 );
             }
 
+            if (!isEditableTextArtifact) {
+                throw new Error("This artifact is not editable in Monaco.");
+            }
+
             const payload = await artifact.read({ executionContext: "render" });
-            content = payload.body.content;
-            originalContent = payload.body.content;
+            if (typeof payload.body !== "string") {
+                throw new Error("This artifact body is not text.");
+            }
+            content = payload.body;
+            originalContent = payload.body;
             saveStatus = "idle";
             saveError = null;
-            lastSavedAt = payload.updatedAt ?? null;
-            loadedPath = path;
+            lastSavedAt = null;
+            loadedId = artifact.id;
         } catch (loadError) {
             error =
                 loadError instanceof Error
@@ -243,10 +259,7 @@
         }
     }
 
-    async function saveArtifactDocument(
-        path: string,
-        nextContent: string,
-    ): Promise<void> {
+    async function saveArtifactBody(nextContent: string): Promise<void> {
         saveInFlight = true;
         saveStatus = "saving";
         saveError = null;
@@ -258,11 +271,15 @@
                 );
             }
 
-            const payload = await artifact.write(nextContent);
+            if (!isEditableTextArtifact) {
+                throw new Error("This artifact is not editable in Monaco.");
+            }
 
-            originalContent = payload.body.content;
-            loadedPath = path;
-            lastSavedAt = payload.updatedAt ?? new Date().toISOString();
+            await artifact.saveBody(nextContent);
+
+            originalContent = nextContent;
+            loadedId = artifact.id;
+            lastSavedAt = new Date().toISOString();
             saveStatus = "saved";
         } catch (saveFailure) {
             saveError =
@@ -276,11 +293,16 @@
     }
 
     async function handleSaveRequest(): Promise<void> {
-        if (!artifactPath || saveInFlight || !hasUnsavedChanges) {
+        if (
+            !id ||
+            !isEditableTextArtifact ||
+            saveInFlight ||
+            !hasUnsavedChanges
+        ) {
             return;
         }
 
-        await saveArtifactDocument(artifactPath, content);
+        await saveArtifactBody(content);
     }
 
     async function handleCloseRequest(): Promise<void> {
@@ -306,7 +328,7 @@
 
     async function setupEditor(container: HTMLElement): Promise<void> {
         const monaco = await loadMonacoFromCdn();
-        const language = inferMonacoLanguage(artifactPath);
+        const language = resolveMonacoLanguage(artifactBodyLocation);
 
         const model = monaco.editor.createModel(content, language);
         const instance = monaco.editor.create(container, {
@@ -467,32 +489,6 @@
         editorLanguage = null;
     }
 
-    function inferMonacoLanguage(path: string | undefined): string {
-        const extension = path?.split(".").pop()?.toLowerCase();
-
-        switch (extension) {
-            case "json":
-                return "json";
-            case "yaml":
-            case "yml":
-                return "yaml";
-            case "md":
-                return "markdown";
-            case "ts":
-                return "typescript";
-            case "js":
-                return "javascript";
-            case "html":
-                return "html";
-            case "css":
-                return "css";
-            case "xml":
-                return "xml";
-            default:
-                return "plaintext";
-        }
-    }
-
     function resolveMonacoTheme(): string {
         return document.documentElement.classList.contains("dark")
             ? "vs-dark"
@@ -523,8 +519,8 @@
                     {panelLabel}
                 </h2>
                 <p class="mt-1 break-all text-xs text-muted-foreground">
-                    {artifactPath ??
-                        "No artifact resolves from the current mission selection."}
+                    {artifactBodyLocation ??
+                        "No artifact body resolves from the current mission selection."}
                 </p>
             </div>
 
@@ -535,7 +531,8 @@
                     onclick={handleSaveRequest}
                     disabled={!hasUnsavedChanges ||
                         saveInFlight ||
-                        !artifactPath}
+                        !id ||
+                        !isEditableTextArtifact}
                 >
                     <DeviceFloppyIcon />
                     Save
@@ -571,13 +568,13 @@
     </header>
 
     <div class="min-h-0 pt-3">
-        {#if artifactPath}
+        {#if id && isEditableTextArtifact}
             {#if monacoLoadError}
-                <textarea
-                    bind:value={content}
-                    spellcheck="false"
-                    class="h-full min-h-[24rem] w-full resize-none rounded-xl border bg-background/80 px-4 py-4 font-mono text-sm leading-6 text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                ></textarea>
+                <div
+                    class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                >
+                    {monacoLoadError}
+                </div>
             {:else}
                 <div
                     class="relative h-full min-h-[24rem] overflow-hidden rounded-xl border bg-background/80"
@@ -600,8 +597,7 @@
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border border-dashed bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                Select a stage, task, or artifact row to resolve the document
-                that belongs in the operator editor pane.
+                No Monaco editor is available for this artifact.
             </div>
         {/if}
     </div>

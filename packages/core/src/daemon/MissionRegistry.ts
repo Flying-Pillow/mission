@@ -1,4 +1,3 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AgentCommand, AgentPrompt } from './runtime/agent/AgentRuntimeTypes.js';
 import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
@@ -8,10 +7,8 @@ import type {
     AgentSessionPromptType
 } from '../entities/AgentSession/AgentSessionSchema.js';
 import {
-    type MissionDocumentSnapshotType,
     MissionLocatorSchema,
-    type MissionLocatorType,
-    type MissionWorktreeNodeData
+    type MissionLocatorType
 } from '../entities/Mission/MissionSchema.js';
 import { Mission } from '../entities/Mission/Mission.js';
 import { Repository } from '../entities/Repository/Repository.js';
@@ -58,16 +55,6 @@ export type MissionHandle = Pick<
     | 'toEntity'
     | 'writeDocument'
 >;
-
-export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
-    '.git',
-    'node_modules',
-    '.pnpm-store',
-    '.svelte-kit',
-    '.turbo',
-    'dist',
-    'build'
-]);
 
 export class MissionRegistry {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
@@ -178,83 +165,12 @@ export class MissionRegistry {
         };
     }
 
-    public resolveControlRoot(payload: MissionLocatorType, context: { surfacePath: string }): string {
-        return path.resolve(payload.repositoryRootPath?.trim() || context.surfacePath);
-    }
-
-    public async readMissionDocument(filePath: string): Promise<MissionDocumentSnapshotType> {
-        const content = await fs.readFile(filePath, 'utf8');
-        const stats = await fs.stat(filePath);
-        return {
-            filePath,
-            content,
-            updatedAt: stats.mtime.toISOString()
-        };
-    }
-
-    public async writeMissionDocument(filePath: string, content: string): Promise<MissionDocumentSnapshotType> {
-        await fs.writeFile(filePath, content, 'utf8');
-        return this.readMissionDocument(filePath);
-    }
-
-    public async assertMissionDocumentPath(
-        filePath: string,
-        intent: 'read' | 'write',
-        controlRoot: string
-    ): Promise<void> {
-        const normalizedPath = filePath.trim();
-        if (!normalizedPath) {
-            throw new Error('Mission document path must not be empty.');
-        }
-
-        const candidatePath = path.resolve(normalizedPath);
-        const canonicalPath = await resolveCanonicalDocumentPath(candidatePath, intent);
-        const roots = await Promise.all([
-            canonicalizeAllowedRoot(controlRoot),
-            canonicalizeAllowedRoot(Repository.getMissionWorktreesPath(controlRoot))
-        ]);
-
-        if (!roots.some((rootPath) => rootPath && isPathInsideRoot(rootPath, canonicalPath))) {
-            throw new Error(`Mission document '${normalizedPath}' is outside the active repository root.`);
-        }
-    }
-
-    public async readDirectoryTree(directoryPath: string, rootPath: string): Promise<MissionWorktreeNodeData[]> {
-        const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-        const nodes = await Promise.all(
-            entries
-                .filter((entry) => !IGNORED_WORKTREE_ENTRY_NAMES.has(entry.name))
-                .map(async (entry) => {
-                    const absolutePath = path.join(directoryPath, entry.name);
-                    const relativePath = path.relative(rootPath, absolutePath) || entry.name;
-                    if (entry.isDirectory()) {
-                        return {
-                            name: entry.name,
-                            relativePath,
-                            absolutePath,
-                            kind: 'directory' as const,
-                            children: await this.readDirectoryTree(absolutePath, rootPath)
-                        };
-                    }
-
-                    return {
-                        name: entry.name,
-                        relativePath,
-                        absolutePath,
-                        kind: 'file' as const
-                    };
-                })
-        );
-
-        return nodes.sort(compareMissionWorktreeNodes);
-    }
-
     private async loadMissionFromRegistry(
         input: MissionLocatorType,
         context: { surfacePath: string },
         terminalSessionName?: string
     ): Promise<MissionHandle | undefined> {
-        const controlRoot = this.resolveControlRoot(input, context);
+        const controlRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
         const key = this.createMissionKey(controlRoot, input.missionId);
         const existingMission = this.missionHandles.get(key);
         if (existingMission) {
@@ -388,49 +304,4 @@ function resolveRepositoryPath(repositoryRootPath: string, configuredPath: strin
     return path.isAbsolute(configuredPath)
         ? configuredPath
         : path.join(repositoryRootPath, configuredPath);
-}
-
-async function canonicalizeAllowedRoot(rootPath: string): Promise<string | undefined> {
-    try {
-        return await fs.realpath(rootPath);
-    } catch (error) {
-        if (isMissingFileError(error)) {
-            return rootPath;
-        }
-
-        throw error;
-    }
-}
-
-async function resolveCanonicalDocumentPath(
-    candidatePath: string,
-    intent: 'read' | 'write'
-): Promise<string> {
-    try {
-        return await fs.realpath(candidatePath);
-    } catch (error) {
-        if (!isMissingFileError(error) || intent === 'read') {
-            throw error;
-        }
-
-        const parentDirectory = await fs.realpath(path.dirname(candidatePath));
-        return path.join(parentDirectory, path.basename(candidatePath));
-    }
-}
-
-function isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
-    const relativePath = path.relative(rootPath, candidatePath);
-    return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-    return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-}
-
-function compareMissionWorktreeNodes(left: MissionWorktreeNodeData, right: MissionWorktreeNodeData): number {
-    if (left.kind !== right.kind) {
-        return left.kind === 'directory' ? -1 : 1;
-    }
-
-    return left.name.localeCompare(right.name, undefined, { numeric: true });
 }

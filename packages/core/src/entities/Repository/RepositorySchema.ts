@@ -197,40 +197,6 @@ export const RepositoryPrepareResultSchema = z.object({
     missionsPath: z.string().trim().min(1)
 }).strict();
 
-export const repositoryRemoteQuerySchemas = {
-    find: RepositoryFindSchema,
-    findAvailable: RepositoryFindAvailableSchema,
-    read: RepositoryLocatorSchema,
-    listIssues: RepositoryLocatorSchema,
-    getIssue: RepositoryGetIssueSchema
-} as const;
-
-export const repositoryRemoteCommandSchemas = {
-    add: RepositoryAddSchema,
-    remove: RepositoryLocatorSchema,
-    prepare: RepositoryLocatorSchema,
-    startMissionFromIssue: RepositoryStartMissionFromIssueSchema,
-    startMissionFromBrief: RepositoryStartMissionFromBriefSchema
-} as const;
-
-export const repositoryRemoteQueryResultSchemas = {
-    find: z.array(RepositoryDataSchema),
-    findAvailable: z.array(RepositoryPlatformRepositorySchema),
-    read: RepositoryDataSchema,
-    listIssues: z.array(TrackedIssueSummarySchema),
-    getIssue: GitHubIssueDetailSchema
-} as const;
-
-export const repositoryRemoteCommandResultSchemas = {
-    add: RepositoryDataSchema,
-    remove: RepositoryRemoveAcknowledgementSchema,
-    prepare: RepositoryPrepareResultSchema,
-    startMissionFromIssue: RepositoryMissionStartAcknowledgementSchema,
-    startMissionFromBrief: RepositoryMissionStartAcknowledgementSchema
-} as const;
-
-
-
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
 export type RepositoryStorageType = z.infer<typeof RepositoryStorageSchema>;
 export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSchema>;

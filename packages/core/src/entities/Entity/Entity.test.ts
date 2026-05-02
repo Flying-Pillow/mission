@@ -87,11 +87,11 @@ describe('Entity event identity', () => {
 
         expect(entityId).toBe('task:mission-29/stage/task-1');
         expect(getEntityTable(entityId)).toBe('task');
-        expect(createEntityChannel(entityId, 'snapshot.changed')).toBe('task:mission-29/stage/task-1.snapshot.changed');
+        expect(createEntityChannel(entityId, 'data.changed')).toBe('task:mission-29/stage/task-1.data.changed');
     });
 
     it('matches exact and wildcard channel subscriptions', () => {
-        const channel = createEntityChannel(createEntityId('task', 'mission-29/stage/task-1'), 'snapshot.changed');
+        const channel = createEntityChannel(createEntityId('task', 'mission-29/stage/task-1'), 'data.changed');
 
         expect(matchesEntityChannel(channel, 'task:mission-29/*.*')).toBe(true);
         expect(matchesEntityChannel(channel, 'task:mission-30/*.*')).toBe(false);

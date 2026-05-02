@@ -101,7 +101,7 @@ export interface TowerView extends AirportPaneViewBase {
 }
 
 export interface BriefingRoomView extends AirportPaneViewBase {
-	artifactId?: string;
+	artifact?: string;
 	artifactPath?: string;
 	resourceLabel?: string;
 	launchPath?: string;

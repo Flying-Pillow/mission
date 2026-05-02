@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import {
 	MissionAgentEventEmitter,
@@ -54,10 +53,7 @@ import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import { toAgentSession } from '../AgentSession/AgentSession.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
-import {
-	createMissionArtifact,
-	createTaskArtifact
-} from '../Artifact/ArtifactFactory.js';
+import { Artifact } from '../Artifact/Artifact.js';
 import { Task, toTask } from '../Task/Task.js';
 import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
 import type { TaskDataType } from '../Task/TaskSchema.js';
@@ -159,22 +155,26 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.buildMissionControlViewSnapshot();
 	}
 
-	public async readDocument(payload: unknown, context: EntityExecutionContext) {
+	public async readDocument(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionReadDocumentInputSchema.parse(payload);
-		const service = await Mission.loadMissionRegistry(context);
-		await service.assertMissionDocumentPath(input.path, 'read', service.resolveControlRoot(input, context));
-		return MissionDocumentSnapshotSchema.parse(await service.readMissionDocument(input.path));
+		this.assertResolvedMissionId(input.missionId);
+		await this.adapter.assertFilePath(input.path, 'read');
+		const fileBody = await this.adapter.readFileBody(input.path);
+		return MissionDocumentSnapshotSchema.parse({
+			filePath: fileBody.filePath,
+			content: fileBody.body,
+			...(fileBody.updatedAt ? { updatedAt: fileBody.updatedAt } : {})
+		});
 	}
 
-	public async readWorktree(payload: unknown, context: EntityExecutionContext) {
+	public async readWorktree(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionLocatorSchema.parse(payload);
 		const missionId = this.assertResolvedMissionId(input.missionId);
-		const service = await Mission.loadMissionRegistry(context);
-		const rootPath = path.join(Repository.getMissionWorktreesPath(service.resolveControlRoot(input, context)), missionId);
+		const rootPath = this.adapter.getMissionWorktreePath(missionId);
 		return MissionWorktreeSnapshotSchema.parse({
 			rootPath,
 			fetchedAt: new Date().toISOString(),
-			tree: await service.readDirectoryTree(rootPath, rootPath)
+			tree: await this.adapter.readDirectoryTree(rootPath, rootPath)
 		});
 	}
 
@@ -220,12 +220,16 @@ export class Mission extends Entity<MissionDataType, string> {
 		return Mission.buildCommandAcknowledgement(input, 'command');
 	}
 
-	public async writeDocument(payload: unknown, context: EntityExecutionContext) {
+	public async writeDocument(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionWriteDocumentInputSchema.parse(payload);
 		this.assertResolvedMissionId(input.missionId);
-		const service = await Mission.loadMissionRegistry(context);
-		await service.assertMissionDocumentPath(input.path, 'write', service.resolveControlRoot(input, context));
-		return MissionDocumentSnapshotSchema.parse(await service.writeMissionDocument(input.path, input.content));
+		await this.adapter.assertFilePath(input.path, 'write');
+		const fileBody = await this.adapter.writeFileBody(input.path, input.content);
+		return MissionDocumentSnapshotSchema.parse({
+			filePath: fileBody.filePath,
+			content: fileBody.body,
+			...(fileBody.updatedAt ? { updatedAt: fileBody.updatedAt } : {})
+		});
 	}
 
 	public async ensureTerminal(payload: unknown, context: EntityExecutionContext) {
@@ -1580,8 +1584,8 @@ export class Mission extends Entity<MissionDataType, string> {
 		return stage ? structuredClone(stage) : undefined;
 	}
 
-	public findArtifact(artifactId: string): MissionDataType['artifacts'][number] | undefined {
-		const artifact = this.data.artifacts.find((candidate) => candidate.artifactId === artifactId);
+	public findArtifact(id: string): MissionDataType['artifacts'][number] | undefined {
+		const artifact = this.data.artifacts.find((candidate) => candidate.id === id);
 		return artifact ? structuredClone(artifact) : undefined;
 	}
 
@@ -1620,7 +1624,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				continue;
 			}
 
-			artifacts.push(createMissionArtifact({
+			artifacts.push(Artifact.createMissionArtifact({
 				missionId,
 				artifactKey,
 				filePath,
@@ -1631,7 +1635,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		const stages: StageDataType[] = requireArray(status.stages, 'Mission status stages').map((stage) => {
 			const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
 				.map((artifactKey) => productFiles[artifactKey]
-					? createMissionArtifact({
+					? Artifact.createMissionArtifact({
 						missionId,
 						artifactKey,
 						filePath: productFiles[artifactKey],
@@ -1643,7 +1647,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			const tasks: TaskDataType[] = stage.tasks.map((task) => {
 				const entity = toTask(task, missionId);
 				if (task.filePath) {
-					artifacts.push(createTaskArtifact({
+					artifacts.push(Artifact.createTaskArtifact({
 						missionId,
 						taskId: task.taskId,
 						stageId: task.stage,

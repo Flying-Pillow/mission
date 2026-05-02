@@ -376,7 +376,7 @@ export type ContextSelection = {
 	missionId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
-	artifactId?: string;
+	artifact?: string;
 	agentSessionId?: string;
 };
 
@@ -399,7 +399,7 @@ export type MissionContext = {
 	currentStage?: MissionStageId;
 	lifecycleState?: MissionLifecycleState;
 	taskIds: string[];
-	artifactIds: string[];
+	artifacts: string[];
 	sessionIds: string[];
 };
 
@@ -417,12 +417,12 @@ export type TaskContext = {
 	instructionSummary: string;
 	lifecycleState: MissionTaskStatus;
 	dependencyIds: string[];
-	primaryArtifactId?: string;
+	primaryArtifact?: string;
 	agentSessionIds?: string[];
 };
 
 export type ArtifactContext = {
-	artifactId: string;
+	id: string;
 	missionId?: string;
 	repositoryId?: string;
 	ownerTaskId?: string;
@@ -516,11 +516,11 @@ export type MissionResolvedSelection = {
 	missionId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
-	activeMissionArtifactId?: string;
+	activeMissionArtifact?: string;
 	activeMissionArtifactPath?: string;
-	activeInstructionArtifactId?: string;
+	activeInstructionArtifact?: string;
 	activeInstructionPath?: string;
-	activeStageResultArtifactId?: string;
+	activeStageResultArtifact?: string;
 	activeStageResultPath?: string;
 	activeAgentSessionId?: string;
 };

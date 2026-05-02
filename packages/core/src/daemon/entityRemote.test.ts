@@ -312,14 +312,14 @@ describe('daemon entity dispatch', () => {
 		await expect(executeEntityQueryInDaemon({
 			entity: 'Artifact',
 			method: 'read',
-			payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
-		}, context)).resolves.toMatchObject({ artifactId: 'mission:brief' });
+			payload: { missionId: 'mission-1', id: 'artifact:mission-1/mission:brief' }
+		}, context)).resolves.toMatchObject({ id: 'artifact:mission-1/mission:brief' });
 
 		await expect(executeEntityCommandInDaemon({
 			entity: 'Artifact',
 			method: 'command',
-			payload: { missionId: 'mission-1', artifactId: 'mission:brief', commandId: 'artifact.review' }
-		}, context)).rejects.toThrow("Command method 'Artifact.command' is not implemented in the daemon.");
+			payload: { missionId: 'mission-1', id: 'artifact:mission-1/mission:brief', commandId: 'artifact.review' }
+		}, context)).rejects.toBeInstanceOf(ZodError);
 
 		await expect(executeEntityQueryInDaemon({
 			entity: 'AgentSession',
@@ -409,8 +409,8 @@ describe('daemon entity dispatch', () => {
 		await expect(executeEntityQueryInDaemon({
 			entity: 'Artifact',
 			method: 'read',
-			payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
-		}, context)).rejects.toThrow("Artifact 'mission:brief' could not be resolved in Mission 'mission-1'.");
+			payload: { missionId: 'mission-1', id: 'artifact:mission-1/mission:brief' }
+		}, context)).rejects.toThrow("Artifact 'artifact:mission-1/mission:brief' could not be resolved in Mission 'mission-1'.");
 
 		await expect(executeEntityQueryInDaemon({
 			entity: 'AgentSession',
@@ -638,11 +638,9 @@ function createMissionTaskSnapshot() {
 function createMissionArtifactSnapshot() {
 	return {
 		id: 'artifact:mission-1/mission:brief',
-		artifactId: 'mission:brief',
 		kind: 'mission' as const,
 		label: 'Brief',
 		fileName: 'BRIEF.md',
-		mimeType: 'text/markdown',
 		filePath: '/repo/root/BRIEF.md',
 		relativePath: 'BRIEF.md'
 	};

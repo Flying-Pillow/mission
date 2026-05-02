@@ -42,8 +42,8 @@ export function resolveMissionSelectionFromContext(input: {
 	domain: ContextGraph;
 }): MissionResolvedSelection | undefined {
 	const { selection, domain } = input;
-	if (selection.artifactId) {
-		const artifact = domain.artifacts[selection.artifactId];
+	if (selection.artifact) {
+		const artifact = domain.artifacts[selection.artifact];
 		if (artifact?.ownerTaskId) {
 			const missionId = selection.missionId?.trim();
 			return resolveMissionSelection({
@@ -127,7 +127,7 @@ function resolveMissionArtifactTarget(
 	const resolvedMissionId = missionId ?? artifact?.missionId;
 	return {
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
-		...(artifact ? { activeMissionArtifactId: artifact.artifactId, activeMissionArtifactPath: artifact.filePath } : {})
+		...(artifact ? { activeMissionArtifact: artifact.id, activeMissionArtifactPath: artifact.filePath } : {})
 	};
 }
 
@@ -146,7 +146,7 @@ function resolveSessionTarget(
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
 		...(task?.stageId ?? target.stageId ? { stageId: (task?.stageId ?? target.stageId)! } : {}),
 		...(taskId ? { taskId } : {}),
-		...(instruction ? { activeInstructionArtifactId: instruction.artifactId, activeInstructionPath: instruction.filePath } : {}),
+		...(instruction ? { activeInstructionArtifact: instruction.id, activeInstructionPath: instruction.filePath } : {}),
 		...(explicitSessionId ? { activeAgentSessionId: explicitSessionId } : {})
 	};
 }
@@ -168,7 +168,7 @@ function resolveTaskTarget(
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
 		...(task?.stageId ?? target.stageId ? { stageId: (task?.stageId ?? target.stageId)! } : {}),
 		taskId,
-		...(instruction ? { activeInstructionArtifactId: instruction.artifactId, activeInstructionPath: instruction.filePath } : {}),
+		...(instruction ? { activeInstructionArtifact: instruction.id, activeInstructionPath: instruction.filePath } : {}),
 		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
 }
@@ -197,7 +197,7 @@ function resolveStageTarget(
 						: {}),
 		stageId,
 		...(preferredTask?.taskId ? { taskId: preferredTask.taskId } : {}),
-		...(stageArtifact ? { activeStageResultArtifactId: stageArtifact.artifactId, activeStageResultPath: stageArtifact.filePath } : {}),
+		...(stageArtifact ? { activeStageResultArtifact: stageArtifact.id, activeStageResultPath: stageArtifact.filePath } : {}),
 		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
 }
@@ -216,8 +216,8 @@ function resolveTaskInstructionArtifact(
 			return explicitArtifact;
 		}
 	}
-	if (task?.primaryArtifactId) {
-		const primaryArtifact = domain.artifacts[task.primaryArtifactId];
+	if (task?.primaryArtifact) {
+		const primaryArtifact = domain.artifacts[task.primaryArtifact];
 		if (primaryArtifact) {
 			return primaryArtifact;
 		}

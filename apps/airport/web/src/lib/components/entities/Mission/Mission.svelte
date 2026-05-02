@@ -19,6 +19,7 @@
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
+    import { isArtifactTextEditable } from "$lib/components/entities/Artifact/ArtifactPresentation.js";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
     import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
@@ -47,9 +48,9 @@
             taskId?: string;
         };
         activeArtifact?: {
+            id: string;
             displayLabel?: string;
         };
-        activeArtifactPath?: string;
         activeSessionId?: string;
     };
 
@@ -167,9 +168,8 @@
                   currentStageId,
                   briefPath: activeMission
                       .listArtifacts()
-                      .find(
-                          (artifact) => artifact.artifactId === "mission:brief",
-                      )?.filePath,
+                      .find((artifact) => artifact.toData().key === "brief")
+                      ?.filePath,
                   treeNodes: missionTreeNodes,
               }
             : undefined,
@@ -207,10 +207,12 @@
                       },
                   }
                 : {}),
-            ...(selectedNode?.sourcePath
+            ...(isArtifactSelectionNode(selectedNode)
                 ? {
-                      activeArtifact: { displayLabel: selectedNode.label },
-                      activeArtifactPath: selectedNode.sourcePath,
+                      activeArtifact: {
+                          id: selectedNode.id,
+                          displayLabel: selectedNode.label,
+                      },
                   }
                 : {}),
             ...(selectedNode?.sessionId
@@ -220,43 +222,25 @@
                   : {}),
         };
     });
-    const activeArtifactPath = $derived(selectionState.activeArtifactPath);
+    const activeArtifactSelection = $derived(selectionState.activeArtifact?.id);
     const selectedWorktreeFile = $derived(
         selectedWorktreeNode?.kind === "file" ? selectedWorktreeNode : null,
     );
-    const displayArtifactPath = $derived(
-        selectedWorktreeFile?.absolutePath ?? activeArtifactPath,
-    );
-    const displayArtifactLabel = $derived(
-        selectedWorktreeFile?.name ??
-            selectionState.activeArtifact?.displayLabel,
-    );
-    const displayStageId = $derived(
-        selectedWorktreeFile
-            ? undefined
-            : selectionState.resolvedSelection?.stageId,
-    );
-    const displayTaskId = $derived(
-        selectedWorktreeFile
-            ? undefined
-            : selectionState.resolvedSelection?.taskId,
-    );
+    const displayStageId = $derived(selectionState.resolvedSelection?.stageId);
+    const displayTaskId = $derived(selectionState.resolvedSelection?.taskId);
     const displayTask = $derived(
         activeMission && displayTaskId
             ? activeMission.getTask(displayTaskId)
             : undefined,
     );
     const showArtifactEditor = $derived.by(() => {
-        if (!displayArtifactPath) {
+        if (!displayArtifact) {
             return false;
         }
 
-        if (!selectedWorktreeFile) {
-            return artifactPanelMode === "edit";
-        }
-
         return (
-            !isMarkdownPath(displayArtifactPath) || artifactPanelMode === "edit"
+            artifactPanelMode === "edit" &&
+            isArtifactTextEditable(displayArtifact.bodyLocationLabel)
         );
     });
     const resolvedSession = $derived(
@@ -286,17 +270,12 @@
     });
 
     $effect(() => {
-        if (!activeMission || !displayArtifactPath) {
+        if (!activeMission || !activeArtifactSelection) {
             displayArtifact = undefined;
             return;
         }
 
-        displayArtifact = activeMission.resolveArtifact({
-            filePath: displayArtifactPath,
-            ...(displayArtifactLabel ? { label: displayArtifactLabel } : {}),
-            ...(displayStageId ? { stageId: displayStageId } : {}),
-            ...(displayTaskId ? { taskId: displayTaskId } : {}),
-        });
+        displayArtifact = activeMission.getArtifact(activeArtifactSelection);
     });
 
     $effect(() => {
@@ -318,19 +297,13 @@
     });
 
     $effect(() => {
-        const nextSourceKey =
-            selectedWorktreeFile?.absolutePath ?? activeArtifactPath ?? null;
+        const nextSourceKey = activeArtifactSelection ?? null;
         if (artifactPanelSourceKey === nextSourceKey) {
             return;
         }
 
         artifactPanelSourceKey = nextSourceKey;
-        artifactPanelMode =
-            selectedWorktreeFile &&
-            nextSourceKey &&
-            !isMarkdownPath(nextSourceKey)
-                ? "edit"
-                : "view";
+        artifactPanelMode = "view";
     });
 
     $effect(() => {
@@ -468,33 +441,33 @@
             case "mission.status":
                 applyMissionStatusEvent(event);
                 return;
-            case "stage.snapshot.changed":
-                const stagePayload = event.payload as { snapshot?: unknown };
-                activeMission?.applyStageSnapshot(
-                    StageDataSchema.parse(stagePayload.snapshot),
+            case "stage.data.changed":
+                const stagePayload = event.payload as { data?: unknown };
+                activeMission?.applyStageData(
+                    StageDataSchema.parse(stagePayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "task.snapshot.changed":
-                const taskPayload = event.payload as { snapshot?: unknown };
-                activeMission?.applyTaskSnapshot(
-                    TaskDataSchema.parse(taskPayload.snapshot),
+            case "task.data.changed":
+                const taskPayload = event.payload as { data?: unknown };
+                activeMission?.applyTaskData(
+                    TaskDataSchema.parse(taskPayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "artifact.snapshot.changed":
-                const artifactPayload = event.payload as { snapshot?: unknown };
-                activeMission?.applyArtifactSnapshot(
-                    ArtifactDataSchema.parse(artifactPayload.snapshot),
+            case "artifact.data.changed":
+                const artifactPayload = event.payload as { data?: unknown };
+                activeMission?.applyArtifactData(
+                    ArtifactDataSchema.parse(artifactPayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "agentSession.snapshot.changed":
+            case "agentSession.data.changed":
                 const agentSessionPayload = event.payload as {
-                    snapshot?: unknown;
+                    data?: unknown;
                 };
-                activeMission?.applyAgentSessionSnapshot(
-                    AgentSessionDataSchema.parse(agentSessionPayload.snapshot),
+                activeMission?.applyAgentSessionData(
+                    AgentSessionDataSchema.parse(agentSessionPayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
@@ -502,7 +475,7 @@
                 const sessionEventPayload = event.payload as {
                     session?: unknown;
                 };
-                activeMission?.applyAgentSessionSnapshot(
+                activeMission?.applyAgentSessionData(
                     AgentSessionDataSchema.parse(sessionEventPayload.session),
                 );
                 commandRefreshNonce += 1;
@@ -529,27 +502,18 @@
     }
 
     function handleEditArtifact(): void {
+        if (
+            !displayArtifact ||
+            !isArtifactTextEditable(displayArtifact.bodyLocationLabel)
+        ) {
+            return;
+        }
+
         artifactPanelMode = "edit";
     }
 
     function handleCloseArtifactEditor(): void {
-        if (
-            selectedWorktreeFile?.absolutePath &&
-            !isMarkdownPath(selectedWorktreeFile.absolutePath)
-        ) {
-            selectedWorktreeNode = null;
-        }
-
         artifactPanelMode = "view";
-    }
-
-    function isMarkdownPath(filePath: string | undefined): boolean {
-        const extension = filePath?.split(".").pop()?.toLowerCase();
-        return (
-            extension === "md" ||
-            extension === "markdown" ||
-            extension === "mdx"
-        );
     }
 
     function resolvePreferredTaskSession(
@@ -579,6 +543,17 @@
         return Boolean(
             node?.stageId &&
                 (node.kind === "stage" || node.kind === "stage-artifact"),
+        );
+    }
+
+    function isArtifactSelectionNode(
+        node: MissionTowerTreeNode | undefined,
+    ): node is MissionTowerTreeNode & { id: string } {
+        return Boolean(
+            node?.id &&
+                (node.kind === "mission-artifact" ||
+                    node.kind === "stage-artifact" ||
+                    node.kind === "task-artifact"),
         );
     }
 
@@ -663,7 +638,7 @@
                 continue;
             }
             nodes.push({
-                id: `tree:mission-artifact:${artifact.artifactId}`,
+                id: artifact.id,
                 label: artifact.label,
                 kind: "mission-artifact",
                 depth: 0,
@@ -691,7 +666,7 @@
 
             for (const artifact of stage.artifacts) {
                 nodes.push({
-                    id: `tree:stage-artifact:${artifact.artifactId}`,
+                    id: artifact.id,
                     label: artifact.label,
                     kind: "stage-artifact",
                     depth: 1,
@@ -724,7 +699,7 @@
                     .listArtifacts()
                     .filter((candidate) => candidate.taskId === task.taskId)) {
                     nodes.push({
-                        id: `tree:task-artifact:${artifact.artifactId}`,
+                        id: artifact.id,
                         label: artifact.label,
                         kind: "task-artifact",
                         depth: 2,
@@ -758,17 +733,11 @@
             for (const artifact of stageSnapshot.artifacts.filter(
                 (candidate: { taskId?: string }) => !candidate.taskId,
             )) {
-                if (
-                    nodes.some(
-                        (node) =>
-                            node.id ===
-                            `tree:stage-artifact:${artifact.artifactId}`,
-                    )
-                ) {
+                if (nodes.some((node) => node.id === artifact.id)) {
                     continue;
                 }
                 nodes.push({
-                    id: `tree:stage-artifact:${artifact.artifactId}`,
+                    id: artifact.id,
                     label: artifact.label,
                     kind: "stage-artifact",
                     depth: 1,

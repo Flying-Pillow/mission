@@ -12,4 +12,6 @@ The accepted State store transaction is the unit for Mission dossier checkpointi
 
 Entity RPC remains the surface mutation interface. Surfaces submit Entity input commands; they do not submit storage patches or State store transactions. A future Entity command outbox stores input commands only, and those commands become canonical only after the daemon validates them and applies the resulting State store transaction.
 
+Until the daemon-wide Mission state store owns Artifact body persistence, file-backed Artifact body edits are accepted only through the Artifact Entity command surface and may use the existing Mission dossier filesystem write path as transitional persistence. That exception is limited to the Artifact body payload itself; it does not permit private storage-record writes, alternate surface mutation vocabularies, compatibility methods such as `writeBody`, or bypassing the Artifact command input schema. When Artifact body persistence moves behind State store transactions, the public surface remains the same Artifact command.
+
 This gives Mission SurrealDB's indexing, relationship, query, and change-stream leverage while preserving daemon authority and keeping write semantics testable through one deep Mission state store interface.

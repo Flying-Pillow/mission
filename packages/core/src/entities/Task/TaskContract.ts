@@ -7,7 +7,7 @@ import {
     TaskStorageSchema,
     TaskDataSchema,
     TaskCommandAcknowledgementSchema,
-    TaskSnapshotChangedEventSchema
+    TaskDataChangedSchema
 } from './TaskSchema.js';
 
 export const TaskContract: EntityContractType = {
@@ -31,8 +31,8 @@ export const TaskContract: EntityContractType = {
         }
     },
     events: {
-        'snapshot.changed': {
-            payload: TaskSnapshotChangedEventSchema
+        'data.changed': {
+            payload: TaskDataChangedSchema
         }
     }
 };

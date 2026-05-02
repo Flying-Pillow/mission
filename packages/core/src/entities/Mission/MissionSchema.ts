@@ -9,24 +9,24 @@ import {
     AgentSessionEventSubjectSchema,
     AgentSessionTerminalHandleSchema,
     AgentSessionDataSchema,
-    AgentSessionSnapshotChangedEventSchema,
+    AgentSessionDataChangedSchema,
     AgentSessionEventSchema,
     AgentSessionLifecycleEventSchema
 } from '../AgentSession/AgentSessionSchema.js';
 import {
-    ArtifactEventSubjectSchema,
+    ArtifactEventLocatorSchema,
     ArtifactDataSchema,
-    ArtifactSnapshotChangedEventSchema
+    ArtifactDataChangedSchema
 } from '../Artifact/ArtifactSchema.js';
 import {
     StageDataSchema,
     StageEventSubjectSchema,
-    StageSnapshotChangedEventSchema
+    StageDataChangedSchema
 } from '../Stage/StageSchema.js';
 import {
     TaskDataSchema,
     TaskEventSubjectSchema,
-    TaskSnapshotChangedEventSchema
+    TaskDataChangedSchema
 } from '../Task/TaskSchema.js';
 export const missionEntityName = 'Mission' as const;
 
@@ -133,7 +133,7 @@ export const MissionChildEventSubjectSchema = z.discriminatedUnion('entity', [
     MissionEventSubjectSchema,
     StageEventSubjectSchema,
     TaskEventSubjectSchema,
-    ArtifactEventSubjectSchema,
+    ArtifactEventLocatorSchema,
     AgentSessionEventSubjectSchema
 ]);
 
@@ -249,20 +249,20 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
         payload: MissionStatusSnapshotSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('stage.snapshot.changed'),
-        payload: StageSnapshotChangedEventSchema
+        type: z.literal('stage.data.changed'),
+        payload: StageDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('task.snapshot.changed'),
-        payload: TaskSnapshotChangedEventSchema
+        type: z.literal('task.data.changed'),
+        payload: TaskDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('artifact.snapshot.changed'),
-        payload: ArtifactSnapshotChangedEventSchema
+        type: z.literal('artifact.data.changed'),
+        payload: ArtifactDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('agentSession.snapshot.changed'),
-        payload: AgentSessionSnapshotChangedEventSchema
+        type: z.literal('agentSession.data.changed'),
+        payload: AgentSessionDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('session.event'),
@@ -309,41 +309,6 @@ export const MissionDocumentWriteAcknowledgementSchema = EntityCommandAcknowledg
     missionId: z.string().trim().min(1),
     path: z.string().trim().min(1)
 }).strict();
-
-export const missionRemoteQueryInputSchemas = {
-    find: MissionFindSchema,
-    read: MissionLocatorSchema,
-    readControlView: MissionLocatorSchema,
-    readDocument: MissionReadDocumentInputSchema,
-    readWorktree: MissionLocatorSchema,
-    readTerminal: MissionLocatorSchema
-} as const;
-
-export const missionRemoteCommandInputSchemas = {
-    command: MissionCommandInputSchema,
-    writeDocument: MissionWriteDocumentInputSchema,
-    ensureTerminal: MissionLocatorSchema,
-    sendTerminalInput: MissionSendTerminalInputSchema
-} as const;
-
-export const missionRemoteQueryResultSchemas = {
-    find: z.array(MissionCatalogEntrySchema),
-    read: MissionSnapshotSchema,
-    readControlView: MissionControlViewSnapshotSchema,
-    readDocument: MissionDocumentSnapshotSchema,
-    readWorktree: MissionWorktreeSnapshotSchema,
-    readTerminal: MissionTerminalSnapshotSchema
-} as const;
-
-export const missionRemoteCommandResultSchemas = {
-    command: MissionCommandAcknowledgementSchema,
-    writeDocument: z.union([
-        MissionDocumentWriteAcknowledgementSchema,
-        MissionDocumentSnapshotSchema
-    ]),
-    ensureTerminal: MissionTerminalSnapshotSchema,
-    sendTerminalInput: MissionTerminalSnapshotSchema
-} as const;
 
 export type MissionLocatorType = z.infer<typeof MissionLocatorSchema>;
 export type MissionEventSubjectType = z.infer<typeof MissionEventSubjectSchema>;

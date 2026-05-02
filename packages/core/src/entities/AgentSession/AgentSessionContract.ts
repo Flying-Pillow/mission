@@ -11,7 +11,7 @@ import {
     AgentSessionDataSchema,
     AgentSessionTerminalSnapshotSchema,
     AgentSessionCommandAcknowledgementSchema,
-    AgentSessionSnapshotChangedEventSchema,
+    AgentSessionDataChangedSchema,
     AgentSessionEventSchema,
     AgentSessionLifecycleEventSchema
 } from './AgentSessionSchema.js';
@@ -61,8 +61,8 @@ export const AgentSessionContract: EntityContractType = {
         }
     },
     events: {
-        'snapshot.changed': {
-            payload: AgentSessionSnapshotChangedEventSchema
+        'data.changed': {
+            payload: AgentSessionDataChangedSchema
         },
         event: {
             payload: AgentSessionEventSchema

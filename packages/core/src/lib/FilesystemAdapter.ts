@@ -27,6 +27,30 @@ import {
 } from '../workflow/mission/manifest.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 
+export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
+	'.git',
+	'node_modules',
+	'.pnpm-store',
+	'.svelte-kit',
+	'.turbo',
+	'dist',
+	'build'
+]);
+
+export type FileBodyResult = {
+	filePath: string;
+	body: string;
+	updatedAt?: string;
+};
+
+export type FilesystemTreeNode = {
+	name: string;
+	relativePath: string;
+	absolutePath: string;
+	kind: 'directory' | 'file';
+	children?: FilesystemTreeNode[];
+};
+
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
 		super(message);
@@ -648,6 +672,72 @@ export class FilesystemAdapter {
 		}
 	}
 
+	public async readFileBody(filePath: string): Promise<FileBodyResult> {
+		const body = await fs.readFile(filePath, 'utf8');
+		const stats = await fs.stat(filePath);
+		return {
+			filePath,
+			body,
+			updatedAt: stats.mtime.toISOString()
+		};
+	}
+
+	public async writeFileBody(filePath: string, body: string): Promise<FileBodyResult> {
+		await fs.writeFile(filePath, body, 'utf8');
+		return this.readFileBody(filePath);
+	}
+
+	public async assertFilePath(
+		filePath: string,
+		intent: 'read' | 'write'
+	): Promise<void> {
+		const normalizedPath = filePath.trim();
+		if (!normalizedPath) {
+			throw new Error('File path must not be empty.');
+		}
+
+		const candidatePath = path.resolve(normalizedPath);
+		const canonicalPath = await this.resolveCanonicalDocumentPath(candidatePath, intent);
+		const roots = await Promise.all([
+			this.canonicalizeAllowedRoot(this.workspaceRoot),
+			this.canonicalizeAllowedRoot(this.getMissionsPath())
+		]);
+
+		if (!roots.some((rootPath) => rootPath && this.isPathInsideRoot(rootPath, canonicalPath))) {
+			throw new Error(`File '${normalizedPath}' is outside the active repository root.`);
+		}
+	}
+
+	public async readDirectoryTree(directoryPath: string, rootPath: string): Promise<FilesystemTreeNode[]> {
+		const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+		const nodes = await Promise.all(
+			entries
+				.filter((entry) => !IGNORED_WORKTREE_ENTRY_NAMES.has(entry.name))
+				.map(async (entry) => {
+					const absolutePath = path.join(directoryPath, entry.name);
+					const relativePath = path.relative(rootPath, absolutePath) || entry.name;
+					if (entry.isDirectory()) {
+						return {
+							name: entry.name,
+							relativePath,
+							absolutePath,
+							kind: 'directory' as const,
+							children: await this.readDirectoryTree(absolutePath, rootPath)
+						};
+					}
+
+					return {
+						name: entry.name,
+						relativePath,
+						absolutePath,
+						kind: 'file' as const
+					};
+				})
+		);
+
+		return nodes.sort(compareMissionWorktreeNodes);
+	}
+
 	public async artifactExists(missionDir: string, artifact: MissionArtifactKey): Promise<boolean> {
 		try {
 			await fs.stat(this.getArtifactPath(missionDir, artifact));
@@ -1213,4 +1303,45 @@ export class FilesystemAdapter {
 	private isMissingFileError(error: unknown): boolean {
 		return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 	}
+
+	private async canonicalizeAllowedRoot(rootPath: string): Promise<string | undefined> {
+		try {
+			return await fs.realpath(rootPath);
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return rootPath;
+			}
+
+			throw error;
+		}
+	}
+
+	private async resolveCanonicalDocumentPath(
+		candidatePath: string,
+		intent: 'read' | 'write'
+	): Promise<string> {
+		try {
+			return await fs.realpath(candidatePath);
+		} catch (error) {
+			if (!this.isMissingFileError(error) || intent === 'read') {
+				throw error;
+			}
+
+			const parentDirectory = await fs.realpath(path.dirname(candidatePath));
+			return path.join(parentDirectory, path.basename(candidatePath));
+		}
+	}
+
+	private isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
+		const relativePath = path.relative(rootPath, candidatePath);
+		return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+	}
+}
+
+function compareMissionWorktreeNodes(left: FilesystemTreeNode, right: FilesystemTreeNode): number {
+	if (left.kind !== right.kind) {
+		return left.kind === 'directory' ? -1 : 1;
+	}
+
+	return left.name.localeCompare(right.name, undefined, { numeric: true });
 }

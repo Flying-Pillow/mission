@@ -99,7 +99,7 @@ A tracked operator-facing file produced or consumed by a Mission at mission, sta
 _Avoid_: document, file, output
 
 **Artifact body**:
-The transferable payload of a Mission artifact, interpreted according to the artifact MIME type.
+The transferable payload of a Mission artifact, presented according to Artifact metadata such as file name and path.
 _Avoid_: document content, file content, output body
 
 **Mission-level artifact**:
@@ -203,6 +203,14 @@ _Avoid_: database model, table schema
 **Entity data schema**:
 The hydrated Entity shape returned to clients, including storage fields and computed, linked, or projected fields.
 _Avoid_: view model, response model
+
+**Entity data change event**:
+A daemon notification that carries the current Entity data after an Entity changed. It is named `data.changed` and uses a `data` payload when the payload is the Entity data schema itself.
+_Avoid_: snapshot changed, entity snapshot event, data snapshot
+
+**Snapshot**:
+A point-in-time read model that is not merely an Entity data schema under another name. Use only for System snapshots, terminal snapshots, worktree snapshots, state store snapshots, or aggregate Mission snapshots that compose or observe multiple records or runtime state.
+_Avoid_: data alias, changed data, Entity data
 
 **Field metadata**:
 Schema-attached metadata that describes persistence, indexing, search, sensitivity, references, and computed values for an Entity field.

@@ -10,10 +10,10 @@ describe('DaemonGateway runtime projection forwarding', () => {
         const gateway = new DaemonGateway() as unknown as ProjectionGateway;
 
         const envelope = gateway.toRuntimeEventEnvelope({
-            type: 'task.snapshot.changed',
+            type: 'task.data.changed',
             entityId: 'task:mission-29/task-1',
-            channel: 'task:mission-29/task-1.snapshot.changed',
-            eventName: 'snapshot.changed',
+            channel: 'task:mission-29/task-1.data.changed',
+            eventName: 'data.changed',
             occurredAt: '2026-04-26T18:00:00.000Z',
             missionEntityId: 'mission:mission-29',
             workspaceRoot: '/repo/root',
@@ -24,7 +24,8 @@ describe('DaemonGateway runtime projection forwarding', () => {
                 repositoryRootPath: '/repo/root',
                 taskId: 'task-1'
             },
-            snapshot: {
+            data: {
+                id: 'task:mission-29/task-1',
                 taskId: 'task-1',
                 stageId: 'implementation',
                 sequence: 1,
@@ -39,10 +40,10 @@ describe('DaemonGateway runtime projection forwarding', () => {
         });
 
         expect(envelope).toMatchObject({
-            type: 'task.snapshot.changed',
+            type: 'task.data.changed',
             entityId: 'task:mission-29/task-1',
-            channel: 'task:mission-29/task-1.snapshot.changed',
-            eventName: 'snapshot.changed',
+            channel: 'task:mission-29/task-1.data.changed',
+            eventName: 'data.changed',
             missionId: 'mission-29',
             payload: {
                 reference: {
@@ -50,7 +51,7 @@ describe('DaemonGateway runtime projection forwarding', () => {
                     missionId: 'mission-29',
                     taskId: 'task-1'
                 },
-                snapshot: {
+                data: {
                     taskId: 'task-1',
                     lifecycle: 'completed'
                 }
@@ -72,8 +73,7 @@ describe('DaemonGateway runtime projection forwarding', () => {
             missionId: 'mission-29',
             status: {
                 missionId: 'mission-29',
-                artifacts: [],
-                stages: []
+                artifacts: []
             }
         });
 

@@ -14,7 +14,7 @@ import type {
 	AgentSessionDataType
 } from '../../entities/AgentSession/AgentSessionSchema.js';
 import type {
-	ArtifactEventSubjectType,
+	ArtifactEventLocatorType,
 	ArtifactDataType
 } from '../../entities/Artifact/ArtifactSchema.js';
 import type {
@@ -348,32 +348,32 @@ export type Notification =
 		status: MissionStatusSnapshotType;
 	}
 	| {
-		type: 'stage.snapshot.changed';
+		type: 'stage.data.changed';
 		workspaceRoot: string;
 		missionId: string;
 		reference: StageEventSubjectType;
-		snapshot: StageDataType;
+		data: StageDataType;
 	}
 	| {
-		type: 'task.snapshot.changed';
+		type: 'task.data.changed';
 		workspaceRoot: string;
 		missionId: string;
 		reference: TaskEventSubjectType;
-		snapshot: TaskDataType;
+		data: TaskDataType;
 	}
 	| {
-		type: 'artifact.snapshot.changed';
+		type: 'artifact.data.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: ArtifactEventSubjectType;
-		snapshot: ArtifactDataType;
+		artifactEventLocator: ArtifactEventLocatorType;
+		data: ArtifactDataType;
 	}
 	| {
-		type: 'agentSession.snapshot.changed';
+		type: 'agentSession.data.changed';
 		workspaceRoot: string;
 		missionId: string;
 		reference: AgentSessionEventSubjectType;
-		snapshot: AgentSessionDataType;
+		data: AgentSessionDataType;
 	}
 	| {
 		type: 'mission.terminal';

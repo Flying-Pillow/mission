@@ -1,53 +1,43 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type {
-    ArtifactBodySnapshotType,
-    ArtifactBodyType
+    ArtifactCommandAcknowledgementType,
+    ArtifactBodyType,
+    ArtifactDataType
 } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 
-export type ArtifactSnapshot = {
-    artifactId: string;
-    filePath: string;
-    mimeType: string;
-    label?: string;
-    stageId?: string;
-    taskId?: string;
-    commands?: EntityCommandDescriptorType[];
-};
-
 export type ArtifactDependencies = {
-    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactBodySnapshotType>;
-    writeDocument(filePath: string, body: ArtifactBodyType): Promise<ArtifactBodySnapshotType>;
+    body(id: string, input?: ArtifactReadOptions): Promise<ArtifactBodyType>;
+    commandBody(id: string, body: ArtifactBodyType): Promise<ArtifactCommandAcknowledgementType>;
 };
 
 export type ArtifactReadOptions = {
     executionContext?: 'event' | 'render';
 };
 
-export class Artifact implements EntityModel<ArtifactSnapshot> {
-    private snapshotState = $state<ArtifactSnapshot | undefined>();
+export class Artifact implements EntityModel<ArtifactDataType> {
+    private dataState = $state<ArtifactDataType | undefined>();
     private readonly dependencies: ArtifactDependencies;
 
-    public constructor(snapshot: ArtifactSnapshot, dependencies: ArtifactDependencies) {
-        this.snapshot = snapshot;
+    public constructor(data: ArtifactDataType, dependencies: ArtifactDependencies) {
+        this.data = data;
         this.dependencies = dependencies;
     }
 
-    private get snapshot(): ArtifactSnapshot {
-        const snapshot = this.snapshotState;
-        if (!snapshot) {
-            throw new Error('Artifact snapshot is not initialized.');
+    private get data(): ArtifactDataType {
+        const data = this.dataState;
+        if (!data) {
+            throw new Error('Artifact data is not initialized.');
         }
 
-        return snapshot;
+        return data;
     }
 
-    private set snapshot(snapshot: ArtifactSnapshot) {
-        this.snapshotState = structuredClone(snapshot);
+    private set data(data: ArtifactDataType) {
+        this.dataState = structuredClone(data);
     }
 
     public get id(): string {
-        return this.artifactId;
+        return this.data.id;
     }
 
     public get entityName(): 'Artifact' {
@@ -55,67 +45,61 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
     }
 
     public get entityId(): string {
-        return this.artifactId;
+        return this.data.id;
     }
 
-    public get artifactId(): string {
-        return this.snapshot.artifactId;
+    public get filePath(): string | undefined {
+        return this.data.filePath;
     }
 
-    public get filePath(): string {
-        return this.snapshot.filePath;
+    public get relativePath(): string | undefined {
+        return this.data.relativePath;
     }
 
-    public get mimeType(): string {
-        return this.snapshot.mimeType;
+    public get fileName(): string {
+        return this.data.fileName;
+    }
+
+    public get bodyLocationLabel(): string {
+        return this.relativePath ?? this.filePath ?? this.fileName;
     }
 
     public get label(): string {
-        return this.snapshot.label ?? basename(this.snapshot.filePath) ?? this.snapshot.filePath;
+        return this.data.label;
     }
 
     public get stageId(): string | undefined {
-        return this.snapshot.stageId;
+        return this.data.stageId;
     }
 
     public get taskId(): string | undefined {
-        return this.snapshot.taskId;
+        return this.data.taskId;
     }
 
-    public get commands(): EntityCommandDescriptorType[] {
-        return structuredClone($state.snapshot(this.snapshot.commands ?? []));
+    public get commands(): ArtifactDataType['commands'] {
+        return structuredClone($state.snapshot(this.data.commands ?? []));
     }
 
-    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactBodySnapshotType> {
-        return this.dependencies.readDocument(this.filePath, input);
+    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactBodyType> {
+        return this.dependencies.body(this.id, input);
     }
 
-    public async write(content: string): Promise<ArtifactBodySnapshotType> {
-        return this.dependencies.writeDocument(this.filePath, {
-            mimeType: this.mimeType,
-            content
+    public async saveBody(content: string): Promise<ArtifactCommandAcknowledgementType> {
+        return this.dependencies.commandBody(this.id, {
+            body: content
         });
     }
 
-    public updateFromData(snapshot: ArtifactSnapshot): this {
-        this.snapshot = snapshot;
+    public updateFromData(data: ArtifactDataType): this {
+        this.data = data;
         return this;
     }
 
-    public toData(): ArtifactSnapshot {
-        return structuredClone($state.snapshot(this.snapshot));
+    public toData(): ArtifactDataType {
+        return structuredClone($state.snapshot(this.data));
     }
 
-    public toJSON(): ArtifactSnapshot {
+    public toJSON(): ArtifactDataType {
         return this.toData();
     }
-}
-
-function basename(filePath: string | undefined): string | undefined {
-    if (!filePath) {
-        return undefined;
-    }
-
-    const normalized = filePath.replace(/\\/g, '/');
-    return normalized.split('/').pop() ?? normalized;
 }

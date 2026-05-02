@@ -185,7 +185,7 @@ export const AgentSessionContextArtifactRoleSchema = z.enum([
 ]);
 
 export const AgentSessionContextArtifactSchema = z.object({
-    artifactId: z.string().trim().min(1),
+    id: z.string().trim().min(1),
     role: AgentSessionContextArtifactRoleSchema,
     order: z.number().int().nonnegative(),
     title: z.string().trim().min(1).optional()
@@ -270,9 +270,9 @@ export const AgentSessionCommandAcknowledgementSchema = EntityCommandAcknowledge
     commandId: AgentSessionCommandIdSchema.optional()
 }).strict();
 
-export const AgentSessionSnapshotChangedEventSchema = z.object({
+export const AgentSessionDataChangedSchema = z.object({
     reference: AgentSessionEventSubjectSchema,
-    snapshot: AgentSessionDataSchema
+    data: AgentSessionDataSchema
 }).strict();
 
 export const AgentSessionEventSchema = AgentSessionDataSchema;
@@ -281,30 +281,6 @@ export const AgentSessionLifecycleEventSchema = z.object({
     phase: z.enum(['spawned', 'active', 'terminated']),
     lifecycleState: AgentSessionDataSchema.shape.lifecycleState
 }).strict();
-
-export const agentSessionRemoteQueryInputSchemas = {
-    read: AgentSessionLocatorSchema,
-    readTerminal: AgentSessionLocatorSchema
-} as const;
-
-export const agentSessionRemoteCommandInputSchemas = {
-    command: AgentSessionCommandInputSchema,
-    sendPrompt: AgentSessionSendPromptInputSchema,
-    sendCommand: AgentSessionSendCommandInputSchema,
-    sendTerminalInput: AgentSessionSendTerminalInputSchema
-} as const;
-
-export const agentSessionRemoteQueryResultSchemas = {
-    read: AgentSessionDataSchema,
-    readTerminal: AgentSessionTerminalSnapshotSchema
-} as const;
-
-export const agentSessionRemoteCommandResultSchemas = {
-    command: AgentSessionCommandAcknowledgementSchema,
-    sendPrompt: AgentSessionCommandAcknowledgementSchema,
-    sendCommand: AgentSessionCommandAcknowledgementSchema,
-    sendTerminalInput: AgentSessionTerminalSnapshotSchema
-} as const;
 
 export type AgentSessionLocatorType = z.infer<typeof AgentSessionLocatorSchema>;
 export type AgentSessionEventSubjectType = z.infer<typeof AgentSessionEventSubjectSchema>;
@@ -319,7 +295,7 @@ export type AgentSessionTerminalHandleType = z.infer<typeof AgentSessionTerminal
 export type AgentSessionStorageType = z.infer<typeof AgentSessionStorageSchema>;
 export type AgentSessionDataType = z.infer<typeof AgentSessionDataSchema>;
 export type AgentSessionCommandAcknowledgementType = z.infer<typeof AgentSessionCommandAcknowledgementSchema>;
-export type AgentSessionSnapshotChangedEventType = z.infer<typeof AgentSessionSnapshotChangedEventSchema>;
+export type AgentSessionDataChangedType = z.infer<typeof AgentSessionDataChangedSchema>;
 export type AgentSessionEventType = z.infer<typeof AgentSessionEventSchema>;
 export type AgentSessionLifecycleEventType = z.infer<typeof AgentSessionLifecycleEventSchema>;
 
