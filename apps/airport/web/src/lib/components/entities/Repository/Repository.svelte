@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { GitHubIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { page } from "$app/state";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
@@ -22,7 +22,7 @@
     });
     const repositoryScope = setScopedRepositoryContext(repositoryScopeState);
 
-    let selectedIssue = $state<GitHubIssueDetailType | null>(null);
+    let selectedIssue = $state<RepositoryIssueDetailType | null>(null);
     let issuePreviewOpen = $state(false);
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);

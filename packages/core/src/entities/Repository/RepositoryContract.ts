@@ -1,7 +1,6 @@
 import { EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
 import { Repository } from './Repository.js';
 import {
-    GitHubIssueDetailSchema,
     RepositoryAddSchema,
     RepositoryDataSchema,
     RepositoryInputSchema,
@@ -13,6 +12,7 @@ import {
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
     RepositoryMissionStartAcknowledgementSchema,
+    RepositoryIssueDetailSchema,
     RepositoryPrepareResultSchema,
     RepositoryRemoveAcknowledgementSchema,
     RepositoryStartMissionFromBriefSchema,
@@ -69,7 +69,7 @@ export const RepositoryContract: EntityContractType = {
         getIssue: {
             kind: 'query',
             payload: RepositoryGetIssueSchema,
-            result: GitHubIssueDetailSchema,
+            result: RepositoryIssueDetailSchema,
             execution: 'entity'
         },
         add: {

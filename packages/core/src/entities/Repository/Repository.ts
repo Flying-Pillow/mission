@@ -23,13 +23,13 @@ import {
 	repositoryEntityName,
 	RepositoryWorkflowConfigurationSchema,
 	createDefaultRepositoryConfiguration,
-	GitHubIssueDetailSchema,
+	RepositoryIssueDetailSchema,
 	TrackedIssueSummarySchema,
 	type RepositoryPlatformRepositoryType,
 	type RepositoryDataType,
 	type RepositoryStorageType,
 	type RepositoryInputType,
-	type GitHubIssueDetailType,
+	type RepositoryIssueDetailType,
 	type RepositoryMissionStartAcknowledgementType,
 	type TrackedIssueSummaryType,
 	type RepositoryFindType,
@@ -658,10 +658,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public async getIssue(
 		input: RepositoryGetIssueType,
 		context?: { authToken?: string }
-	): Promise<GitHubIssueDetailType> {
+	): Promise<RepositoryIssueDetailType> {
 		const args = RepositoryGetIssueSchema.parse(input);
 		this.assertRepositoryIdentity(args);
-		return GitHubIssueDetailSchema.parse(
+		return RepositoryIssueDetailSchema.parse(
 			await this.requireRepositoryPlatformAdapter(context?.authToken)
 				.fetchIssueDetail(String(args.issueNumber))
 		);

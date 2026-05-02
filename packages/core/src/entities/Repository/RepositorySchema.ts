@@ -1,7 +1,11 @@
 import { z } from 'zod/v4';
 import { WorkflowDefinitionSchema } from '../../workflow/WorkflowSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
-import { MissionEntityTypeSchema } from '../Mission/MissionSchema.js';
+import {
+    MissionAgentRunnerSchema,
+    MissionDefaultAgentModeSchema,
+    MissionEntityTypeSchema
+} from '../Mission/MissionSchema.js';
 import {
     EntityCommandAcknowledgementSchema,
     EntityIdSchema
@@ -54,8 +58,8 @@ export const RepositorySettingsSchema = z.object({
     trackingProvider: z.literal('github'),
     instructionsPath: z.string().trim().min(1),
     skillsPath: z.string().trim().min(1),
-    agentRunner: z.enum(['copilot-cli', 'pi']),
-    defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
+    agentRunner: MissionAgentRunnerSchema,
+    defaultAgentMode: MissionDefaultAgentModeSchema.optional(),
     defaultModel: z.string().trim().min(1).optional()
 }).strict();
 
@@ -70,10 +74,6 @@ const defaultRepositorySettings: RepositorySettingsType = {
 export function createDefaultRepositorySettings(): RepositorySettingsType {
     return structuredClone(defaultRepositorySettings);
 }
-
-export type MissionAgentRunner = 'copilot-cli' | 'pi';
-export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
-
 
 export const RepositoryInputSchema = z.object({
     repositoryRootPath: z.string().trim().min(1),
@@ -150,7 +150,7 @@ export const TrackedIssueSummarySchema = z.object({
     assignees: z.array(z.string())
 }).strict();
 
-export const GitHubIssueDetailSchema = z.object({
+export const RepositoryIssueDetailSchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
     body: z.string(),
@@ -206,7 +206,7 @@ export type RepositoryGetIssueType = z.infer<typeof RepositoryGetIssueSchema>;
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;
-export type GitHubIssueDetailType = z.infer<typeof GitHubIssueDetailSchema>;
+export type RepositoryIssueDetailType = z.infer<typeof RepositoryIssueDetailSchema>;
 export type TrackedIssueSummaryType = z.infer<typeof TrackedIssueSummarySchema>;
 export type RepositoryMissionStartAcknowledgementType = z.infer<typeof RepositoryMissionStartAcknowledgementSchema>;
 export type RepositoryRemoveAcknowledgementType = z.infer<typeof RepositoryRemoveAcknowledgementSchema>;

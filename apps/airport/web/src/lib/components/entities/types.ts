@@ -1,5 +1,5 @@
 import type {
-    GitHubIssueDetailType,
+    RepositoryIssueDetailType,
     RepositoryStorageType,
     RepositoryPlatformRepositoryType,
     RepositoryDataType,
@@ -24,7 +24,7 @@ export type AirportRepositoryListItem = {
     isLocal: boolean;
 };
 export type {
-    GitHubIssueDetailType,
+    RepositoryIssueDetailType,
     MissionCatalogEntryType,
     RepositoryStorageType,
     RepositoryPlatformRepositoryType,

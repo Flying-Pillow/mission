@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { GitHubIssueDetailSchema, RepositoryDataSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { GitHubIssueDetailType, RepositoryDataType, RepositoryStorageType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryStorageType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
@@ -145,8 +145,8 @@ export class Repository extends Entity<RepositoryDataType> {
         });
     }
 
-    public async getIssue(issueNumber: number): Promise<GitHubIssueDetailType> {
-        return GitHubIssueDetailSchema.parse(
+    public async getIssue(issueNumber: number): Promise<RepositoryIssueDetailType> {
+        return RepositoryIssueDetailSchema.parse(
             await qry({
                 entity: 'Repository',
                 method: 'getIssue',

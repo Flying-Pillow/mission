@@ -31,6 +31,8 @@ import {
 export const missionEntityName = 'Mission' as const;
 
 export const MissionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
+export const MissionAgentRunnerSchema = z.enum(['copilot-cli', 'pi']);
+export const MissionDefaultAgentModeSchema = z.enum(['interactive', 'autonomous']);
 
 export const MissionCommandInvocationSchema = z.object({
     commandId: z.string().trim().min(1),
@@ -311,6 +313,8 @@ export const MissionDocumentWriteAcknowledgementSchema = EntityCommandAcknowledg
 }).strict();
 
 export type MissionLocatorType = z.infer<typeof MissionLocatorSchema>;
+export type MissionAgentRunnerType = z.infer<typeof MissionAgentRunnerSchema>;
+export type MissionDefaultAgentModeType = z.infer<typeof MissionDefaultAgentModeSchema>;
 export type MissionEventSubjectType = z.infer<typeof MissionEventSubjectSchema>;
 export type MissionChildEventSubjectType = z.infer<typeof MissionChildEventSubjectSchema>;
 export type MissionFindType = z.infer<typeof MissionFindSchema>;

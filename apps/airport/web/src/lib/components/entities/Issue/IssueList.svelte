@@ -14,12 +14,12 @@
     } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
-        selectedIssue = $bindable<GitHubIssueDetailType | null>(null),
+        selectedIssue = $bindable<RepositoryIssueDetailType | null>(null),
         issuePreviewOpen = $bindable(false),
         issueError = $bindable<string | null>(null),
         issueLoadingNumber = $bindable<number | null>(null),
     }: {
-        selectedIssue?: GitHubIssueDetailType | null;
+        selectedIssue?: RepositoryIssueDetailType | null;
         issuePreviewOpen?: boolean;
         issueError?: string | null;
         issueLoadingNumber?: number | null;

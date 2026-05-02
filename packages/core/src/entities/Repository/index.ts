@@ -1,5 +1,4 @@
 export {
-    GitHubIssueDetailSchema,
     MissionFromBriefInputSchema,
     MissionFromIssueInputSchema,
     RepositoryAddSchema,
@@ -13,6 +12,7 @@ export {
     RepositorySettingsSchema,
     RepositoryInputSchema,
     RepositoryGitHubCheckoutInputSchema,
+    RepositoryIssueDetailSchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryMissionStartMethodSchema,
     RepositoryPrepareResultSchema,
@@ -28,9 +28,6 @@ export {
     createDefaultRepositoryConfiguration
 } from './RepositorySchema.js';
 export type {
-    GitHubIssueDetailType,
-    MissionDefaultAgentMode,
-    MissionAgentRunner,
     RepositoryAddType,
     RepositoryStorageType,
     RepositoryDataType,
@@ -41,6 +38,7 @@ export type {
     RepositoryLocatorType,
     RepositoryPlatformKindType,
     RepositoryPlatformRepositoryType,
+    RepositoryIssueDetailType,
     RepositoryMissionStartAcknowledgementType,
     RepositoryPrepareResultType,
     RepositoryRemoveAcknowledgementType,

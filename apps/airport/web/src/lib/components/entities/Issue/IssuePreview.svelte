@@ -13,7 +13,7 @@
         onClose,
         embedded = false,
     }: {
-        selectedIssue: GitHubIssueDetailType;
+        selectedIssue: RepositoryIssueDetailType;
         onClose: () => void;
         embedded?: boolean;
     } = $props();
