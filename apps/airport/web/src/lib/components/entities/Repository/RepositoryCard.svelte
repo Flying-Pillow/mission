@@ -88,9 +88,7 @@
                 Setup
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {!activeRepository.data.isInitialized
-                    ? "Incomplete"
-                    : "Ready"}
+                {!activeRepository.data.isInitialized ? "Incomplete" : "Ready"}
             </p>
         </div>
     </div>
