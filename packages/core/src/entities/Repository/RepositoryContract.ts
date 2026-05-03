@@ -141,12 +141,12 @@ export const RepositoryContract: EntityContractType = {
             execution: 'entity',
             ui: {
                 label: 'Pull from GitHub',
-                description: 'Fast-forward this Repository from its GitHub tracking branch.',
+                description: 'Fast-forward this Repository from its GitHub tracking branch, preserving local changes with Git autostash.',
                 variant: 'default',
                 icon: 'git-pull-request-arrow',
                 confirmation: {
                     required: true,
-                    prompt: 'Pull changes from GitHub by fast-forwarding this Repository from its tracking branch? This updates the local checkout without merging divergent local commits.'
+                    prompt: 'Pull changes from GitHub by fast-forwarding this Repository from its tracking branch? Local changes are preserved with Git autostash, and divergent local commits are not merged.'
                 },
                 presentationOrder: 25
             }

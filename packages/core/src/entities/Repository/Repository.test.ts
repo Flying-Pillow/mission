@@ -406,6 +406,15 @@ describe('Repository', () => {
                 }
             });
 
+            await fsp.writeFile(path.join(localPath, 'LOCAL.md'), 'operator change\n', 'utf8');
+            const commands = await repository.commands({
+                id: repository.id,
+                repositoryRootPath: repository.repositoryRootPath
+            });
+            expect(commands.commands.find((command) => command.commandId === 'repository.fastForwardFromExternal')).toMatchObject({
+                disabled: false
+            });
+
             await expect(repository.fastForwardFromExternal({
                 id: repository.id,
                 repositoryRootPath: repository.repositoryRootPath
@@ -416,6 +425,7 @@ describe('Repository', () => {
                     external: { status: 'up-to-date', aheadCount: 0, behindCount: 0 }
                 }
             });
+            expect(await fsp.readFile(path.join(localPath, 'LOCAL.md'), 'utf8')).toBe('operator change\n');
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }

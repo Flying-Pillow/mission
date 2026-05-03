@@ -178,9 +178,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public async canFastForwardFromExternal(context?: EntityExecutionContext) {
 		const status = this.buildSyncStatus(context?.authToken, { refreshExternalState: true });
-		if (!status.worktree.clean) {
-			return { available: false, reason: 'Repository has local changes.' };
-		}
 		if (status.external.status !== 'behind') {
 			return { available: false, reason: Repository.describeExternalSyncState(status) };
 		}

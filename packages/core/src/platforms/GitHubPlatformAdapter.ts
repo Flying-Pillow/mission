@@ -379,7 +379,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub branch pull requires a remote name.');
 		}
 
-		assertGit(this.repositoryRootPath, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
+		assertGit(this.repositoryRootPath, ['pull', '--ff-only', '--autostash', normalizedRemoteName, normalizedBranchRef]);
 	}
 
 	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
