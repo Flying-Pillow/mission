@@ -7,6 +7,7 @@ import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
+import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
@@ -97,6 +98,58 @@ describe('Repository', () => {
         } finally {
             requireRepositoryPlatformAdapterSpy.mockRestore();
             prepareMissionSpy.mockRestore();
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('rejects an existing Mission dossier with stale runtime data during start', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-existing-stale-runtime-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const missionDir = path.join(repositoryRootPath, '.mission', 'missions', '1-initial-setup');
+        const repository = Repository.create({ repositoryRootPath });
+        const repositoryInternals = repository as unknown as {
+            assertExistingMissionRuntimeDataValid(
+                adapter: FilesystemAdapter,
+                missionDir: string,
+                missionId: string
+            ): Promise<void>;
+        };
+
+        try {
+            await fsp.mkdir(missionDir, { recursive: true });
+            await fsp.writeFile(path.join(missionDir, 'mission.json'), JSON.stringify({
+                schemaVersion: 1,
+                missionId: '1-initial-setup',
+                configuration: {
+                    createdAt: '2026-04-28T14:42:35.582Z',
+                    source: 'global-settings',
+                    workflowVersion: 'mission-workflow-v1',
+                    workflow: createDefaultWorkflowSettings()
+                },
+                runtime: {
+                    lifecycle: 'draft',
+                    pause: { paused: false },
+                    panic: {
+                        active: false,
+                        terminateSessions: true,
+                        clearLaunchQueue: true,
+                        haltMission: true
+                    },
+                    stages: [],
+                    tasks: [],
+                    sessions: [],
+                    gates: [],
+                    launchQueue: [],
+                    updatedAt: '2026-04-28T14:42:35.582Z'
+                }
+            }, null, 2), 'utf8');
+
+            await expect(repositoryInternals.assertExistingMissionRuntimeDataValid(
+                new FilesystemAdapter(repositoryRootPath),
+                missionDir,
+                '1-initial-setup'
+            )).rejects.toThrow(/does not fallback-load or implicitly migrate stale runtime data/u);
+        } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
     });

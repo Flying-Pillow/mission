@@ -986,6 +986,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
 			const existingDescriptor = await proposalStore.readMissionDescriptor(missionRootDir);
 			if (existingDescriptor) {
+				await this.assertExistingMissionRuntimeDataValid(proposalStore, missionRootDir, missionId);
 				return {
 					kind: 'mission',
 					state: 'branch-prepared',
@@ -1044,6 +1045,25 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			};
 		} finally {
 			preparedMission?.dispose();
+		}
+	}
+
+	private async assertExistingMissionRuntimeDataValid(
+		adapter: FilesystemAdapter,
+		missionDir: string,
+		missionId: string
+	): Promise<void> {
+		const { Mission } = await import('../Mission/Mission.js');
+		try {
+			const existingData = await Mission.readStateData(adapter, missionDir);
+			if (!existingData) {
+				throw new Error(`Mission runtime data is missing for existing Mission '${missionId}'.`);
+			}
+		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
+			throw new Error(
+				`Mission '${missionId}' already exists at '${missionDir}', but its Mission runtime data is invalid for the current runtime schema. Delete or explicitly recreate the Mission; Mission does not fallback-load or implicitly migrate stale runtime data. ${detail}`
+			);
 		}
 	}
 

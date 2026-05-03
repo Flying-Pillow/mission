@@ -77,6 +77,32 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 
+	it('prunes stale registered worktrees before materializing a Mission worktree', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-stale-worktree-'));
+		const worktreePath = path.join(workspaceRoot, '..', 'mission-worktree');
+
+		try {
+			git(workspaceRoot, ['init']);
+			git(workspaceRoot, ['config', 'user.email', 'mission@example.test']);
+			git(workspaceRoot, ['config', 'user.name', 'Mission Test']);
+			await fs.writeFile(path.join(workspaceRoot, 'README.md'), 'initial\n', 'utf8');
+			git(workspaceRoot, ['add', 'README.md']);
+			git(workspaceRoot, ['commit', '-m', 'initial']);
+			git(workspaceRoot, ['branch', '-M', 'main']);
+			git(workspaceRoot, ['worktree', 'add', '-b', 'mission/1-initial-setup', worktreePath, 'main']);
+			await fs.rm(worktreePath, { recursive: true, force: true });
+
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			await expect(adapter.materializeMissionWorktree(worktreePath, 'mission/1-initial-setup'))
+				.resolves.toBe('mission/1-initial-setup');
+			expect(git(workspaceRoot, ['-C', worktreePath, 'branch', '--show-current']))
+				.toBe('mission/1-initial-setup');
+		} finally {
+			await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
 	it('derives mission branch names without a trailing slug when title is empty', () => {
 		const adapter = new FilesystemAdapter('/tmp/repo');
 		expect(adapter.deriveMissionBranchName(42, '')).toBe('mission/42');

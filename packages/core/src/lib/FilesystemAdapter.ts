@@ -220,22 +220,24 @@ export class FilesystemAdapter {
 
 		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
 		const remoteBranchExists = this.runGit(['rev-parse', '--verify', `refs/remotes/origin/${normalizedBranch}`]);
+		const addArgs = branchExists
+			? ['worktree', 'add', worktreePath, normalizedBranch]
+			: remoteBranchExists
+				? ['worktree', 'add', '-b', normalizedBranch, worktreePath, `origin/${normalizedBranch}`]
+				: ['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef];
 		try {
-			if (branchExists) {
-				this.assertGit(['worktree', 'add', worktreePath, normalizedBranch]);
-			} else if (remoteBranchExists) {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, `origin/${normalizedBranch}`]);
-			} else {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef]);
-			}
+			this.assertGit(addArgs);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			if (message.includes('already checked out')) {
+			if (message.includes('missing but already registered worktree')) {
+				this.assertGit(['worktree', 'add', '-f', ...addArgs.slice(2)]);
+			} else if (message.includes('already checked out')) {
 				throw new Error(
 					`Mission branch '${normalizedBranch}' is already checked out in another worktree. Switch that worktree away before adopting it as a mission.`
 				);
+			} else {
+				throw error;
 			}
-			throw error;
 		}
 
 		const nextBranch = this.getCurrentBranch(worktreePath);
