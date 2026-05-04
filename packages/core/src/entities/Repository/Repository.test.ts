@@ -102,6 +102,49 @@ describe('Repository', () => {
         }
     });
 
+    it('starts a mission when Mission worktrees live outside the Repository root', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-external-worktrees-'));
+        const repositoriesRoot = path.join(tempRoot, 'repositories');
+        const missionsRoot = path.join(tempRoot, 'missions');
+        const repositoryRootPath = path.join(repositoriesRoot, 'Flying-Pillow', 'mission');
+        const remoteRootPath = path.join(tempRoot, 'remote.git');
+        const settings = createDefaultRepositorySettings();
+        settings.missionsRoot = missionsRoot;
+
+        try {
+            await fsp.mkdir(path.dirname(repositoryRootPath), { recursive: true });
+            git(tempRoot, ['init', '--bare', remoteRootPath]);
+            git(tempRoot, ['init', repositoryRootPath]);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), 'initial\n', 'utf8');
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            git(repositoryRootPath, ['add', 'README.md', '.mission']);
+            git(repositoryRootPath, ['commit', '-m', 'initial']);
+            git(repositoryRootPath, ['branch', '-M', 'main']);
+            git(repositoryRootPath, ['remote', 'add', 'origin', remoteRootPath]);
+            git(repositoryRootPath, ['push', '--set-upstream', 'origin', 'main']);
+
+            const repository = Repository.open(repositoryRootPath);
+            const result = await repository.startMissionFromBrief({
+                id: repository.id,
+                repositoryRootPath,
+                title: 'Adopt Sandcastle AgentProviderAdapter for four agent coders',
+                body: 'Use Sandcastle providers behind Mission runtime boundaries.',
+                type: 'feat'
+            });
+            const missionWorktreePath = path.join(missionsRoot, 'mission', result.id);
+
+            expect(result).toMatchObject({
+                ok: true,
+                entity: 'Repository',
+                method: 'startMissionFromBrief'
+            });
+            await expect(fsp.stat(path.join(missionWorktreePath, '.mission', 'settings.json'))).resolves.toBeDefined();
+            expect(git(missionWorktreePath, ['status', '--porcelain'])).toBe('');
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
     it('rejects an existing Mission dossier with stale runtime data during start', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-existing-stale-runtime-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
@@ -161,9 +204,9 @@ describe('Repository', () => {
         const branchRef = 'mission/1-initial-setup';
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
-            materializeOrAdoptMissionWorktree(
+            ensureMissionWorktreeOnBranch(
                 store: FilesystemAdapter,
-                worktreePath: string,
+                missionWorktreePath: string,
                 branchRef: string,
                 baseBranch: string
             ): Promise<void>;
@@ -177,7 +220,7 @@ describe('Repository', () => {
             git(repositoryRootPath, ['branch', '-M', 'main']);
             git(repositoryRootPath, ['worktree', 'add', '-b', branchRef, worktreePath, 'main']);
 
-            await expect(repositoryInternals.materializeOrAdoptMissionWorktree(
+            await expect(repositoryInternals.ensureMissionWorktreeOnBranch(
                 new FilesystemAdapter(repositoryRootPath),
                 worktreePath,
                 branchRef,
