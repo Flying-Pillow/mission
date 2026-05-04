@@ -10,7 +10,10 @@ import {
 	type AgentSessionSignalCandidate,
 	type AgentSessionSignalScope
 } from './AgentSessionSignal.js';
-import { MissionProtocolMarkerParser } from './MissionProtocolMarkerParser.js';
+import {
+	MISSION_PROTOCOL_MARKER_PREFIX,
+	MissionProtocolMarkerParser
+} from './MissionProtocolMarkerParser.js';
 import { ProviderOutputSignalParser } from './ProviderOutputSignalParser.js';
 
 const NEEDS_INPUT_PATTERNS = [
@@ -110,6 +113,9 @@ export class AgentSessionObservationRouter {
 			: [];
 		if (markerCandidates.length > 0) {
 			return this.toObservations(markerCandidates, 'protocol-marker', input.scope, observedAt);
+		}
+		if (input.line.startsWith(MISSION_PROTOCOL_MARKER_PREFIX)) {
+			return [];
 		}
 		return this.toObservations(
 			this.detectTerminalHeuristics(input.line, input.channel),

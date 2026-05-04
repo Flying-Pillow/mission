@@ -49,6 +49,34 @@ describe('AgentSessionObservationRouter', () => {
 		}]);
 	});
 
+	it('routes malformed stdout markers as protocol-marker diagnostics', () => {
+		const router = new AgentSessionObservationRouter();
+		const observations = router.route({
+			kind: 'terminal-output',
+			channel: 'stdout',
+			scope,
+			observedAt: '2026-05-04T12:00:30.000Z',
+			line: `${MISSION_PROTOCOL_MARKER_PREFIX}{not-json}`
+		});
+
+		expect(observations).toEqual([{
+			observationId: expect.stringMatching(/^protocol-marker:[a-f0-9]+:[0-9a-f-]+$/),
+			observedAt: '2026-05-04T12:00:30.000Z',
+			rawText: `${MISSION_PROTOCOL_MARKER_PREFIX}{not-json}`,
+			route: {
+				origin: 'protocol-marker',
+				scope
+			},
+			signal: {
+				type: 'diagnostic',
+				code: 'protocol-marker-malformed',
+				summary: 'Mission protocol marker did not contain valid JSON.',
+				source: 'agent-declared',
+				confidence: 'diagnostic'
+			}
+		}]);
+	});
+
 	it('records terminal heuristics as diagnostics when no strict marker is present', () => {
 		const router = new AgentSessionObservationRouter();
 		const observations = router.route({
@@ -80,6 +108,28 @@ describe('AgentSessionObservationRouter', () => {
 				confidence: 'diagnostic'
 			}
 		}]);
+	});
+
+	it('does not trust stderr marker-looking lines as protocol markers', () => {
+		const router = new AgentSessionObservationRouter();
+
+		expect(router.route({
+			kind: 'terminal-output',
+			channel: 'stderr',
+			scope,
+			observedAt: '2026-05-04T12:01:30.000Z',
+			line: `${MISSION_PROTOCOL_MARKER_PREFIX}${JSON.stringify({
+				version: 1,
+				missionId: scope.missionId,
+				taskId: scope.taskId,
+				agentSessionId: scope.agentSessionId,
+				eventId: 'stderr-marker',
+				signal: {
+					type: 'progress',
+					summary: 'This should stay untrusted.'
+				}
+			})}`
+		})).toEqual([]);
 	});
 
 	it('routes mcp-validated signals through the mcp boundary', () => {
