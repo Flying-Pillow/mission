@@ -1,6 +1,6 @@
 import { TerminalAgentTransport, type TerminalSessionSnapshot } from '../../daemon/runtime/agent/TerminalAgentTransport.js';
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { AgentSessionRecord } from './AgentSessionSchema.js';
+import type { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 
 type SessionLogWriterState = {
     session: AgentSessionRecord;
@@ -20,7 +20,7 @@ export class AgentSessionLogWriter {
     private disposed = false;
 
     public constructor(
-        private readonly adapter: FilesystemAdapter,
+        private readonly adapter: MissionDossierFilesystem,
         private readonly missionDir: string,
         private readonly missionId: string
     ) {

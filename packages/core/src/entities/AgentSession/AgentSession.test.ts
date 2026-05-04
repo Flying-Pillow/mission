@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentSession } from './AgentSession.js';
 import { AgentSessionContract } from './AgentSessionContract.js';
 import { AgentSessionDataSchema } from './AgentSessionSchema.js';
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionRecord } from './AgentSessionSchema.js';
 
 describe('AgentSession', () => {
     it('materializes terminal identity through terminalHandle only', () => {

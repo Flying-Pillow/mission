@@ -4,7 +4,7 @@ import type {
 	AgentSessionSnapshot
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { MissionTaskState } from '../../types.js';
+import type { MissionTaskState } from '../Mission/MissionSchema.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,
@@ -12,7 +12,7 @@ import type {
 	AgentSessionRecord,
 	AgentSessionState,
 	MissionAgentTelemetrySnapshot
-} from '../../daemon/protocol/contracts.js';
+} from './AgentSessionSchema.js';
 import {
 	AgentSessionCommandAcknowledgementSchema,
 	AgentSessionCommandInputSchema,

@@ -65,7 +65,7 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowDefinition {
 									? task.dependsOn.filter((dependency): dependency is string => typeof dependency === 'string')
 									: [],
 								...(typeof task.agentRunner === 'string'
-									? { agentRunner: task.agentRunner.trim() }
+									? { agentRunner: task.agentRunner }
 									: {})
 							}))
 						: []

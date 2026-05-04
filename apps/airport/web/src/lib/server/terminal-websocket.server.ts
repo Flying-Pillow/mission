@@ -1,7 +1,4 @@
-import {
-    type Notification as DaemonNotification,
-    type MissionAgentTerminalState
-} from '@flying-pillow/mission-core/node';
+import type { Notification as DaemonNotification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
 import {
     MissionTerminalOutputSchema,
     MissionTerminalSnapshotSchema,
@@ -139,7 +136,7 @@ async function handleTerminalConnection(
         send(AgentSessionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
     };
 
-    const sendOutput = (state: MissionAgentTerminalState) => {
+    const sendOutput = (state: AgentSessionTerminalSnapshotType) => {
         const output = AgentSessionTerminalOutputSchema.parse({
             missionId: query.missionId,
             sessionId,
@@ -227,31 +224,20 @@ async function handleTerminalConnection(
         }
 
         subscription = daemon.client.onDidEvent((event: DaemonNotification) => {
-            if (event.type !== 'session.terminal' || event.missionId !== query.missionId || event.sessionId !== sessionId) {
+            if (event.type !== 'session.terminal' || event.missionId !== query.missionId || event.entityId !== `agent_session:${query.missionId}/${sessionId}`) {
                 return;
             }
 
-            const state = event.state;
-            const snapshot = AgentSessionTerminalSnapshotSchema.parse({
-                missionId: query.missionId,
-                sessionId,
-                connected: state.connected,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                screen: state.screen,
-                ...(state.chunk ? { chunk: state.chunk } : {}),
-                ...(state.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
-            if (!state.connected || state.dead) {
+            const snapshot = AgentSessionTerminalSnapshotSchema.parse(event.payload);
+            if (!snapshot.connected || snapshot.dead) {
                 sendSnapshot(snapshot, 'disconnected');
                 dispose();
                 webSocket.close();
                 return;
             }
 
-            if (typeof state.chunk === 'string' && state.chunk.length > 0) {
-                sendOutput(state);
+            if (typeof snapshot.chunk === 'string' && snapshot.chunk.length > 0) {
+                sendOutput(snapshot);
                 return;
             }
 
@@ -424,21 +410,9 @@ async function handleMissionTerminalConnection(
             if (event.type !== 'mission.terminal' || event.missionId !== missionId) {
                 return;
             }
-            if (repositoryRootPath && event.workspaceRoot !== repositoryRootPath) {
-                return;
-            }
-
-            sendMissionState(MissionTerminalSnapshotSchema.parse({
-                missionId,
-                connected: event.state.connected,
-                dead: event.state.dead,
-                exitCode: event.state.dead ? event.state.exitCode : null,
-                screen: event.state.screen,
-                ...(event.state.chunk ? { chunk: event.state.chunk } : {}),
-                ...(event.state.truncated ? { truncated: true } : {}),
-                ...(event.state.terminalHandle ? { terminalHandle: event.state.terminalHandle } : {})
-            }));
-            if (!event.state.connected || event.state.dead) {
+            const snapshot = MissionTerminalSnapshotSchema.parse(event.payload);
+            sendMissionState(snapshot);
+            if (!snapshot.connected || snapshot.dead) {
                 dispose();
                 webSocket.close();
             }
@@ -470,7 +444,7 @@ function clipTerminalScreen(screen: string): { screen: string; truncated: boolea
 }
 
 function clipMissionSessionTerminalScreen(
-    state: Pick<MissionAgentTerminalState, 'connected' | 'dead' | 'screen'> | null,
+    state: Pick<AgentSessionTerminalSnapshotType, 'connected' | 'dead' | 'screen'> | null,
 ): { screen: string; truncated: boolean } {
     if (state && !state.connected && state.dead) {
         return { screen: state.screen, truncated: false };

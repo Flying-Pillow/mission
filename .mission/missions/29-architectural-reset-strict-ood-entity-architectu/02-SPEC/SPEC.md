@@ -353,7 +353,7 @@ It contains:
 
 - `repository`
 - `operationalMode`
-- `controlRoot`
+- `repositoryRoot`
 - `currentBranch`
 - `settingsComplete`
 - `githubRepository`

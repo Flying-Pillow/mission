@@ -26,6 +26,8 @@ const agentSessionMetadataValueSchema = z.union([
     z.null()
 ]);
 
+export type MissionAgentPrimitiveValue = string | number | boolean | null;
+
 const agentSessionMetadataSchema = z.record(z.string(), agentSessionMetadataValueSchema);
 
 export const AgentSessionPromptSchema = z.object({
@@ -234,6 +236,151 @@ export const AgentSessionLifecycleStateSchema = z.enum([
 ]);
 
 export type AgentSessionLifecycleStateType = z.infer<typeof AgentSessionLifecycleStateSchema>;
+
+export type MissionAgentLifecycleState = AgentSessionLifecycleStateType;
+
+export type MissionAgentPermissionKind =
+    | 'input'
+    | 'tool'
+    | 'filesystem'
+    | 'command'
+    | 'unknown';
+
+export type MissionAgentPermissionRequest = {
+    id: string;
+    kind: MissionAgentPermissionKind;
+    prompt: string;
+    options: string[];
+    providerDetails?: Record<string, MissionAgentPrimitiveValue>;
+};
+
+export type MissionAgentModelInfo = {
+    id?: string;
+    family?: string;
+    provider?: string;
+    displayName?: string;
+};
+
+export type MissionAgentTelemetrySnapshot = {
+    model?: MissionAgentModelInfo;
+    providerSessionId?: string;
+    tokenUsage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+    };
+    contextWindow?: {
+        usedTokens?: number;
+        maxTokens?: number;
+        utilization?: number;
+    };
+    estimatedCostUsd?: number;
+    activeToolName?: string;
+    updatedAt: string;
+};
+
+export type MissionAgentScope =
+    | {
+        kind: 'control';
+        workspaceRoot?: string;
+        repoName?: string;
+        branch?: string;
+    }
+    | {
+        kind: 'mission';
+        missionId?: string;
+        stage?: string;
+        currentSlice?: string;
+        readyTaskIds?: string[];
+        readyTaskTitle?: string;
+        readyTaskInstruction?: string;
+    }
+    | {
+        kind: 'artifact';
+        missionId?: string;
+        stage?: string;
+        artifactKey: string;
+        artifactPath?: string;
+        checkpoint?: string;
+        validation?: string;
+    }
+    | {
+        kind: 'slice';
+        missionId?: string;
+        missionDir?: string;
+        stage?: string;
+        sliceTitle: string;
+        sliceId?: string;
+        taskId?: string;
+        taskTitle?: string;
+        taskSummary?: string;
+        taskInstruction?: string;
+        doneWhen?: string[];
+        stopCondition?: string;
+        verificationTargets: string[];
+        requiredSkills: string[];
+        dependsOn: string[];
+    }
+    | {
+        kind: 'gate';
+        missionId?: string;
+        stage?: string;
+        intent: string;
+    };
+
+export type MissionAgentTurnRequest = {
+    workingDirectory: string;
+    prompt: string;
+    scope?: MissionAgentScope;
+    title?: string;
+    operatorIntent?: string;
+    startFreshSession?: boolean;
+};
+
+export type AgentSessionState = {
+    runnerId: string;
+    transportId?: string;
+    runnerLabel: string;
+    sessionId: string;
+    sessionLogPath?: string;
+    terminalHandle?: AgentSessionTerminalHandleType;
+    lifecycleState: MissionAgentLifecycleState;
+    workingDirectory?: string;
+    currentTurnTitle?: string;
+    scope?: MissionAgentScope;
+    awaitingPermission?: MissionAgentPermissionRequest;
+    telemetry?: MissionAgentTelemetrySnapshot;
+    failureMessage?: string;
+    lastUpdatedAt: string;
+};
+
+export type AgentSessionRecord = {
+    sessionId: string;
+    runnerId: string;
+    transportId?: string;
+    runnerLabel: string;
+    sessionLogPath?: string;
+    terminalHandle?: AgentSessionTerminalHandleType;
+    lifecycleState: MissionAgentLifecycleState;
+    taskId?: string;
+    assignmentLabel?: string;
+    workingDirectory?: string;
+    currentTurnTitle?: string;
+    scope?: MissionAgentScope;
+    telemetry?: MissionAgentTelemetrySnapshot;
+    failureMessage?: string;
+    createdAt: string;
+    lastUpdatedAt: string;
+};
+
+export type AgentSessionLaunchRequest = MissionAgentTurnRequest & {
+    runnerId: string;
+    terminalSessionName?: string;
+    transportId?: string;
+    sessionId?: string;
+    taskId?: string;
+    assignmentLabel?: string;
+};
 
 export const AgentSessionStorageSchema = z.object({
     id: EntityIdSchema,

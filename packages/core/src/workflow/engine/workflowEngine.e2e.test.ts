@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import type { AgentCommand, AgentPrompt } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
@@ -406,7 +406,7 @@ function createAdapter() {
         setPersistedDocument: (document: MissionStateData | undefined) => {
             persisted = document;
         }
-    } as unknown as FilesystemAdapter & {
+    } as unknown as MissionDossierFilesystem & {
         getPersistedDocument(): MissionStateData | undefined;
         getPersistedEventLog(): Array<{ type: string }>;
         setPersistedDocument(document: MissionStateData | undefined): void;

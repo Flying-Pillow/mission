@@ -1,5 +1,5 @@
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { MissionStageId } from '../../types.js';
+import type { AgentSessionRecord } from '../AgentSession/AgentSessionSchema.js';
+import type { MissionStageId } from '../../workflow/mission/manifest.js';
 import type { MissionWorkflowEvent, MissionStateData } from '../../workflow/engine/index.js';
 import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
 import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
@@ -162,7 +162,7 @@ function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: Missi
     const enabled = task.lifecycle === 'ready' && errors.length === 0;
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.start,
-        label: 'Start Ready Task',
+        label: 'Start task',
         ...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
         requiresConfirmation: false
     }));
@@ -172,7 +172,7 @@ function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: Missio
     const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.complete,
-        label: 'Mark Task Done',
+        label: 'Mark task done',
         ...buildAvailability(errors.length === 0, errors[0]),
         requiresConfirmation: true,
         confirmationPrompt: 'Mark this task done?'
@@ -183,7 +183,7 @@ function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: Miss
     const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.reopen,
-        label: 'Reopen Task',
+        label: 'Reopen task',
         ...buildAvailability(errors.length === 0, errors[0]),
         requiresConfirmation: true,
         confirmationPrompt: 'Reopen this task and invalidate downstream stage progress?'

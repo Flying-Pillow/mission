@@ -16,7 +16,7 @@ import type {
     MissionTemplateContext,
     MissionTemplateContextInput
 } from './types.js';
-import type { MissionTaskAgent, MissionTaskStatus } from '../../../types.js';
+import type { MissionTaskAgent, MissionTaskStatus } from '../../../entities/Mission/MissionSchema.js';
 
 const packagedTemplateDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,7 +45,7 @@ export async function renderMissionTaskTemplate(
     template: MissionTaskTemplateRef,
     input: MissionTemplateContextInput
 ): Promise<MissionTaskTemplate> {
-    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), template.templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.repositoryRootPath), template.templatePath);
     const renderedText = renderTemplate(templateText, createMissionTemplateContext(input));
     const document = parseFrontmatterDocument(renderedText);
 
@@ -135,12 +135,12 @@ async function renderMissionTemplate(
     templatePath: string,
     input: MissionTemplateContextInput
 ): Promise<string> {
-    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.repositoryRootPath), templatePath);
     return renderTemplate(templateText, createMissionTemplateContext(input));
 }
 
-function resolveMissionTemplateDirectory(controlRoot: string): string {
-    const repositoryTemplateDirectory = Repository.getMissionWorkflowTemplatesPath(controlRoot);
+function resolveMissionTemplateDirectory(repositoryRoot: string): string {
+    const repositoryTemplateDirectory = Repository.getMissionWorkflowTemplatesPath(repositoryRoot);
     if (path.isAbsolute(repositoryTemplateDirectory) && fs.existsSync(repositoryTemplateDirectory)) {
         return repositoryTemplateDirectory;
     }

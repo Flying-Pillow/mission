@@ -25,40 +25,15 @@ This is the state surface that Tower and other clients consume from the daemon.
 
 ### `MissionSystemState`
 
-`MissionSystemState` packages three concerns:
+`MissionSystemState` packages live daemon state for surfaces. Current implementations should name concrete fields after their owner, such as system status, Mission tower state, or Airport state, rather than using a generic semantic graph bucket.
 
 | Field | Responsibility |
 | --- | --- |
 | `version` | Monotonic daemon snapshot version |
-| `domain` | Semantic context graph for repository, mission, task, artifact, and session selection |
 | `airport` | Active repository airport state |
 | `airports` | Registry of repository airports and their persisted intents |
 
 This is daemon-wide state. It is not stored in `mission.json`.
-
-## `ContextGraph`
-
-`ContextGraph` is the daemon's semantic domain graph:
-
-```ts
-type ContextGraph = {
-  selection: ContextSelection;
-  repositories: Record<string, RepositoryContext>;
-  missions: Record<string, MissionContext>;
-  tasks: Record<string, TaskContext>;
-  artifacts: Record<string, ArtifactContext>;
-  agentSessions: Record<string, AgentSessionContext>;
-}
-```
-
-Its role is selection and projection, not mission execution persistence. It tells the daemon and surfaces:
-
-- which repository is selected
-- which mission is selected
-- which task, artifact, or session is selected
-- what mission, task, artifact, and session contexts currently exist
-
-This is derived daemon state built from workspace discovery and mission status, not a mission-local persisted workflow record.
 
 ## Airport State Versus Airport Registry State
 

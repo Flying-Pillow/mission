@@ -114,7 +114,7 @@ The core domain must not speak raw provider protocol shapes.
 
 1. The core domain may define platform-neutral contracts such as mission briefs, issue status updates, and pull request creation intents.
 2. Concrete adapters must translate external ecosystems into Mission concepts rather than leaking foreign terminology inward.
-3. GitHub labels or templates may inform mission type inference, but the resulting type must be expressed in Mission's own vocabulary such as `fix`, `feat`, `docs`, `refactor`, or `task`.
+3. GitHub labels or templates may inform mission type inference, but the resulting type must be expressed in Mission's own vocabulary such as `fix`, `feature`, `docs`, `refactor`, or `task`.
 4. Adapter inference is preferred over repeated manual CLI flags when the external platform already contains reliable intent signals.
 5. When platform metadata is insufficient, Mission must fail clearly or prompt explicitly rather than guessing silently.
 6. The `domain` layer may depend on `interfaces`, but it must not import from concrete `platforms` or concrete `agents` implementations.

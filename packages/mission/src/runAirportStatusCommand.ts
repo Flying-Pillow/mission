@@ -1,5 +1,6 @@
 import { note, outro } from '@clack/prompts';
-import { DaemonApi, connectAirportDaemon, resolveAirportDaemonRuntimeMode } from '@flying-pillow/mission-core/node';
+import { DaemonApi } from '@flying-pillow/mission-core/daemon/client/DaemonApi';
+import { connectAirportDaemon, resolveAirportDaemonRuntimeMode } from '@flying-pillow/mission-core/daemon/client/connectAirportDaemon';
 import type { EntryContext } from './entryContext.js';
 
 export async function runAirportStatusCommand(context: EntryContext): Promise<void> {

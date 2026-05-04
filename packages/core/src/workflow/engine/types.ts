@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { AgentSessionTerminalHandleSchema, type AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
+import type { MissionAgentRunnerType } from '../../entities/Mission/MissionSchema.js';
 import {
     WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
@@ -267,7 +268,7 @@ export interface MissionGeneratedTaskPayload {
     taskKind?: 'implementation' | 'verification';
     pairedTaskId?: string;
     dependsOn: string[];
-    agentRunner?: string;
+    agentRunner?: MissionAgentRunnerType;
 }
 
 export interface MissionCreatedEvent extends MissionWorkflowEventBase {

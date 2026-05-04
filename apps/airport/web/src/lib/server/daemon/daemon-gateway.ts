@@ -1,9 +1,7 @@
 // /apps/airport/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for mission runtime, terminal, and document operations.
-import { randomUUID } from 'node:crypto';
-import {
-    DaemonApi,
-    type Notification,
-} from '@flying-pillow/mission-core/node';
+import { DaemonApi } from '@flying-pillow/mission-core/daemon/client/DaemonApi';
+import type { Notification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
+import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
 import {
     createAllRuntimeEventSubscriptionChannels,
     createMissionRuntimeEventSubscriptionChannels
@@ -25,19 +23,27 @@ import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
 } from './connections.server';
+import type { AppContextServerValue } from '$lib/client/context/app-context.svelte';
+import { readCachedDaemonSystemStatus } from './health.server';
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 
-type AddressedNotification = Notification & {
-    entityId: string;
-    channel: string;
-    eventName: string;
-    occurredAt: string;
-    missionEntityId?: string;
+export type AirportSystemState = {
+    appContext: AppContextServerValue;
+    systemState?: SystemState;
 };
 
 export class DaemonGateway {
     public constructor(private readonly locals?: App.Locals) { }
+
+    public async getSystemState(): Promise<AirportSystemState> {
+        return {
+            appContext: this.getAppContext(),
+            systemState: await readCachedDaemonSystemStatus({
+                ...(this.locals ? { locals: this.locals } : {}),
+            }),
+        };
+    }
 
     public async openEventSubscription(input: {
         missionId?: string;
@@ -52,7 +58,7 @@ export class DaemonGateway {
                 : createAllRuntimeEventSubscriptionChannels()
         });
         const subscription = daemon.client.onDidEvent((event) => {
-            input.onEvent(this.toRuntimeEventEnvelope(toAddressedNotification(event)));
+            input.onEvent(this.toRuntimeEventEnvelope(event));
         });
 
         return {
@@ -66,14 +72,14 @@ export class DaemonGateway {
     public async openApplicationEventSubscription(input: {
         channels: string[];
         surfacePath?: string;
-        onEvent: (event: AddressedNotification) => void;
+        onEvent: (event: Notification) => void;
     }): Promise<{ dispose(): void }> {
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
         await daemon.client.request<null>('event.subscribe', {
             channels: input.channels
         });
         const subscription = daemon.client.onDidEvent((event) => {
-            input.onEvent(toAddressedNotification(event));
+            input.onEvent(event);
         });
 
         return {
@@ -166,53 +172,8 @@ export class DaemonGateway {
         });
     }
 
-    private toRuntimeEventEnvelope(event: AddressedNotification): MissionRuntimeEventEnvelopeType {
-        return MissionRuntimeEventEnvelopeSchema.parse({
-            eventId: randomUUID(),
-            entityId: event.entityId,
-            channel: event.channel,
-            eventName: event.eventName,
-            type: event.type,
-            occurredAt: event.occurredAt,
-            ...(notificationMissionId(event) ? { missionId: notificationMissionId(event) } : {}),
-            payload: this.toRuntimeEventPayload(event)
-        });
-    }
-
-    private toRuntimeEventPayload(event: AddressedNotification): unknown {
-        switch (event.type) {
-            case 'mission.snapshot.changed':
-                return {
-                    reference: event.reference,
-                    snapshot: event.snapshot
-                };
-            case 'stage.data.changed':
-            case 'task.data.changed':
-            case 'agentSession.data.changed':
-                return {
-                    reference: event.reference,
-                    data: event.data
-                };
-            case 'artifact.data.changed':
-                return {
-                    artifactEventLocator: event.artifactEventLocator,
-                    data: event.data
-                };
-            case 'mission.status':
-                return event.status;
-            case 'session.event':
-                return event.session;
-            case 'session.lifecycle':
-                return {
-                    phase: event.phase,
-                    lifecycleState: event.lifecycleState
-                };
-            case 'session.console':
-            case 'mission.terminal':
-            case 'session.terminal':
-            case 'control.workflow.settings.updated':
-                return event;
-        }
+    private toRuntimeEventEnvelope(event: Notification): MissionRuntimeEventEnvelopeType {
+        return MissionRuntimeEventEnvelopeSchema.parse(event);
     }
 
     public async resolveRepositoryCandidate(input: {
@@ -321,25 +282,18 @@ export class DaemonGateway {
         );
     }
 
-}
-
-function notificationMissionId(event: AddressedNotification): string | undefined {
-    return 'missionId' in event ? event.missionId : undefined;
-}
-
-function toAddressedNotification(event: Notification): AddressedNotification {
-    if (!hasAddressMetadata(event)) {
-        throw new Error(`Daemon event '${event.type}' did not include entity channel metadata.`);
+    private getAppContext(): AppContextServerValue {
+        return this.locals?.appContext ?? {
+            daemon: {
+                running: false,
+                startedByHook: false,
+                message: 'Mission daemon state is unavailable.',
+                lastCheckedAt: new Date(0).toISOString(),
+            },
+            githubStatus: 'unknown',
+        };
     }
-    return event;
-}
 
-function hasAddressMetadata(event: Notification): event is AddressedNotification {
-    const candidate = event as Partial<AddressedNotification>;
-    return typeof candidate.entityId === 'string' && candidate.entityId.trim().length > 0
-        && typeof candidate.channel === 'string' && candidate.channel.trim().length > 0
-        && typeof candidate.eventName === 'string' && candidate.eventName.trim().length > 0
-        && typeof candidate.occurredAt === 'string' && candidate.occurredAt.trim().length > 0;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

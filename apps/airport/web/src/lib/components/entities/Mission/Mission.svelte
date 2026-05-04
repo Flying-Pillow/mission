@@ -25,7 +25,7 @@
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,

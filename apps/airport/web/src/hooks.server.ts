@@ -77,7 +77,13 @@ function resolveGitHubContext(input: {
 
 export const handle: Handle = async ({ event, resolve }) => {
     const canonicalOrigin = resolveCanonicalOrigin(event.url);
-    if (canonicalOrigin && event.url.origin !== canonicalOrigin && ['GET', 'HEAD'].includes(event.request.method)) {
+    const isApiRequest = event.url.pathname.startsWith('/api/');
+    if (
+        canonicalOrigin
+        && event.url.origin !== canonicalOrigin
+        && ['GET', 'HEAD'].includes(event.request.method)
+        && !isApiRequest
+    ) {
         throw redirect(307, `${canonicalOrigin}${event.url.pathname}${event.url.search}`);
     }
 

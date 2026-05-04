@@ -4,14 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev.mjs",
-    "dev:host": "node ./scripts/dev.mjs --host 0.0.0.0",
+    "dev": "MISSION_SURFACE_PATH=${MISSION_SURFACE_PATH:-$(cd ../../.. && pwd)} vp dev --host 0.0.0.0 --port 5174",
     "build": "vp build",
     "preview": "vp preview",
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:svelte": "pnpm run check",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "vp lint src && eslint \"src/**/*.svelte\"",
     "test": "vp test run --passWithNoTests"
   },

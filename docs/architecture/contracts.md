@@ -56,7 +56,6 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | Field | Meaning |
 | --- | --- |
 | `state.version` | Monotonic version for the composite daemon state |
-| `state.domain` | `ContextGraph` for selection and semantic routing |
 | `state.missionOperatorViews` | Mission dashboard projections used to populate stage rail and tree nodes |
 | `state.airport` | Active repository airport state |
 | `state.airports` | Registry of repository airports known to the daemon |

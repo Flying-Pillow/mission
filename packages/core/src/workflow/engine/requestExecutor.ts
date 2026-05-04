@@ -1,8 +1,12 @@
-import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
-import type { MissionDefaultAgentModeType } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission/MissionSchema.js';
+import type { MissionStageId } from '../manifest.js';
+import {
+	MissionAgentRunnerSchema,
+	type MissionDefaultAgentModeType
+} from '../../entities/Mission/MissionSchema.js';
 import type { AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
 	renderMissionProductTemplate
@@ -45,7 +49,7 @@ type RuntimeSessionHandle = {
 type RuntimeEventListener = (event: AgentSessionEvent) => void;
 
 export interface MissionWorkflowRequestExecutorOptions {
-	adapter: FilesystemAdapter;
+	adapter: MissionDossierFilesystem;
 	runners: Map<string, AgentRunner>;
 	instructionsPath?: string;
 	skillsPath?: string;
@@ -685,7 +689,7 @@ export class MissionWorkflowRequestExecutor {
 				},
 				body: await renderMissionProductTemplate(template, {
 					missionId: descriptor.missionId,
-					controlRoot: Repository.getMissionControlRootFromMissionDir(descriptor.missionDir),
+					repositoryRootPath: Repository.getRepositoryRootFromMissionDir(descriptor.missionDir),
 					brief: descriptor.brief,
 					branchRef: descriptor.branchRef
 				})
@@ -720,13 +724,13 @@ export class MissionWorkflowRequestExecutor {
 	): Promise<MissionGeneratedTaskPayload[]> {
 		const taskStates = await this.options.adapter.listTaskStates(descriptor.missionDir, stageId).catch(() => []);
 		return taskStates.map((taskState) => ({
+			...(normalizeGeneratedTaskAgentRunner(taskState.agent) ?? {}),
 			taskId: taskState.taskId,
 			title: taskState.subject,
 			instruction: taskState.instruction,
 			...(taskState.taskKind ? { taskKind: taskState.taskKind } : {}),
 			...(taskState.pairedTaskId ? { pairedTaskId: taskState.pairedTaskId } : {}),
-			dependsOn: [...taskState.dependsOn],
-			...(taskState.agent ? { agentRunner: taskState.agent } : {})
+			dependsOn: [...taskState.dependsOn]
 		}));
 	}
 
@@ -754,6 +758,13 @@ function toAgentCommand(value: string): AgentCommand | undefined {
 		default:
 			return undefined;
 	}
+}
+
+function normalizeGeneratedTaskAgentRunner(
+	agent: MissionTaskState['agent']
+): Pick<MissionGeneratedTaskPayload, 'agentRunner'> | undefined {
+	const parsedRunner = MissionAgentRunnerSchema.safeParse(agent);
+	return parsedRunner.success ? { agentRunner: parsedRunner.data } : undefined;
 }
 
 function toTransportEventFields(snapshot: AgentSessionSnapshot): { transportId: string; terminalHandle: AgentSessionTerminalHandleType } | Record<string, never> {

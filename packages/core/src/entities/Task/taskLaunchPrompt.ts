@@ -1,4 +1,4 @@
-import type { MissionTaskState } from '../../types.js';
+import type { MissionTaskState } from '../Mission/MissionSchema.js';
 
 export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string): string {
 	const instruction = task.instruction.trim();

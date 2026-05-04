@@ -7,15 +7,13 @@ nav_order: 7
 
 # Airport Control Plane
 
-Airport is the repository-scoped layout authority for Mission surfaces. It decides what each pane means, which client is attached to which pane, and how focus intent should be reconciled against the observed terminal substrate.
+Airport is the Mission surface for repository and mission operations. It decides what each pane shows and renders daemon/Entity state without owning mission execution truth.
 
 ## Primary Components
 
 | Component | Responsibility | Owned state |
 | --- | --- | --- |
-| `airport/types.ts` contracts | Shared airport pane, client, and substrate state contracts | `AirportState`, pane bindings |
-| `AirportTerminalSubstrate` helpers | Derive client-reported substrate observations and focus effects | `AirportSubstrateState` |
-| Airport terminal surfaces | Surface-local layout and focus state for Tower, Briefing Room, and Runway | panel-local UI state |
+| Airport surfaces | Surface-local layout and focus state for Tower, Briefing Room, and Runway | panel-local UI state |
 | Daemon protocol | `system.status` plus entity remote requests | daemon snapshots and entity results |
 
 ## Pane Model
@@ -36,14 +34,13 @@ Each pane has a `PaneBinding`:
 | `targetId` | Selected semantic target |
 | `mode` | `view` or `control` |
 
-## Airport State
+## Airport Projection State
 
-`AirportState` carries:
+Airport projection state carries:
 
 - repository-scoped pane bindings
 - focus intent and observed focus
 - connected client registrations
-- substrate observations and pane mapping
 
 It does not carry workflow execution truth.
 
@@ -55,34 +52,15 @@ Examples:
 - valid: update Tower or Briefing Room when daemon status changes
 - invalid: let focused pane, visible pane, or client-local cursor change whether a task may start or whether a session is considered alive
 
-## Focus And Substrate Reconciliation
+## Pane Selection
 
-```mermaid
-flowchart TD
-    Intent[Focus intent] --> Airport
-    Clients[Panel observations] --> Airport
-    Substrate[Observed zellij panes] --> Airport
-    Airport --> Effects[Planned substrate effects]
-    Effects --> Zellij[zellij focus action]
-    Zellij --> Substrate
-    Airport --> Views[Pane views for surfaces]
-```
-
-`planAirportSubstrateEffects(...)` only emits a focus effect when:
-
-1. a pane is the intended focus target
-2. the observed focus does not already match
-3. the bound pane exists in the current substrate observation
-
-Semantic selection is a separate concern from focus intent:
+Semantic selection is separate from surface focus:
 
 - mission or repository selection updates pane bindings and views
 - mission-mode task selection should resolve the task's canonical instruction and preferred session before panes bind
 - mission-mode stage selection should resolve the stage's canonical result artifact before panes bind
-- explicit airport focus observations update observed focus state; they do not reassert stale intent
-- selecting an artifact or agent session must not, by itself, move terminal focus away from Tower
-
-If observed focus conflicts with previously recorded focus intent, the observed focus wins until a new explicit airport command asserts new intent.
+- explicit surface focus observations update observed focus state; they do not reassert stale intent
+- selecting an artifact or agent session must not, by itself, mutate workflow execution state
 
 ## Persistence Boundary
 
@@ -95,24 +73,14 @@ Airport intent is persisted inside repository daemon settings, not inside `missi
 
 If the current airport intent matches the default bindings, the registry omits it rather than persisting redundant state.
 
-## Terminal Substrate Boundary
-
-The current substrate controller targets `zellij` by default, using `list-panes --json --all` for observation and `focus-pane-id` for effect application. This makes the substrate boundary explicit:
-
-- Airport owns intent.
-- The substrate controller owns terminal-manager translation.
-- zellij owns real pane existence and focus.
-
-That boundary is operational only. Real pane existence can matter to Airport reconciliation and may be observed by runtime transport code, but pane focus or pane visibility must never become workflow input.
-
 ## Non-Responsibilities
 
-Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only derives views and reconciles layout state.
+Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only derives views and surface-local layout state.
 
 Airport also does not arbitrate session truth. If a client and the daemon disagree about what is visible, the daemon wins. If Airport and workflow disagree about whether work is active, workflow plus normalized runtime facts win.
 
 ## Relationship To Other Pages
 
 - See [daemon.md](./daemon.html) for the multi-repository registry and daemon integration.
-- See [airport-terminal-surface.md](./airport-terminal-surface.html) for how the Airport terminal surfaces attach to airport panes.
+- See [airport-web-surface-blueprint.md](./airport-web-surface-blueprint.html) for the current Airport web surface shape.
 - See [semantic-model.md](./semantic-model.html) for the semantic targets referenced by pane bindings.

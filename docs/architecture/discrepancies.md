@@ -23,7 +23,7 @@ This page records current architecture boundaries that need precise vocabulary.
 ## 1. Workflow Gates And Airport Panes Use Different Vocabularies
 
 - Workflow gates in `mission.json` use gate ids such as `implement`, `verify`, `audit`, and `deliver`.
-- Airport panes in `packages/airport/src/types.ts` use pane ids such as `tower`, `briefingRoom`, and `runway`.
+- Airport panes in the web surface use pane ids such as `tower`, `briefingRoom`, and `runway`.
 
 They are both first-class, but they mean different things. One is workflow progression. The other is Airport layout topology.
 

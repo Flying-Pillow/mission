@@ -10,6 +10,9 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDocsRoot = path.resolve(currentDirectory, "../../../docs");
 const workspaceRoot = path.resolve(currentDirectory, "../../..");
 const useSourcePackages = process.env.NODE_ENV !== "production";
+const missionCoreSourceRoot = path.resolve(workspaceRoot, "packages/core/src");
+const terminalWebSocketServerModule = "./src/lib/server/terminal-websocket.server.ts";
+const terminalWebSocketSsrModule = "/src/lib/server/terminal-websocket.server.ts";
 
 type ViteHttpServer = HttpServer | HttpsServer;
 
@@ -32,7 +35,7 @@ function missionTerminalWebSocketPlugin() {
 			if (server.httpServer) {
 				void attachMissionTerminalWebSockets(
 					server.httpServer,
-					() => server.ssrLoadModule("/src/lib/server/terminal-websocket.server.ts") as Promise<TerminalWebSocketModule>
+					() => server.ssrLoadModule(terminalWebSocketSsrModule) as Promise<TerminalWebSocketModule>
 				);
 			}
 		},
@@ -40,7 +43,7 @@ function missionTerminalWebSocketPlugin() {
 			if (server.httpServer) {
 				void attachMissionTerminalWebSockets(
 					server.httpServer,
-					() => import("./src/lib/server/terminal-websocket.server.ts")
+					() => import(terminalWebSocketServerModule)
 				);
 			}
 		}
@@ -61,9 +64,18 @@ export default defineConfig({
 		]
 	},
 	resolve: {
-		conditions: useSourcePackages
-			? ["development", "typescript", "svelte", "browser", "module", "import", "default"]
-			: ["svelte", "browser", "module", "import", "default"]
+		alias: useSourcePackages
+			? [
+				{
+					find: /^@flying-pillow\/mission-core$/,
+					replacement: path.join(missionCoreSourceRoot, "index.ts")
+				},
+				{
+					find: /^@flying-pillow\/mission-core\/(.+)$/,
+					replacement: `${missionCoreSourceRoot}/$1.ts`
+				}
+			]
+			: []
 	},
 	server: {
 		fs: {

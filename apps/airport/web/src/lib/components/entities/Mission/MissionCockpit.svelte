@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
 
     type MissionCockpitSelectionState = {
         treeNodes: MissionTowerTreeNode[];

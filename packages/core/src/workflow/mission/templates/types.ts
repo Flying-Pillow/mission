@@ -1,10 +1,9 @@
 import type {
 	MissionBrief,
-	MissionArtifactKey,
-	MissionStageId,
 	MissionTaskAgent,
 	MissionTaskStatus
-} from '../../../types.js';
+} from '../../../entities/Mission/MissionSchema.js';
+import type { MissionArtifactKey, MissionStageId } from '../../manifest.js';
 import type { TemplateObject } from '../../engine/templates/templateRenderer.js';
 
 export type MissionProductTemplate = {
@@ -60,7 +59,7 @@ export type MissionTemplateContext = TemplateObject & {
 
 export type MissionTemplateContextInput = {
 	missionId: string;
-	controlRoot: string;
+	repositoryRootPath: string;
 	brief: MissionBrief;
 	branchRef: string;
 };

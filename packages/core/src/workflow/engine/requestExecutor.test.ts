@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor, MissionTaskState } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
 	createInitialMissionWorkflowRuntimeState,
 	createMissionWorkflowConfigurationSnapshot
@@ -55,7 +55,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			writeTaskRecord: async (_missionDir: string, stage: string, fileName: string) => {
 				writtenTasks.push({ stage, fileName });
 			}
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -138,7 +138,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			listTaskStates: async (_missionDir: string, stage: string) =>
 				stage === 'implementation' ? [implementationTaskArtifact] : [],
 			writeTaskRecord: async () => undefined
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -212,7 +212,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					} satisfies MissionTaskState]
 					: [],
 			writeTaskRecord: async () => undefined
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -263,7 +263,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			writeArtifactRecord: async () => undefined,
 			listTaskStates: async () => [],
 			writeTaskRecord: async () => undefined
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -310,7 +310,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -353,7 +353,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	it('starts a new runtime session id when relaunching the same task after termination', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -413,7 +413,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	it('preserves canonical task identity when cancelling an unattached runtime session', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 
@@ -442,7 +442,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	it('emits task.completed when a task-scoped runtime session completes successfully', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -509,7 +509,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				relativePath: '03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 			}),
 			getMissionWorkspacePath: (missionDir: string) => missionDir
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -567,7 +567,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				relativePath: '03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 			}),
 			getMissionWorkspacePath: (missionDir: string) => missionDir
-		} as unknown as FilesystemAdapter;
+		} as unknown as MissionDossierFilesystem;
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter,
@@ -631,7 +631,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		const runner = new ThrowingReconcileRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -675,7 +675,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		const runner = new ThrowingReconcileRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -711,7 +711,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('treats workflow termination of an unattached session as a terminal lifecycle event', async () => {
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map()
 		});
 
@@ -732,7 +732,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	it('reconciles detached terminal snapshots even when runtime snapshot taskId is unknown', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as FilesystemAdapter,
+			adapter: {} as MissionDossierFilesystem,
 			runners: new Map([[runner.id, runner]])
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({

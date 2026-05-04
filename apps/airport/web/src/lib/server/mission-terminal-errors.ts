@@ -1,5 +1,6 @@
-import { stopMissionDaemonProcess } from '@flying-pillow/mission-core/node';
+import { stopMissionDaemonProcess } from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
 import { resolveRequestAuthToken, resolveSurfacePath } from './daemon/context.server';
+import { isDaemonUnavailableError } from './daemon/health.server';
 import { clearSharedDaemonClient } from './daemon/shared-client.server';
 import { openDaemonConnection } from './daemon/transport.server';
 
@@ -12,6 +13,8 @@ export type MissionTerminalRuntimeError = {
     message: string;
     status: number;
 };
+
+const DAEMON_UNAVAILABLE_MESSAGE_PREFIX = 'Mission daemon is unavailable';
 
 export function isStaleMissionTerminalDaemonError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
@@ -44,6 +47,13 @@ export function resolveMissionTerminalRuntimeError(error: unknown): MissionTermi
     if (isStaleMissionTerminalDaemonError(error)) {
         return {
             message: 'Mission daemon is running an older protocol version. Restart the mission daemon or dev server and try again.',
+            status: 503
+        };
+    }
+
+    if (isDaemonUnavailableError(error) || message.includes(DAEMON_UNAVAILABLE_MESSAGE_PREFIX)) {
+        return {
+            message,
             status: 503
         };
     }

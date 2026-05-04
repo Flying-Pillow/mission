@@ -14,6 +14,11 @@ _Avoid_: project, job, run, workflow
 The local-first engineering control system that coordinates repositories, missions, daemon-owned runtime state, Airport surfaces, and agent runtimes.
 _Avoid_: Mission, app, platform
 
+**Control plane**:
+The daemon-owned live coordination layer that composes repository state, Mission state, Airport state, and client connections into live operator-facing views and routing state.
+Use only as a runtime-plane umbrella term, not as the default name for module folders, types, or adapters when a narrower owner such as daemon projection, Airport substrate, Entity contract, or daemon client is known.
+_Avoid_: generic folder prefix, catch-all type prefix, surface-owned state
+
 ### Repository Plane
 
 **Platform repository ref**:

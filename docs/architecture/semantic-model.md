@@ -10,7 +10,7 @@ nav_order: 3
 Mission uses two related but different semantic layers:
 
 1. Domain identities and persisted mission records.
-2. Daemon projection contexts used for selection, routing, and UI composition.
+2. Daemon-owned surface read models used for status, selection, routing, and UI composition.
 
 The architecture stays coherent only if those layers are not collapsed.
 
@@ -18,12 +18,12 @@ The architecture stays coherent only if those layers are not collapsed.
 
 | Entity | Primary representation | Purpose | Runtime authority |
 | --- | --- | --- | --- |
-| Repository | `RepositoryContext`, repository root path, `.mission/settings.json` | Repository-scoped control plane root | `WorkspaceManager`, `MissionWorkspace` |
-| Mission | `MissionDescriptor`, `MissionRuntimeData`, `MissionContext` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
+| Repository | Repository root path, `.mission/settings.json`, `RepositoryControlStatus` | Repository-scoped Mission system root | `WorkspaceManager`, `MissionWorkspace` |
+| Mission | `MissionDescriptor`, `MissionRuntimeData`, `MissionRecord` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
 | Stage | `MissionStageId`, `MissionStageRuntimeProjection` | Structural phase boundary derived from task state | Workflow runtime |
-| Task | `MissionTaskRuntimeState`, `MissionTaskState`, `TaskContext` | Atomic unit of executable work | Workflow runtime |
-| Artifact | `MissionArtifactKey`, `ArtifactContext` | Mission output and operator-readable state | Workflow artifact materialization |
-| Agent session | `AgentSessionState`, `AgentSessionRecord`, `AgentSessionContext` | Live or recorded execution of a task through a runner | Agent runtime + mission aggregate |
+| Task | `MissionTaskRuntimeState`, `MissionTaskState` | Atomic unit of executable work | Workflow runtime |
+| Artifact | `MissionArtifactKey`, artifact records | Mission output and operator-readable state | Workflow artifact materialization |
+| Agent session | `AgentSessionState`, `AgentSessionRecord` | Live or recorded execution of a task through a runner | Agent runtime + mission aggregate |
 
 ## Mission Records Versus Projection Records
 
@@ -32,7 +32,6 @@ The architecture stays coherent only if those layers are not collapsed.
 | `MissionDescriptor` | Mission identity | Stable mission metadata such as `missionId`, brief, branch, and creation time |
 | `MissionRuntimeData` | Mission persistence | Snapshot of workflow configuration, runtime state, and event log |
 | `MissionRecord` | Operator-facing aggregate summary | Mission identity plus current stage and session records |
-| `ContextGraph` | Daemon projection state | Repository, mission, task, artifact, and session selection graph |
 | `OperatorStatus` | Surface-facing response | Aggregated mission status returned by daemon APIs |
 
 ## Stage And Artifact Taxonomy
@@ -55,7 +54,7 @@ Mission exposes two different task shapes for different reasons.
 | --- | --- | --- |
 | `MissionTaskRuntimeState` | Runtime lifecycle, launch policy, retries, dependency blocking | Workflow engine |
 | `MissionTaskState` | Task file identity, subject, instruction body, simplified status for operator surfaces | Mission aggregate and control surfaces |
-| `TaskContext` | Selection graph fields and session links | Daemon context graph |
+| `MissionTaskState` | Operator-facing task fields and dependency links | Mission aggregate and control surfaces |
 
 This is intentional. The workflow engine needs detailed lifecycle semantics such as `queued` and `running`. The operator surface model uses a simpler task status vocabulary for mission control and selection.
 
@@ -69,13 +68,19 @@ Sessions also exist in more than one form.
 | `AgentSessionSnapshot` | Provider-neutral AgentSession snapshot | daemon-owned agent control |
 | `AgentSessionState` | Workflow-tracked AgentSession state | Workflow runtime |
 | `AgentSessionRecord` | Mission aggregate AgentSession record for surfaces | `Mission` aggregate |
-| `AgentSessionContext` | Daemon selection/projection context | `MissionControl` |
+| `AgentSessionRecord` | Mission aggregate Agent session record for surfaces | `Mission` aggregate |
 
-## Context Graph
+## Selection And Surface Read Models
 
-`ContextGraph` is the daemon's semantic routing graph. It is not stored in `mission.json`.
+Mission does not currently have a separate generic navigation graph. Selection and routing should be expressed through concrete owner-owned read models:
 
-It exists to answer questions such as:
+- `OperatorStatus` for aggregated Mission and Repository status returned by daemon APIs
+- `MissionTowerProjection` for Tower stage rail and tree nodes
+- Airport pane binding state for Airport-owned layout and focus intent
+
+These read models are not stored in `mission.json`.
+
+Together they answer questions such as:
 
 - which repository is currently selected
 - which mission Tower should center on
@@ -88,13 +93,13 @@ Mission mode also needs one more layer above that raw target:
 - which agent session should be active for that task when no explicit session row is selected
 - which stage product artifact should be active when a stage is selected
 
-That resolution is derived projection behavior, not mission runtime persistence.
+That resolution is daemon-owned or Airport-owned read-model behavior, depending on the owner of the state being resolved; it is not Mission runtime persistence.
 
 ## Invariants
 
 1. Stage state is derived from task state, not independently edited by the UI.
-2. Artifact contexts are routing records, not the artifacts themselves.
-3. The daemon may project a mission through `ContextGraph` without changing mission execution state.
+2. Surface routing records are not the artifacts themselves.
+3. The daemon may update surface read models without changing Mission execution state.
 4. Sessions are tied to tasks semantically, but they remain runtime objects with their own lifecycle and transport boundary.
 5. Task selection is a work-bundle selection: task identity, canonical instruction artifact, and preferred session belong together.
 6. Stage selection resolves to the stage's canonical product artifact.

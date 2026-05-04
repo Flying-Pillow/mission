@@ -76,10 +76,6 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
         return this.data.terminalHandle?.sessionName;
     }
 
-    public get terminalPaneId(): string | undefined {
-        return this.data.terminalHandle?.paneId;
-    }
-
     public get terminalHandle(): AgentSessionDataType['terminalHandle'] {
         return this.data.terminalHandle;
     }

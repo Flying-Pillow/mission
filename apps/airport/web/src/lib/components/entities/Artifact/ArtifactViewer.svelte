@@ -32,15 +32,15 @@
     const canEditArtifact = $derived(
         isArtifactTextEditable(artifactBodyLocation),
     );
-    const artifactBodyKey = $derived(
-        artifact ? `${artifact.id}:${refreshNonce}` : "none",
-    );
     const canReadArtifactBody = $derived.by(() => {
         refreshNonce;
         return Boolean(
             artifact && viewerKind !== "unsupported" && viewerKind !== "image",
         );
     });
+    const artifactBodyKey = $derived(
+        artifact ? `${artifact.id}:${refreshNonce}` : "none",
+    );
 </script>
 
 <section

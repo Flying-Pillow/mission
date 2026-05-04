@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { MissionAgentRunnerSchema } from '../entities/Mission/MissionSchema.js';
 import { StageIdSchema } from '../entities/Stage/StageSchema.js';
 import { TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
@@ -45,7 +46,7 @@ export const WorkflowGeneratedTaskDefinitionSchema = z.object({
 	taskKind: z.enum(['implementation', 'verification']).optional(),
 	pairedTaskId: TaskIdSchema.optional(),
 	dependsOn: z.array(TaskIdSchema),
-	agentRunner: z.string().trim().min(1).optional()
+	agentRunner: MissionAgentRunnerSchema.optional()
 }).strict();
 
 export const WorkflowTaskTemplateSourceSchema = z.object({
@@ -148,7 +149,7 @@ export const WorkflowDefinitionSchema = z.object({
 });
 
 export const WorkflowRuntimeSettingsSchema = z.object({
-	agentRunner: z.enum(['copilot-cli', 'pi']),
+	agentRunner: MissionAgentRunnerSchema,
 	defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
 	defaultModel: z.string().trim().min(1).optional()
 }).strict();

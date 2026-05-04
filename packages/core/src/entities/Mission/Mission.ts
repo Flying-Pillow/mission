@@ -7,11 +7,19 @@ import {
 	type MissionAgentConsoleEvent,
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
-	type MissionAgentLifecycleState,
-	type MissionAgentTerminalState,
-	type AgentSessionLaunchRequest,
-	type AgentSessionRecord
-} from '../../daemon/protocol/contracts.js';
+	type MissionTerminalSnapshotType,
+	type MissionDefaultAgentModeType,
+	type MissionCommandAcknowledgementType,
+	type MissionDataType,
+	type MissionLocatorType,
+	type MissionCommandViewSnapshotType,
+	type MissionOwnedCommandDescriptorType
+} from './MissionSchema.js';
+import type {
+	MissionAgentLifecycleState,
+	AgentSessionLaunchRequest,
+	AgentSessionRecord
+} from '../AgentSession/AgentSessionSchema.js';
 import type {
 	AgentCommand,
 	AgentPrompt
@@ -19,7 +27,6 @@ import type {
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { AgentSessionLogWriter } from '../AgentSession/AgentSessionLogWriter.js';
 import {
-	MISSION_STAGES,
 	type MissionTaskUpdate,
 	type GateIntent,
 	type MissionBrief,
@@ -27,12 +34,12 @@ import {
 	type MissionGateResult,
 	type MissionRecord,
 	type MissionSelector,
-	type MissionStageId,
 	type MissionTaskState,
 	type MissionType,
 	type OperatorStatus
-} from '../../types.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+} from './MissionSchema.js';
+import { MISSION_STAGES, type MissionStageId } from '../../workflow/mission/manifest.js';
+import { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
 	MissionWorkflowController,
@@ -73,12 +80,6 @@ import {
 	MissionTerminalSnapshotSchema,
 	MissionWorktreeSnapshotSchema,
 	MissionWriteDocumentInputSchema,
-	type MissionDefaultAgentModeType,
-	type MissionCommandAcknowledgementType,
-	type MissionDataType,
-	type MissionLocatorType,
-	type MissionCommandViewSnapshotType,
-	type MissionOwnedCommandDescriptorType
 } from './MissionSchema.js';
 import {
 	MissionWorkflowEventRecordSchema,
@@ -111,7 +112,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	public static async find(payload: unknown, context: EntityExecutionContext) {
 		const input = MissionFindSchema.parse(payload);
 		const repositoryRootPath = input.repositoryRootPath ?? context.surfacePath;
-		const store = new FilesystemAdapter(repositoryRootPath);
+		const store = new MissionDossierFilesystem(repositoryRootPath);
 		const missions = await store.listMissions().catch(() => []);
 
 		return MissionCatalogEntrySchema.array().parse(missions.map(({ missionDir, descriptor }) => ({
@@ -284,7 +285,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private static parseTerminalSnapshot(missionId: string, state: MissionAgentTerminalState) {
+	private static parseTerminalSnapshot(missionId: string, state: MissionTerminalSnapshotType) {
 		return MissionTerminalSnapshotSchema.parse({
 			missionId,
 			connected: state.connected,
@@ -317,7 +318,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	public readonly onDidAgentEvent = this.agentEventEmitter.event;
 
 	public constructor(
-		private readonly adapter: FilesystemAdapter,
+		private readonly adapter: MissionDossierFilesystem,
 		private readonly missionDir: string,
 		descriptor: MissionDossierDescriptor,
 		workflowBindings: MissionWorkflowBindings,
@@ -356,7 +357,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async create(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		input: {
 			brief: MissionBrief;
 			branchRef: string;
@@ -391,7 +392,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async load(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		selector: MissionSelector = {},
 		workflowBindings: MissionWorkflowBindings
 	): Promise<Mission | undefined> {
@@ -1466,7 +1467,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async readStateData(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string
 	): Promise<MissionStateData | undefined> {
 		const rawData = await adapter.readMissionStateDataFile(missionDir);
@@ -1474,7 +1475,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async writeStateData(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string,
 		data: MissionStateData
 	): Promise<void> {
@@ -1482,7 +1483,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async appendEventRecord(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string,
 		eventRecord: MissionWorkflowEventRecord
 	): Promise<void> {
@@ -1493,7 +1494,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async readEventLog(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string
 	): Promise<MissionWorkflowEventRecord[]> {
 		return MissionWorkflowEventRecordSchema.array()
@@ -1502,7 +1503,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public static async initializeStateData(input: {
-		adapter: FilesystemAdapter;
+		adapter: MissionDossierFilesystem;
 		missionDir: string;
 		missionId: string;
 		configuration: MissionWorkflowConfigurationSnapshot;
@@ -1696,7 +1697,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private static createDataFromDescriptor(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string,
 		descriptor: MissionDossierDescriptor
 	): MissionDataType {

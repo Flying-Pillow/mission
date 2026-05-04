@@ -60,12 +60,6 @@ Mission now uses pnpm workspaces at the repository root and launches the Airport
 
 On Linux, `mission install` provisions the Mission-managed GitHub CLI automatically when it is missing, then records the resolved binary path in Mission config.
 
-### Native TypeScript preview
-
-For local experimentation, the workspace exposes `pnpm run check:native-preview` and package-specific `check:native-preview:*` scripts that run the Go-based TypeScript preview against the TS-only packages.
-
-These scripts are intentionally separate from the default `check`, `build`, and `ci:verify` flows. Keep the stable TypeScript 6 toolchain as the source of truth for CI and continue using the stable web checks for SvelteKit and `svelte-check`.
-
 **1. Run the published CLI package:**
 
 ```bash

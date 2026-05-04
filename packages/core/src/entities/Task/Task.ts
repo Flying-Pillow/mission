@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { AgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionLaunchRequest } from '../AgentSession/AgentSessionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
@@ -13,9 +13,9 @@ import {
 	evaluateMissionTaskStatusIntent,
 	MISSION_STAGE_FOLDERS,
 	type MissionStageId,
-	type MissionTaskState,
 	type MissionTaskStatusIntent
-} from '../../types.js';
+} from '../../workflow/mission/manifest.js';
+import type { MissionTaskState } from '../Mission/MissionSchema.js';
 import type { MissionStateData } from '../../workflow/engine/index.js';
 import {
 	TaskDataSchema,

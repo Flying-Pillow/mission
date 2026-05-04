@@ -7,7 +7,7 @@ import {
 } from '../entities/Mission/MissionSchema.js';
 import { Mission } from '../entities/Mission/Mission.js';
 import { Repository } from '../entities/Repository/Repository.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
 import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
 
@@ -36,25 +36,25 @@ export class MissionRegistry {
             roots.add(path.resolve(repository.repositoryRootPath));
         }
 
-        for (const controlRoot of roots) {
-            await this.hydrateRepositoryMissions({ surfacePath: controlRoot });
+        for (const repositoryRoot of roots) {
+            await this.hydrateRepositoryMissions({ surfacePath: repositoryRoot });
         }
     }
 
     public async hydrateRepositoryMissions(context: { surfacePath: string }): Promise<void> {
-        const controlRoot = path.resolve(context.surfacePath);
-        const adapter = new FilesystemAdapter(controlRoot);
+        const repositoryRoot = path.resolve(context.surfacePath);
+        const adapter = new MissionDossierFilesystem(repositoryRoot);
         const missions = await this.listKnownMissions(adapter);
         await Promise.all(
             missions.map(async (mission) => {
                 try {
-                    const missionControlRoot = adapter.getMissionWorkspacePath(mission.missionDir);
+                    const missionRepositoryRoot = adapter.getMissionWorkspacePath(mission.missionDir);
                     await this.loadMissionFromRegistry(
                         {
                             missionId: mission.descriptor.missionId,
-                            repositoryRootPath: missionControlRoot
+                            repositoryRootPath: missionRepositoryRoot
                         },
-                        { surfacePath: missionControlRoot }
+                        { surfacePath: missionRepositoryRoot }
                     );
                 } catch (error) {
                     const message = `Mission daemon could not hydrate mission '${mission.descriptor.missionId}' at '${mission.missionDir}': ${error instanceof Error ? error.message : String(error)}`;
@@ -104,8 +104,8 @@ export class MissionRegistry {
         context: { surfacePath: string },
         terminalSessionName?: string
     ): Promise<MissionHandle | undefined> {
-        const controlRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
-        const key = this.createMissionKey(controlRoot, input.missionId);
+        const repositoryRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
+        const key = this.createMissionKey(repositoryRoot, input.missionId);
         const existingMission = this.missionHandles.get(key);
         if (existingMission) {
             return existingMission;
@@ -119,7 +119,7 @@ export class MissionRegistry {
         const loader = this.options.loadMission ?? this.loadMission;
         const load = loader(
             input,
-            { surfacePath: controlRoot },
+            { surfacePath: repositoryRoot },
             terminalSessionName
         ).then((mission) => {
             if (!mission) {
@@ -140,20 +140,20 @@ export class MissionRegistry {
         input: MissionLocatorType,
         context: { surfacePath: string },
     ): Promise<Mission | undefined> => {
-        const controlRoot = input.repositoryRootPath?.trim() || context.surfacePath;
-        const settings = Repository.requireSettingsDocument(controlRoot);
-        const workflowDocument = readMissionWorkflowDefinition(controlRoot);
+        const repositoryRoot = input.repositoryRootPath?.trim() || context.surfacePath;
+        const settings = Repository.requireSettingsDocument(repositoryRoot);
+        const workflowDocument = readMissionWorkflowDefinition(repositoryRoot);
         if (!workflowDocument) {
-            throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(controlRoot)}' is required.`);
+            throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(repositoryRoot)}' is required.`);
         }
         const workflow = parsePersistedWorkflowSettings(workflowDocument);
         const taskRunners = new Map(
             (await createConfiguredAgentRunners({
-                controlRoot
+                repositoryRootPath: repositoryRoot
             })).map((runner) => [runner.id, runner] as const)
         );
 
-        const adapter = new FilesystemAdapter(controlRoot);
+        const adapter = new MissionDossierFilesystem(repositoryRoot);
         const resolved = await adapter.resolveKnownMission({ missionId: input.missionId });
         if (!resolved) {
             return undefined;
@@ -164,9 +164,9 @@ export class MissionRegistry {
             resolveWorkflow: () => workflow,
             taskRunners,
             ...(settings.instructionsPath
-                ? { instructionsPath: resolveRepositoryPath(controlRoot, settings.instructionsPath) }
+                ? { instructionsPath: resolveRepositoryPath(repositoryRoot, settings.instructionsPath) }
                 : {}),
-            ...(settings.skillsPath ? { skillsPath: resolveRepositoryPath(controlRoot, settings.skillsPath) } : {}),
+            ...(settings.skillsPath ? { skillsPath: resolveRepositoryPath(repositoryRoot, settings.skillsPath) } : {}),
             ...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
             ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
         });
@@ -174,7 +174,7 @@ export class MissionRegistry {
         return mission;
     };
 
-    private async listKnownMissions(adapter: FilesystemAdapter) {
+    private async listKnownMissions(adapter: MissionDossierFilesystem) {
         const missions = [
             ...await adapter.listTrackedMissions(),
             ...await adapter.listMissions()
@@ -182,8 +182,8 @@ export class MissionRegistry {
         return [...new Map(missions.map((mission) => [mission.missionDir, mission])).values()];
     }
 
-    private createMissionKey(controlRoot: string, missionId: string): string {
-        return `${path.resolve(controlRoot)}:${missionId}`;
+    private createMissionKey(repositoryRoot: string, missionId: string): string {
+        return `${path.resolve(repositoryRoot)}:${missionId}`;
     }
 
     private createBorrowedMissionHandle(mission: MissionHandle): MissionHandle {

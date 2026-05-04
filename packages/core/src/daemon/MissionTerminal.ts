@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { TerminalAgentTransport, type TerminalSessionHandle } from './runtime/agent/TerminalAgentTransport.js';
 import { MissionAgentEventEmitter } from './runtime/agent/events.js';
-import type { MissionSelector } from '../types.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import type { MissionAgentTerminalState } from './protocol/contracts.js';
+import type { MissionSelector } from '../entities/Mission/MissionSchema.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
+import type { MissionTerminalSnapshotType } from '../entities/Mission/MissionSchema.js';
 
 type MissionTerminalInput = {
     data?: string;
@@ -25,7 +25,7 @@ type MissionTerminalRecord = {
 export type MissionTerminalUpdate = {
     workspaceRoot: string;
     missionId: string;
-    state: MissionAgentTerminalState;
+    state: MissionTerminalSnapshotType;
 };
 
 const missionTerminalTransport = new TerminalAgentTransport();
@@ -53,7 +53,7 @@ export function observeMissionTerminalUpdates(listener: (event: MissionTerminalU
 export async function readMissionTerminalState(input: {
     surfacePath: string;
     selector?: MissionSelector;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await readExistingMissionTerminalRecord(input);
     if (!resolved) {
         return null;
@@ -64,7 +64,7 @@ export async function readMissionTerminalState(input: {
 export async function ensureMissionTerminalState(input: {
     surfacePath: string;
     selector?: MissionSelector;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await ensureMissionTerminalRecord(input);
     if (!resolved) {
         return null;
@@ -76,7 +76,7 @@ export async function sendMissionTerminalInput(input: {
     surfacePath: string;
     selector?: MissionSelector;
     terminalInput: MissionTerminalInput;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await readExistingMissionTerminalRecord(input);
     if (!resolved) {
         return null;
@@ -171,7 +171,7 @@ async function resolveMissionTerminalContext(input: {
         return undefined;
     }
 
-    const adapter = new FilesystemAdapter(surfacePath);
+    const adapter = new MissionDossierFilesystem(surfacePath);
     const mission = await adapter.resolveKnownMission({ missionId });
     if (!mission) {
         return undefined;
@@ -189,7 +189,7 @@ async function resolveMissionTerminalContext(input: {
     };
 }
 
-async function createMissionTerminalState(record: MissionTerminalRecord): Promise<MissionAgentTerminalState> {
+async function createMissionTerminalState(record: MissionTerminalRecord): Promise<MissionTerminalSnapshotType> {
     const snapshot = await missionTerminalTransport.readSnapshot(record.handle);
     return createMissionTerminalStateFromSnapshot(record, snapshot);
 }
@@ -197,9 +197,9 @@ async function createMissionTerminalState(record: MissionTerminalRecord): Promis
 function createMissionTerminalStateFromSnapshot(
     record: MissionTerminalRecord,
     snapshot: Awaited<ReturnType<typeof missionTerminalTransport.readSnapshot>>
-): MissionAgentTerminalState {
+): MissionTerminalSnapshotType {
     return {
-        sessionId: record.sessionId,
+        missionId: record.missionId,
         connected: snapshot.connected,
         dead: snapshot.dead,
         exitCode: snapshot.exitCode,

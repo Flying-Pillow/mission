@@ -270,6 +270,13 @@ function buildPendingDaemonState(checkedAtMs: number): DaemonRuntimeState {
         ?? lastKnownState?.failureCount
         ?? 0;
 
+    if (lastKnownState?.running) {
+        return {
+            ...lastKnownState,
+            lastCheckedAt: new Date(checkedAtMs).toISOString()
+        };
+    }
+
     return {
         running: false,
         startedByHook: true,

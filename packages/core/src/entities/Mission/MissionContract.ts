@@ -3,6 +3,8 @@ import { Mission } from './Mission.js';
 import { AgentSessionContract } from '../AgentSession/AgentSessionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';
 import { createEntityChannel, createEntityId } from '../Entity/Entity.js';
+import { createEntityEventEnvelope } from '../Entity/Entity.js';
+import type { EntityEventEnvelopeType } from '../Entity/EntitySchema.js';
 import { StageContract } from '../Stage/StageContract.js';
 import { TaskContract } from '../Task/TaskContract.js';
 import {
@@ -105,9 +107,31 @@ export const MissionContract: EntityContractType = {
         },
         status: {
             payload: MissionStatusSnapshotSchema
+        },
+        terminal: {
+            payload: MissionTerminalSnapshotSchema
         }
     }
 };
+
+export function createMissionTerminalEvent(input: {
+    workspaceRoot: string;
+    missionId: string;
+    state: unknown;
+}): EntityEventEnvelopeType {
+    const missionId = input.missionId.trim();
+    const payload = MissionTerminalSnapshotSchema.parse({
+        missionId,
+        ...(typeof input.state === 'object' && input.state !== null ? input.state : {})
+    });
+    return createEntityEventEnvelope({
+        entityId: createEntityId('mission', missionId),
+        eventName: 'terminal',
+        type: 'mission.terminal',
+        missionId,
+        payload
+    });
+}
 
 export function createMissionRuntimeEventSubscriptionChannels(missionId: string): string[] {
     const normalizedMissionId = missionId.trim();

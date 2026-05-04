@@ -14,22 +14,20 @@ Mission's architecture is split along package boundaries that mirror its runtime
 | Package or app | Architectural role | Key exports or modules |
 | --- | --- | --- |
 | `packages/mission` | Published CLI distribution package | `mission`, `missiond`, CLI entry wiring |
-| `packages/core` | Main domain package for daemon service, mission/repository/workspace domains, agent runtime wiring, workflow, client, and settings | `DaemonClient`, `MissionRegistry`, mission aggregate, workflow engine, runtime/process control, types |
-| `packages/airport` | Shared airport surface schemas and runtime snapshot contracts | airport types, substrate effects, runtime schemas |
-| `apps/airport/terminal` | Airport terminal surfaces | airport entry routing, airport control connection, OpenTUI UI, Tower/Runway/Briefing Room surfaces |
+| `packages/core` | Main domain package for daemon service, mission/repository/workspace domains, agent runtime wiring, workflow, daemon IPC client adapters, and settings | `DaemonClient`, `MissionRegistry`, mission aggregate, workflow engine, runtime/process control, types |
+| `apps/airport/web` | Airport web surface | SvelteKit routes, Entity Remote dispatch, Airport runtime snapshot rendering |
 
 ## `packages/core` Internal Architecture
 
 | Folder | Responsibility |
 | --- | --- |
-| `src/daemon` | IPC server, daemon protocol, system control-plane coordination, and daemon process/runtime entrypoints |
+| `src/daemon` | IPC server, daemon protocol, daemon IPC client adapters, live daemon coordination, and daemon process/runtime entrypoints |
 | `src/daemon/runtime/mission` | MissionRuntime orchestration, Mission worktree/session runtime services, MissionDossier schema-aware dossier I/O, and per-Mission dossier-backed state-store checkpointing |
 | `src/workspace` | Repository discovery, workspace routing, and repository-scoped execution boundary (`WorkspaceManager`, `MissionWorkspace`) |
 | `src/entities` | Entity-owned schemas, contracts, and behavior for Mission, Stage, Task, Artifact, AgentSession, Repository, and shared Entity infrastructure |
 | `src/repository` | Repository initialization and bootstrap preparation services |
 | `src/agent` | Agent abstractions, sessions/events, runtime IDs, concrete runners, and default runtime factory wiring |
 | `src/workflow/engine` | Workflow document, reducer ingestion, request execution, generation, validation |
-| `src/client` | IPC client and namespaced API surfaces |
 | `src/settings` | Repository workflow settings initialization, patching, revision control, validation |
 | `src/lib` | Shared helpers and physical adapters (paths, config helpers, operator targeting, repo/workspace utilities, raw Mission dossier file I/O) |
 | `src/platforms` | External platform adapters (for example GitHub integration) |
@@ -37,9 +35,9 @@ Mission's architecture is split along package boundaries that mirror its runtime
 
 ## Package Boundary Rules
 
-1. `packages/airport` must not absorb workflow semantics.
-2. `apps/airport/terminal` must consume exported contracts rather than reaching into daemon internals.
-3. `packages/core` is the main integration package that re-exports airport, daemon, runtime, and type surfaces.
+1. Airport surfaces must not absorb workflow semantics.
+2. `apps/airport/web` must consume exported daemon and Entity contracts rather than reaching into daemon internals.
+3. `packages/core` is the main integration package for daemon, runtime, and type surfaces.
 4. `packages/mission` is the public npm distribution boundary for the Mission CLI and must compose publishable packages rather than monorepo-only root scripts.
 
 ## Public Export Surface

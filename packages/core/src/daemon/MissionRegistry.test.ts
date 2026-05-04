@@ -2,8 +2,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import type { MissionDescriptor } from '../types.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
+import type { MissionDescriptor } from '../entities/Mission/MissionSchema.js';
 import { MissionRegistry } from './MissionRegistry.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
@@ -20,7 +20,7 @@ afterEach(async () => {
 describe('MissionRegistry', () => {
 	it('continues startup hydration when a persisted mission fails strict loading', async () => {
 		const workspaceRoot = await createTempWorkspace();
-		const adapter = new FilesystemAdapter(workspaceRoot);
+		const adapter = new MissionDossierFilesystem(workspaceRoot);
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-good'), createDescriptor('mission-good'));
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-bad'), createDescriptor('mission-bad'));
 		const loadMission = vi.fn(async (input: { missionId: string }) => {
@@ -43,11 +43,11 @@ describe('MissionRegistry', () => {
 		}
 	});
 
-	it('hydrates discovered Mission worktrees from the worktree control root', async () => {
+	it('hydrates discovered Mission worktrees from the worktree Repository root', async () => {
 		const repositoryRoot = await createTempWorkspace();
-		const repositoryAdapter = new FilesystemAdapter(repositoryRoot);
+		const repositoryAdapter = new MissionDossierFilesystem(repositoryRoot);
 		const missionWorktreeRoot = repositoryAdapter.getMissionWorktreePath('1-prepare-repo-for-mission');
-		const missionAdapter = new FilesystemAdapter(missionWorktreeRoot);
+		const missionAdapter = new MissionDossierFilesystem(missionWorktreeRoot);
 		const missionDir = missionAdapter.getTrackedMissionDir('1-prepare-repo-for-mission', missionWorktreeRoot);
 		await fs.mkdir(path.join(missionWorktreeRoot, '.mission'), { recursive: true });
 		await fs.writeFile(

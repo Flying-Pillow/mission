@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Task } from './Task.js';
 import { TaskReworkCommandInputSchema, TaskStartCommandOptionsSchema } from './TaskSchema.js';
-import type { MissionTaskState } from '../../types.js';
+import type { MissionTaskState } from '../Mission/MissionSchema.js';
 
 const taskState: MissionTaskState = {
     taskId: 'implementation/01',

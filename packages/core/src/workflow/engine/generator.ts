@@ -2,8 +2,9 @@ import {
     renderMissionTaskTemplate,
     type MissionTaskTemplate
 } from '../mission/templates/index.js';
+import { MissionAgentRunnerSchema } from '../../entities/Mission/MissionSchema.js';
 import { Repository } from '../../entities/Repository/Repository.js';
-import type { MissionDescriptor } from '../../types.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
 import type {
     MissionGeneratedTaskPayload,
     MissionStageId,
@@ -35,7 +36,7 @@ export async function generateMissionWorkflowTasks(input: {
                 { templatePath: templateSource.path },
                 {
                     missionId: input.descriptor.missionId,
-                    controlRoot: Repository.getMissionControlRootFromMissionDir(input.descriptor.missionDir),
+                    repositoryRootPath: Repository.getRepositoryRootFromMissionDir(input.descriptor.missionDir),
                     brief: input.descriptor.brief,
                     branchRef: input.descriptor.branchRef
                 }
@@ -69,6 +70,8 @@ function toGeneratedTaskPayload(
     stageId: MissionStageId,
     taskTemplate: MissionTaskTemplate
 ): MissionGeneratedTaskPayload {
+    const parsedRunner = MissionAgentRunnerSchema.safeParse(taskTemplate.agent);
+
     return {
         taskId: `${stageId}/${stripMarkdownExtension(taskTemplate.fileName)}`,
         title: taskTemplate.subject,
@@ -76,7 +79,7 @@ function toGeneratedTaskPayload(
         ...(taskTemplate.taskKind ? { taskKind: taskTemplate.taskKind } : {}),
         ...(taskTemplate.pairedTaskId ? { pairedTaskId: taskTemplate.pairedTaskId } : {}),
         dependsOn: taskTemplate.dependsOn ? [...taskTemplate.dependsOn] : [],
-        ...(taskTemplate.agent ? { agentRunner: taskTemplate.agent } : {})
+        ...(parsedRunner.success ? { agentRunner: parsedRunner.data } : {})
     };
 }
 

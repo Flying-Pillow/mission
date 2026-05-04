@@ -15,11 +15,9 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 | --- | --- | --- |
 | Repository discovery roots | Yes | Mission config |
 | Repository workflow settings | Yes | `.mission/settings.json` |
-| Airport pane intent | Yes | `.mission/settings.json` |
 | Mission execution state | Yes | `mission.json` |
 | Tower local selection and overlays | No | recomputed from fresh daemon snapshot |
-| Connected pane registrations | No | surfaces reconnect |
-| Observed zellij focus | No | substrate is resampled |
+| Connected Airport clients | No | surfaces reconnect |
 
 ## Recovery Paths
 
@@ -33,9 +31,8 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 ### Airport Recovery
 
 1. Airport surfaces reconnect to the daemon and refresh `system.status` plus entity-backed mission state.
-2. Client-reported pane observations rebuild `AirportSubstrateState` for the connected surface.
-3. `planAirportSubstrateEffects(...)` derives focus effects only when an attached pane should be focused.
-4. No daemon-owned repository airport registry participates in recovery in the current runtime.
+2. Surface-local pane state is rebuilt from current daemon status and Entity snapshots.
+3. No daemon-owned repository airport registry participates in recovery in the current runtime.
 
 ### Surface Recovery
 
@@ -49,11 +46,10 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 flowchart TD
     Persisted[Persisted repo and mission state] --> Daemon
     Daemon --> MissionRefresh[Workflow refresh]
-    Daemon --> AirportRefresh[Airport scope and substrate observe]
+    Daemon --> AirportRefresh[Airport surface refresh]
     MissionRefresh --> SessionReconcile[Runtime session reconcile]
-    AirportRefresh --> FocusPlan[Plan substrate focus effects]
     SessionReconcile --> Snapshot[MissionSystemSnapshot]
-    FocusPlan --> Snapshot
+    AirportRefresh --> Snapshot
     Snapshot --> Surfaces[Reconnected surfaces]
 ```
 
@@ -61,5 +57,5 @@ flowchart TD
 
 1. The daemon snapshot is disposable and rebuildable.
 2. `mission.json` is required for mission execution recovery.
-3. Airport pane existence is observed, not assumed.
+3. Airport pane rendering is rebuilt from current daemon and Entity state.
 4. Surface reconnect should not require manual re-entry of repository or mission state when persisted context is available.

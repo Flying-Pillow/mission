@@ -1,5 +1,5 @@
-import type { MissionDescriptor } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
     MissionWorkflowEventRecordSchema,
     MissionStateDataSchema
@@ -27,7 +27,7 @@ import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
 import type { WorkflowDefinition } from './types.js';
 
 export interface MissionWorkflowControllerOptions {
-    adapter: FilesystemAdapter;
+    adapter: MissionDossierFilesystem;
     descriptor: MissionDescriptor;
     workflow: WorkflowDefinition;
     resolveWorkflow?: () => WorkflowDefinition;
@@ -37,7 +37,7 @@ export interface MissionWorkflowControllerOptions {
 
 export class MissionWorkflowController {
     private readonly descriptor: MissionDescriptor;
-    private readonly adapter: FilesystemAdapter;
+    private readonly adapter: MissionDossierFilesystem;
     private readonly requestExecutor: MissionWorkflowRequestExecutor;
     private readonly workflowVersion: string;
     private readonly workflow: WorkflowDefinition;

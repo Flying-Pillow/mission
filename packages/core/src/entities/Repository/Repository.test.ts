@@ -7,7 +7,7 @@ import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
@@ -19,6 +19,34 @@ describe('Repository', () => {
         expect(repository.repoName).toBe('mission-proof-of-concept');
         expect(repository.isInitialized).toBe(false);
         expect(repository.workflowConfiguration).toEqual(createDefaultWorkflowSettings());
+    });
+
+    it('resolves the Repository root from inside a linked Mission worktree', async () => {
+        const repositoryRootPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-root-'));
+        const missionWorktreePath = path.join(repositoryRootPath, '..', 'mission-worktree');
+
+        try {
+            git(repositoryRootPath, ['init']);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), '# Mission Test\n', 'utf8');
+            git(repositoryRootPath, ['add', 'README.md']);
+            git(repositoryRootPath, ['commit', '-m', 'init']);
+            git(repositoryRootPath, ['worktree', 'add', missionWorktreePath, '-b', 'mission/test-root']);
+
+            expect(Repository.resolveRepositoryRoot(missionWorktreePath)).toBe(repositoryRootPath);
+        } finally {
+            git(repositoryRootPath, ['worktree', 'remove', '--force', missionWorktreePath]);
+            await fsp.rm(repositoryRootPath, { recursive: true, force: true });
+        }
+    });
+
+    it('falls back to the provided path when no Git Repository can be resolved', async () => {
+        const directoryPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-non-git-root-'));
+
+        try {
+            expect(Repository.resolveRepositoryRoot(directoryPath)).toBe(directoryPath);
+        } finally {
+            await fsp.rm(directoryPath, { recursive: true, force: true });
+        }
     });
 
     it('opens a GitHub repository and updates only its own configuration', () => {
@@ -109,7 +137,7 @@ describe('Repository', () => {
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
             assertExistingMissionRuntimeDataValid(
-                adapter: FilesystemAdapter,
+                adapter: MissionDossierFilesystem,
                 missionDir: string,
                 missionId: string
             ): Promise<void>;
@@ -145,7 +173,7 @@ describe('Repository', () => {
             }, null, 2), 'utf8');
 
             await expect(repositoryInternals.assertExistingMissionRuntimeDataValid(
-                new FilesystemAdapter(repositoryRootPath),
+                new MissionDossierFilesystem(repositoryRootPath),
                 missionDir,
                 '1-initial-setup'
             )).rejects.toThrow(/does not fallback-load or implicitly migrate stale runtime data/u);
@@ -162,7 +190,7 @@ describe('Repository', () => {
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
             materializeOrAdoptMissionWorktree(
-                store: FilesystemAdapter,
+                store: MissionDossierFilesystem,
                 worktreePath: string,
                 branchRef: string,
                 baseBranch: string
@@ -178,7 +206,7 @@ describe('Repository', () => {
             git(repositoryRootPath, ['worktree', 'add', '-b', branchRef, worktreePath, 'main']);
 
             await expect(repositoryInternals.materializeOrAdoptMissionWorktree(
-                new FilesystemAdapter(repositoryRootPath),
+                new MissionDossierFilesystem(repositoryRootPath),
                 worktreePath,
                 branchRef,
                 'main'

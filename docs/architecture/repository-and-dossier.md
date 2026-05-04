@@ -67,7 +67,7 @@ The system distinguishes three different paths that often get conflated:
 
 | Path | Meaning |
 | --- | --- |
-| Repository root | The control root for `.mission/` and repository policy |
+| Repository root | Filesystem root for `.mission/` and repository policy |
 | Mission dossier root | The tracked directory under `.mission/missions/<mission-id>/` |
 | Mission worktree path | The external checkout created under the configured mission workspace root |
 

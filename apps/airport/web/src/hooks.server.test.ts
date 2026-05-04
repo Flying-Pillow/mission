@@ -82,6 +82,19 @@ describe("handle", () => {
 
 		expect(resolve).toHaveBeenCalledTimes(2);
 	});
+
+	it("does not canonical-redirect api requests on localhost port 5174", async () => {
+		const { handle } = await import("./hooks.server");
+		const resolve = vi.fn().mockResolvedValue(new Response("api ok"));
+
+		const response = await handle({
+			event: createEvent("http://localhost:5174/api/entities/remote/command"),
+			resolve,
+		});
+
+		expect(await response.text()).toBe("api ok");
+		expect(resolve).toHaveBeenCalledTimes(1);
+	});
 });
 
 function createEvent(url: string) {

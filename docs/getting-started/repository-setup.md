@@ -62,7 +62,7 @@ The safety model is:
 
 - repository policy lives in `.mission/`
 - mission execution lives in an external mission workspace
-- the active checkout remains the control root, not the agent sandbox
+- the active checkout remains the Repository root, not the agent sandbox
 
 That is one of the main reasons the product feels trustworthy in real work.
 

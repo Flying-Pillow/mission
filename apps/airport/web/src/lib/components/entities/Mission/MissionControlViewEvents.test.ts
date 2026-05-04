@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
-import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
 import { AgentSessionCommandIds, type AgentSessionCommandAcknowledgementType, type AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
@@ -111,7 +111,7 @@ describe('Mission control view reconciliation', () => {
             throw new Error('Expected PRD Artifact to be available.');
         }
 
-        await artifact.read({ executionContext: 'render' });
+        await artifact.refreshBody({ executionContext: 'render' });
 
         expect(artifactBodyCalls).toEqual(['artifact:mission-29/mission-29:prd']);
     });

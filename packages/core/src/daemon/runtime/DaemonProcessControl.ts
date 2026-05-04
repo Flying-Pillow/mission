@@ -5,9 +5,10 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { DaemonClient } from '../../client/DaemonClient.js';
-import type { Ping } from '../protocol/transport.js';
+import { DaemonClient } from '../client/DaemonClient.js';
+import type { Ping } from '../protocol/contracts.js';
 import {
+	getDaemonLockPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
 	getDaemonStdoutLogPath,
@@ -154,6 +155,7 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 	}
 
 	await fs.rm(manifestPath, { force: true }).catch(() => undefined);
+	await fs.rm(getDaemonLockPath(), { force: true }).catch(() => undefined);
 	if (manifest?.endpoint.transport === 'ipc') {
 		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
 	}

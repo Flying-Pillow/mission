@@ -1,9 +1,8 @@
 import * as path from 'node:path';
 import { TerminalAgentTransport, type TerminalSessionHandle, type TerminalSessionSnapshot } from './runtime/agent/TerminalAgentTransport.js';
 import { MissionAgentEventEmitter } from './runtime/agent/events.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import type { MissionAgentTerminalState } from './protocol/contracts.js';
-import type { AgentSessionTerminalHandleType } from '../entities/AgentSession/AgentSessionSchema.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
+import type { AgentSessionTerminalHandleType, AgentSessionTerminalSnapshotType } from '../entities/AgentSession/AgentSessionSchema.js';
 
 type AgentSessionTerminalInput = {
     sessionId?: string;
@@ -29,7 +28,7 @@ export type AgentSessionTerminalUpdate = {
     workspaceRoot: string;
     missionId: string;
     sessionId: string;
-    state: MissionAgentTerminalState;
+    state: AgentSessionTerminalSnapshotType;
 };
 
 const agentSessionTerminalTransport = new TerminalAgentTransport();
@@ -57,7 +56,7 @@ export function observeAgentSessionTerminalUpdates(listener: (event: AgentSessio
 
 export async function readAgentSessionTerminalState(input: {
     record: AgentSessionTerminalRuntimeRecord;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<AgentSessionTerminalSnapshotType | null> {
     const resolved = await resolveAgentSessionTerminalRecord(input.record);
     if (!resolved) {
         return null;
@@ -68,7 +67,7 @@ export async function readAgentSessionTerminalState(input: {
 export async function sendAgentSessionTerminalInput(input: {
     record: AgentSessionTerminalRuntimeRecord;
     terminalInput: AgentSessionTerminalInput;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<AgentSessionTerminalSnapshotType | null> {
     const resolved = await resolveAgentSessionTerminalRecord(input.record);
     if (!resolved?.handle) {
         return resolved ? createAgentSessionTerminalState(resolved) : null;
@@ -145,16 +144,17 @@ async function attachAgentSessionTerminal(record: AgentSessionTerminalRecord): P
     return attached;
 }
 
-async function createAgentSessionTerminalState(record: AgentSessionTerminalRecord): Promise<MissionAgentTerminalState> {
+async function createAgentSessionTerminalState(record: AgentSessionTerminalRecord): Promise<AgentSessionTerminalSnapshotType> {
     if (record.handle) {
         const snapshot = await agentSessionTerminalTransport.readSnapshot(record.handle);
         return createAgentSessionTerminalStateFromSnapshot(record, snapshot);
     }
 
     const transcript = record.sessionLogPath && record.missionDir
-        ? await new FilesystemAdapter(record.workspaceRoot).readMissionSessionLog(record.missionDir, record.sessionLogPath) ?? ''
+        ? await new MissionDossierFilesystem(record.workspaceRoot).readMissionSessionLog(record.missionDir, record.sessionLogPath) ?? ''
         : '';
     return {
+        missionId: record.missionId,
         sessionId: record.sessionId,
         connected: false,
         dead: true,
@@ -171,8 +171,9 @@ async function createAgentSessionTerminalState(record: AgentSessionTerminalRecor
 function createAgentSessionTerminalStateFromSnapshot(
     record: AgentSessionTerminalRecord,
     snapshot: TerminalSessionSnapshot
-): MissionAgentTerminalState {
+): AgentSessionTerminalSnapshotType {
     return {
+        missionId: record.missionId,
         sessionId: record.sessionId,
         connected: snapshot.connected,
         dead: snapshot.dead,

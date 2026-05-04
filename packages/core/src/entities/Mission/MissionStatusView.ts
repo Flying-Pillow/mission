@@ -1,20 +1,22 @@
 import * as path from 'node:path';
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { AgentSessionRecord } from '../AgentSession/AgentSessionSchema.js';
+import type { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
 	type MissionArtifactKey,
-	type MissionDescriptor,
-	type MissionStageId,
-	type MissionStageStatus,
-	type MissionTaskState,
-	type MissionTowerProjection as MissionTowerView,
-	type MissionTowerStageRailItem,
-	type MissionTowerTreeNode,
-	type OperatorStatus
-} from '../../types.js';
+	type MissionStageId
+} from '../../workflow/mission/manifest.js';
+import type {
+	MissionDescriptor,
+	MissionStageStatus,
+	MissionTaskState,
+	MissionTowerProjection as MissionTowerView,
+	MissionTowerStageRailItem,
+	MissionTowerTreeNode,
+	OperatorStatus
+} from './MissionSchema.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
 	createDraftMissionWorkflowRuntimeState,
@@ -27,7 +29,7 @@ import { Task } from '../Task/Task.js';
 import { Stage } from '../Stage/Stage.js';
 
 export type MissionStatusViewInput = {
-	adapter: FilesystemAdapter;
+	adapter: MissionDossierFilesystem;
 	missionDir: string;
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
@@ -421,7 +423,7 @@ function toStatusLabel(state: string): string {
 }
 
 async function collectMissionArtifactPaths(input: {
-	adapter: FilesystemAdapter;
+	adapter: MissionDossierFilesystem;
 	missionDir: string;
 }): Promise<Partial<Record<MissionArtifactKey, string>>> {
 	const entries = await Promise.all(

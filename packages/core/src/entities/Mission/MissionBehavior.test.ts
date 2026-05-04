@@ -4,11 +4,11 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import { Repository } from '../Repository/Repository.js';
 import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { MissionStageStatus, MissionTowerTreeNode } from '../../types.js';
+import type { AgentSessionRecord } from '../AgentSession/AgentSessionSchema.js';
+import type { MissionStageStatus, MissionTowerTreeNode } from './MissionSchema.js';
 import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
@@ -33,7 +33,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(200, 'Mission owned control views'),
                 branchRef: adapter.deriveMissionBranchName(200, 'Mission owned control views')
@@ -63,7 +63,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(201, 'Mission session compatibility'),
                 branchRef: adapter.deriveMissionBranchName(201, 'Mission session compatibility')
@@ -135,7 +135,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(202, 'Mission session cancel'),
                 branchRef: adapter.deriveMissionBranchName(202, 'Mission session cancel')
@@ -172,7 +172,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(203, 'Mission stale session relaunch'),
                 branchRef: adapter.deriveMissionBranchName(203, 'Mission stale session relaunch')
@@ -216,7 +216,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(204, 'Mission mismatched session workspace'),
                 branchRef: adapter.deriveMissionBranchName(204, 'Mission mismatched session workspace')
@@ -260,7 +260,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(203, 'Mission session terminate'),
                 branchRef: adapter.deriveMissionBranchName(203, 'Mission session terminate')
@@ -297,7 +297,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(204, 'Mission task launch command'),
                 branchRef: adapter.deriveMissionBranchName(204, 'Mission task launch command')
@@ -357,7 +357,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(2041, 'Mission task rework command'),
                 branchRef: adapter.deriveMissionBranchName(2041, 'Mission task rework command')
@@ -417,7 +417,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(2042, 'Mission verification-triggered rework command'),
                 branchRef: adapter.deriveMissionBranchName(2042, 'Mission verification-triggered rework command')
@@ -557,7 +557,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(2043, 'Mission verification-triggered rework command from file metadata'),
                 branchRef: adapter.deriveMissionBranchName(2043, 'Mission verification-triggered rework command from file metadata')
@@ -693,7 +693,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(206, 'Mission tree ordering'),
                 branchRef: adapter.deriveMissionBranchName(206, 'Mission tree ordering')
@@ -726,7 +726,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(207, 'Mission empty launch prompt fallback'),
                 branchRef: adapter.deriveMissionBranchName(207, 'Mission empty launch prompt fallback')
@@ -765,7 +765,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(205, 'Mission running task launch command'),
                 branchRef: adapter.deriveMissionBranchName(205, 'Mission running task launch command')
@@ -804,7 +804,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(208, 'Mission implementation task visibility during planning'),
                 branchRef: adapter.deriveMissionBranchName(208, 'Mission implementation task visibility during planning')
@@ -882,7 +882,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(209, 'Mission completes active session on task done'),
                 branchRef: adapter.deriveMissionBranchName(209, 'Mission completes active session on task done')
@@ -922,7 +922,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'terminal');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(206, 'Mission transport identity migration'),
                 branchRef: adapter.deriveMissionBranchName(206, 'Mission transport identity migration')
@@ -1000,7 +1000,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(207, 'Mission status fallback'),
                 branchRef: adapter.deriveMissionBranchName(207, 'Mission status fallback')
@@ -1046,7 +1046,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(208, 'Mission live daemon cache'),
                 branchRef: adapter.deriveMissionBranchName(208, 'Mission live daemon cache')
@@ -1092,7 +1092,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(209, 'Mission command snapshot freshness'),
                 branchRef: adapter.deriveMissionBranchName(209, 'Mission command snapshot freshness')
@@ -1127,7 +1127,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(210, 'Mission awaiting-input session commands'),
                 branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session commands')
@@ -1170,7 +1170,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(210, 'Mission delivered command availability'),
                 branchRef: adapter.deriveMissionBranchName(210, 'Mission delivered command availability')
@@ -1225,7 +1225,7 @@ describe('Mission', () => {
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
-            const adapter = new FilesystemAdapter(workspaceRoot);
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
                 brief: createBrief(211, 'Mission panic command availability'),
                 branchRef: adapter.deriveMissionBranchName(211, 'Mission panic command availability')

@@ -17,7 +17,7 @@ Use this page to verify that architecture claims still match code, specs, and re
 | Semantic entity model | `semantic-model.md` | `packages/core/src/types.ts`, `workflow/manifest.ts`, `daemon/system/MissionControl.ts` | `.mission/missions/15-*`, `specifications/mission/model/*` |
 | Workflow runtime and settings | `workflow-engine.md`, `contracts.md` | `workflow/engine/*`, `settings/WorkflowSettingsStore.ts` | `.mission/missions/16-*`, `specifications/mission/workflow/workflow-engine.md` |
 | Agent runtime unification | `agent-runtime.md` | `runtime/*`, `adapters/*` | `.mission/missions/17-*`, `specifications/mission/execution/agent-runtime.md` |
-| Airport control plane | `airport-control-plane.md`, `airport-terminal-surface.md` | `packages/airport/*`, `MissionSystemController.ts`, tower bootstrap files | `.mission/missions/18-*`, `specifications/airport/airport-control-plane.md` |
+| Airport control surface | `airport-control-plane.md`, `airport-web-surface-blueprint.md` | `apps/airport/web/*`, Entity Remote routes, web gateway files | `.mission/missions/18-*`, `specifications/airport/airport-control-plane.md` |
 
 ## Referential-Integrity Questions
 

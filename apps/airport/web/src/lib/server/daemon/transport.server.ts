@@ -1,9 +1,6 @@
 // /apps/airport/web/src/lib/server/daemon/transport.server.ts: Opens raw daemon connections for the Airport web server without adding web-specific policy.
-import {
-    connectAirportDaemon,
-    type DaemonClient,
-    resolveAirportDaemonRuntimeMode
-} from '@flying-pillow/mission-core/node';
+import type { DaemonClient } from '@flying-pillow/mission-core/daemon/client/DaemonClient';
+import { connectAirportDaemon, resolveAirportDaemonRuntimeMode } from '@flying-pillow/mission-core/daemon/client/connectAirportDaemon';
 
 function resolveDaemonAutoStart(allowStart: boolean): boolean {
     const supervisedDaemon = process.env['MISSION_DAEMON_SUPERVISED']?.trim();

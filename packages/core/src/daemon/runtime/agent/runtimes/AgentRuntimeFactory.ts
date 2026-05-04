@@ -4,11 +4,11 @@ import { Repository } from '../../../../entities/Repository/Repository.js';
 import type { AgentRunner } from '../AgentRunner.js';
 
 export async function createConfiguredAgentRunners(options: {
-	controlRoot: string;
+	repositoryRootPath: string;
 	terminalSessionName?: string;
 	logLine?: (line: string) => void;
 }): Promise<AgentRunner[]> {
-	Repository.readSettingsDocument(options.controlRoot);
+	Repository.readSettingsDocument(options.repositoryRootPath);
 
 	return [
 		new CopilotCliAgentRunner({
