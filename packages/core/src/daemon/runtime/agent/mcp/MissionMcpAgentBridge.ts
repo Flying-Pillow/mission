@@ -1,19 +1,25 @@
 import { z } from 'zod/v4';
 import {
-	missionMcpSignalToolNameSchema,
-	type MissionMcpSignalToolName
+	missionMcpSignalToolNameSchema
 } from './MissionMcpSignalTools.js';
+import {
+	missionMcpAllowedEntityCommandSchema,
+	missionMcpEntityCommandToolName,
+	type MissionMcpAllowedEntityCommand
+} from './MissionMcpEntityCommandTools.js';
+import type { MissionMcpToolName } from './MissionMcpSessionRegistry.js';
 
 export const MISSION_MCP_SERVER_NAME = 'mission';
-export const MISSION_MCP_AGENT_BRIDGE_COMMAND = 'mission';
-export const MISSION_MCP_AGENT_BRIDGE_ARGS = ['mcp', 'agent-bridge'] as const;
+export const MISSION_MCP_AGENT_BRIDGE_COMMAND = 'mission-command';
+export const MISSION_MCP_AGENT_BRIDGE_ARGS = [] as const;
 
 export const missionMcpAgentBridgeEnvKeys = {
 	endpoint: 'MISSION_MCP_ENDPOINT',
 	missionId: 'MISSION_MCP_MISSION_ID',
 	taskId: 'MISSION_MCP_TASK_ID',
 	agentSessionId: 'MISSION_MCP_AGENT_SESSION_ID',
-	allowedTools: 'MISSION_MCP_ALLOWED_TOOLS'
+	allowedTools: 'MISSION_MCP_ALLOWED_TOOLS',
+	allowedEntityCommands: 'MISSION_MCP_ALLOWED_ENTITY_COMMANDS'
 } as const;
 
 export const missionMcpAgentBridgeEnvVarNames = Object.freeze([
@@ -29,14 +35,16 @@ export type MissionMcpAgentBridgeLaunchContext = {
 	missionId: string;
 	taskId: string;
 	agentSessionId: string;
-	allowedTools: MissionMcpSignalToolName[];
+	allowedTools: MissionMcpToolName[];
+	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 };
 
 type MissionMcpAgentBridgeLaunchContextInput = Omit<
 	MissionMcpAgentBridgeLaunchContext,
-	'allowedTools'
+	'allowedTools' | 'allowedEntityCommands'
 > & {
 	allowedTools: unknown;
+	allowedEntityCommands?: unknown;
 };
 
 const missionMcpAgentBridgeLaunchContextSchema = z.object({
@@ -44,7 +52,11 @@ const missionMcpAgentBridgeLaunchContextSchema = z.object({
 	missionId: z.string().trim().min(1),
 	taskId: z.string().trim().min(1),
 	agentSessionId: z.string().trim().min(1),
-	allowedTools: z.array(missionMcpSignalToolNameSchema)
+	allowedTools: z.array(z.union([
+		missionMcpSignalToolNameSchema,
+		z.literal(missionMcpEntityCommandToolName)
+	])),
+	allowedEntityCommands: z.array(missionMcpAllowedEntityCommandSchema).optional()
 }).strict();
 
 export class MissionMcpAgentBridge {
@@ -61,7 +73,10 @@ export class MissionMcpAgentBridge {
 			[missionMcpAgentBridgeEnvKeys.missionId]: context.missionId,
 			[missionMcpAgentBridgeEnvKeys.taskId]: context.taskId,
 			[missionMcpAgentBridgeEnvKeys.agentSessionId]: context.agentSessionId,
-			[missionMcpAgentBridgeEnvKeys.allowedTools]: JSON.stringify(context.allowedTools)
+			[missionMcpAgentBridgeEnvKeys.allowedTools]: JSON.stringify(context.allowedTools),
+			...(context.allowedEntityCommands ? {
+				[missionMcpAgentBridgeEnvKeys.allowedEntityCommands]: JSON.stringify(context.allowedEntityCommands)
+			} : {})
 		};
 	}
 
@@ -77,13 +92,25 @@ export class MissionMcpAgentBridge {
 				);
 			}
 		}
+		let allowedEntityCommands: unknown = [];
+		const rawAllowedEntityCommands = env[missionMcpAgentBridgeEnvKeys.allowedEntityCommands];
+		if (rawAllowedEntityCommands) {
+			try {
+				allowedEntityCommands = JSON.parse(rawAllowedEntityCommands);
+			} catch (error) {
+				throw new Error(
+					`Invalid ${missionMcpAgentBridgeEnvKeys.allowedEntityCommands} value: ${(error as Error).message}`
+				);
+			}
+		}
 
 		return parseLaunchContext({
 			endpoint: env[missionMcpAgentBridgeEnvKeys.endpoint] ?? '',
 			missionId: env[missionMcpAgentBridgeEnvKeys.missionId] ?? '',
 			taskId: env[missionMcpAgentBridgeEnvKeys.taskId] ?? '',
 			agentSessionId: env[missionMcpAgentBridgeEnvKeys.agentSessionId] ?? '',
-			allowedTools
+			allowedTools,
+			...(rawAllowedEntityCommands ? { allowedEntityCommands } : {})
 		});
 	}
 }
@@ -101,7 +128,10 @@ function parseLaunchContext(
 		missionId: parsed.data.missionId,
 		taskId: parsed.data.taskId,
 		agentSessionId: parsed.data.agentSessionId,
-		allowedTools: [...new Set(parsed.data.allowedTools)]
+		allowedTools: [...new Set(parsed.data.allowedTools)],
+		...(parsed.data.allowedEntityCommands ? {
+			allowedEntityCommands: parsed.data.allowedEntityCommands.map((command) => ({ ...command }))
+		} : {})
 	};
 }
 

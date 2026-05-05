@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Task } from './Task.js';
+import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import { TaskReworkCommandInputSchema, TaskStartCommandOptionsSchema } from './TaskSchema.js';
 import type { MissionTaskState } from '../Mission/MissionSchema.js';
 
@@ -11,6 +12,10 @@ const taskState: MissionTaskState = {
     instruction: 'Ship it.',
     body: 'Ship it.',
     dependsOn: [],
+    context: [
+        { name: 'Spec', path: '02-spec/SPEC.md', selectionPosition: 1 },
+        { name: 'Brief', path: 'BRIEF.md', selectionPosition: 0 }
+    ],
     waitingOn: [],
     status: 'ready',
     agent: 'copilot-cli',
@@ -32,8 +37,20 @@ describe('Task', () => {
             stageId: 'implementation',
             title: 'Implement task',
             lifecycle: 'ready',
+            context: [
+                { name: 'Spec', path: '02-spec/SPEC.md', selectionPosition: 1 },
+                { name: 'Brief', path: 'BRIEF.md', selectionPosition: 0 }
+            ],
             agentRunner: 'copilot-cli'
         });
+    });
+
+    it('adds selected context artifacts to the launch prompt in selection order', () => {
+        expect(buildTaskLaunchPrompt(taskState, '/mission')).toContain([
+            'Context artifacts:',
+            '- Brief: @BRIEF.md',
+            '- Spec: @02-spec/SPEC.md'
+        ].join('\n'));
     });
 
     it('uses strict schemas for command inputs', () => {

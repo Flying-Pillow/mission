@@ -352,6 +352,52 @@ describe('Mission', () => {
         }
     });
 
+    it('passes operator-selected launch settings through task start', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner', 'terminal');
+
+        try {
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
+            const mission = await Mission.create(adapter, {
+                brief: createBrief(205, 'Mission task selected launch settings'),
+                branchRef: adapter.deriveMissionBranchName(205, 'Mission task selected launch settings')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId) {
+                    throw new Error('Expected a ready task after workflow start.');
+                }
+
+                await mission.startTask(taskId, {
+                    agentRunner: runner.id,
+                    model: 'gpt-5-codex',
+                    reasoningEffort: 'high',
+                    terminalSessionName: 'airport-terminal-session'
+                });
+
+                expect(runner.getLastStartRequest()?.requestedRunnerId).toBe(runner.id);
+                expect(runner.getLastStartRequest()?.metadata).toMatchObject({
+                    model: 'gpt-5-codex',
+                    reasoningEffort: 'high',
+                    terminalSessionName: 'airport-terminal-session'
+                });
+                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
+                const persistedTask = persisted?.runtime.tasks.find((task) => task.taskId === taskId);
+                expect(persistedTask).toMatchObject({
+                    agentRunner: runner.id,
+                    model: 'gpt-5-codex',
+                    reasoningEffort: 'high'
+                });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('exposes and executes task rework as an input-taking operator command', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');

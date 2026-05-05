@@ -178,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -203,11 +203,11 @@
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "readyTaskIds": [],
-        "queuedTaskIds": [],
-        "runningTaskIds": [
+        "readyTaskIds": [
           "implementation/09-documentation-and-final-cleanup"
         ],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -763,7 +763,7 @@
         "dependsOn": [
           "implementation/08.2-simplify-agent-mcp-integration-verify"
         ],
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
@@ -772,7 +772,7 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
@@ -797,7 +797,7 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-05T10:27:00.897Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       }
     ],
     "sessions": [
@@ -2011,9 +2011,100 @@
           "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-5d7203bd",
           "paneId": "pty"
         },
-        "lifecycle": "running",
+        "lifecycle": "terminated",
         "launchedAt": "2026-05-05T14:27:13.348Z",
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T14:28:24.470Z",
+        "terminatedAt": "2026-05-05T14:28:24.470Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-53e416b3",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-53e416b3.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-53e416b3",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T14:28:30.213Z",
+        "updatedAt": "2026-05-05T14:31:54.793Z",
+        "terminatedAt": "2026-05-05T14:31:54.793Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-08b5a5a4",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-08b5a5a4.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-08b5a5a4",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-05T16:17:07.871Z",
+        "updatedAt": "2026-05-05T16:17:18.914Z",
+        "cancelledAt": "2026-05-05T16:17:18.914Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-6593c8f5",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-6593c8f5.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-6593c8f5",
+          "paneId": "pty"
+        },
+        "lifecycle": "failed",
+        "launchedAt": "2026-05-05T16:19:20.196Z",
+        "updatedAt": "2026-05-05T16:19:21.199Z",
+        "failedAt": "2026-05-05T16:19:21.199Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-52d93e26",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-52d93e26.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-52d93e26",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T16:21:41.512Z",
+        "updatedAt": "2026-05-05T16:23:20.634Z",
+        "terminatedAt": "2026-05-05T16:23:20.634Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-8209f8a6",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-8209f8a6.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-8209f8a6",
+          "paneId": "pty"
+        },
+        "lifecycle": "failed",
+        "launchedAt": "2026-05-05T16:30:15.313Z",
+        "updatedAt": "2026-05-05T16:30:16.318Z",
+        "failedAt": "2026-05-05T16:30:16.318Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-e4f765ba",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-e4f765ba.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-e4f765ba",
+          "paneId": "pty"
+        },
+        "lifecycle": "failed",
+        "launchedAt": "2026-05-05T16:31:13.578Z",
+        "updatedAt": "2026-05-05T16:31:14.584Z",
+        "failedAt": "2026-05-05T16:31:14.584Z"
       }
     ],
     "gates": [
@@ -2025,7 +2116,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       },
       {
         "gateId": "verify",
@@ -2035,7 +2126,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       },
       {
         "gateId": "audit",
@@ -2045,7 +2136,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       },
       {
         "gateId": "deliver",
@@ -2055,10 +2146,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-05T14:27:13.348Z"
+        "updatedAt": "2026-05-05T16:33:59.198Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-05T14:27:13.348Z"
+    "updatedAt": "2026-05-05T16:33:59.198Z"
   }
 }

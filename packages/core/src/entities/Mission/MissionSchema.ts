@@ -44,7 +44,8 @@ import {
 import {
     TaskDataSchema,
     TaskEventSubjectSchema,
-    TaskDataChangedSchema
+    TaskDataChangedSchema,
+    type TaskContextArtifactReferenceType
 } from '../Task/TaskSchema.js';
 export const missionEntityName = 'Mission' as const;
 
@@ -219,9 +220,12 @@ export type MissionTaskState = {
     subject: string;
     instruction: string;
     body: string;
+    model?: string;
+    reasoningEffort?: MissionReasoningEffortType;
     taskKind?: 'implementation' | 'verification';
     pairedTaskId?: string;
     dependsOn: string[];
+    context?: TaskContextArtifactReferenceType[];
     waitingOn: string[];
     status: MissionTaskStatus;
     agent: MissionTaskAgent;

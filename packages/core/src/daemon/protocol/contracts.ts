@@ -7,7 +7,9 @@ export type Method =
 	| 'event.subscribe'
 	| 'system.status'
 	| 'entity.query'
-	| 'entity.command';
+	| 'entity.command'
+	| 'mcp.tools.list'
+	| 'mcp.tool.invoke';
 
 export type MethodWorkspaceRoute = 'none' | 'control' | 'mission';
 
@@ -21,7 +23,9 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'entity.query': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' }
+	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'mcp.tools.list': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'mcp.tool.invoke': { includeSurfacePath: false, workspaceRoute: 'none' }
 };
 
 export type Notification = EntityEventEnvelopeType;
@@ -85,4 +89,3 @@ export type Message = Request | Response | EventMessage;
 export type EventSubscription = {
 	channels?: string[];
 };
-

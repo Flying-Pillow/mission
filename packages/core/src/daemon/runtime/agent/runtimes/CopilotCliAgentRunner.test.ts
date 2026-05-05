@@ -267,10 +267,10 @@ describe('CopilotCliAgentRunner', () => {
 				path.join(workspaceRoot, '.mcp.json'),
 				`${JSON.stringify({
 					mcpServers: {
-						mission_signal: {
+						mission: {
 							type: 'stdio',
-							command: 'mission',
-							args: ['mcp', 'agent-bridge']
+							command: 'mission-command',
+							args: []
 						}
 					}
 				}, null, 2)}\n`,
@@ -345,27 +345,27 @@ function createFakePty(state: MockTerminalState): FakePty {
 			state.writes.push(data);
 			onDataListener?.(data);
 		},
-		resize() {},
+		resize() { },
 		kill() {
 			fakePty.killCount += 1;
 			state.killCount += 1;
 			onExitListener?.({ exitCode: 0 });
 		},
-		clear() {},
+		clear() { },
 		onData(listener: (chunk: string) => void) {
 			onDataListener = listener;
-			return { dispose() {} };
+			return { dispose() { } };
 		},
 		onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
 			onExitListener = listener;
-			return { dispose() {} };
+			return { dispose() { } };
 		},
 		emitExit(exitCode = 0) {
 			onExitListener?.({ exitCode });
 		},
-		pause() {},
-		resume() {},
-		setEncoding() {},
+		pause() { },
+		resume() { },
+		setEncoding() { },
 		addListener() {
 			return fakePty;
 		},

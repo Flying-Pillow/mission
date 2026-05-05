@@ -54,6 +54,7 @@ export async function generateMissionWorkflowTasks(input: {
             ...(task.taskKind ? { taskKind: task.taskKind } : {}),
             ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
             dependsOn: [...task.dependsOn],
+            context: task.context ? task.context.map((contextArtifact) => ({ ...contextArtifact })) : [],
             ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
         })),
         ...renderedTasks.map((taskTemplate) =>
@@ -81,6 +82,7 @@ function toGeneratedTaskPayload(
         ...(taskTemplate.taskKind ? { taskKind: taskTemplate.taskKind } : {}),
         ...(taskTemplate.pairedTaskId ? { pairedTaskId: taskTemplate.pairedTaskId } : {}),
         dependsOn: taskTemplate.dependsOn ? [...taskTemplate.dependsOn] : [],
+        context: taskTemplate.context ? taskTemplate.context.map((contextArtifact) => ({ ...contextArtifact })) : [],
         ...(parsedRunner.success ? { agentRunner: parsedRunner.data } : {})
     };
 }

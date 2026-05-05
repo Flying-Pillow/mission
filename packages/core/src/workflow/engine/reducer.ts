@@ -150,6 +150,7 @@ class MissionWorkflowTransitionEngine {
                         ...(task.taskKind ? { taskKind: task.taskKind } : {}),
                         ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
                         dependsOn: [...task.dependsOn],
+                        context: task.context ? task.context.map((contextArtifact) => ({ ...contextArtifact })) : [],
                         lifecycle: 'pending',
                         waitingOnTaskIds: [],
                         runtime: {
@@ -178,11 +179,21 @@ class MissionWorkflowTransitionEngine {
                         : task
                 );
                 return;
+            case 'task.configured':
+                this.state.tasks = this.state.tasks.map((task) =>
+                    task.taskId === event.taskId
+                        ? configureTaskRuntimeState(task, event)
+                        : task
+                );
+                return;
             case 'task.queued':
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
                             ...task,
+                            ...(event.runnerId ? { agentRunner: event.runnerId } : {}),
+                            ...(event.model ? { model: event.model } : {}),
+                            ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
                             lifecycle: 'queued',
                             updatedAt: event.occurredAt
                         }
@@ -198,6 +209,8 @@ class MissionWorkflowTransitionEngine {
                         ...(event.runnerId ? { runnerId: event.runnerId } : {}),
                         ...(event.prompt ? { prompt: event.prompt } : {}),
                         ...(event.workingDirectory ? { workingDirectory: event.workingDirectory } : {}),
+                        ...(event.model ? { model: event.model } : {}),
+                        ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
                         ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {})
                     });
                 }
@@ -555,6 +568,8 @@ function queueAutostartTasks(
             ...(launchRequest.runnerId ? { runnerId: launchRequest.runnerId } : {}),
             ...(launchRequest.prompt ? { prompt: launchRequest.prompt } : {}),
             ...(launchRequest.workingDirectory ? { workingDirectory: launchRequest.workingDirectory } : {}),
+            ...(launchRequest.model ? { model: launchRequest.model } : {}),
+            ...(launchRequest.reasoningEffort ? { reasoningEffort: launchRequest.reasoningEffort } : {}),
             ...(launchRequest.terminalSessionName ? { terminalSessionName: launchRequest.terminalSessionName } : {})
         });
         launchRequest.dispatchedAt = event.occurredAt;
@@ -668,6 +683,7 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         tasks: state.tasks.map((task) => ({
             ...task,
             dependsOn: [...task.dependsOn],
+            ...(task.context ? { context: task.context.map((contextArtifact) => ({ ...contextArtifact })) } : {}),
             waitingOnTaskIds: [...task.waitingOnTaskIds],
             runtime: { ...task.runtime },
             ...(task.reworkRequest
@@ -692,6 +708,37 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         launchQueue: state.launchQueue.map((request) => ({ ...request })),
         updatedAt: state.updatedAt
     };
+}
+
+function configureTaskRuntimeState(
+    task: MissionTaskRuntimeState,
+    event: Extract<MissionWorkflowEvent, { type: 'task.configured' }>
+): MissionTaskRuntimeState {
+    const next: MissionTaskRuntimeState = {
+        ...task,
+        updatedAt: event.occurredAt
+    };
+    if (event.agentRunner?.trim()) {
+        next.agentRunner = event.agentRunner.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'model')) {
+        if (event.model?.trim()) {
+            next.model = event.model.trim();
+        } else {
+            delete next.model;
+        }
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'reasoningEffort')) {
+        if (event.reasoningEffort) {
+            next.reasoningEffort = event.reasoningEffort;
+        } else {
+            delete next.reasoningEffort;
+        }
+    }
+    if (event.context) {
+        next.context = event.context.map((contextArtifact) => ({ ...contextArtifact }));
+    }
+    return next;
 }
 
 function assignActiveStageId(

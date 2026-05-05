@@ -3,6 +3,7 @@ import type {
 	MissionTaskAgent,
 	MissionTaskStatus
 } from '../../../entities/Mission/MissionSchema.js';
+import type { TaskContextArtifactReferenceType } from '../../../entities/Task/TaskSchema.js';
 import type { MissionArtifactKey, MissionStageId } from '../../manifest.js';
 import type { TemplateObject } from '../../engine/templates/templateRenderer.js';
 
@@ -18,6 +19,7 @@ export type MissionTaskTemplate = {
 	taskKind?: 'implementation' | 'verification';
 	pairedTaskId?: string;
 	dependsOn?: string[];
+	context?: TaskContextArtifactReferenceType[];
 	agent: MissionTaskAgent;
 	status?: MissionTaskStatus;
 	retries?: number;

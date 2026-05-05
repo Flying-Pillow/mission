@@ -9,6 +9,7 @@ export const taskEntityName = 'Task' as const;
 export const TaskIdSchema = z.string().trim().min(1);
 
 export const TaskCommandIds = {
+    configure: 'task.configure',
     start: 'task.start',
     complete: 'task.complete',
     reopen: 'task.reopen',
@@ -19,6 +20,7 @@ export const TaskCommandIds = {
 } as const;
 
 export const TaskCommandIdSchema = z.enum([
+    TaskCommandIds.configure,
     TaskCommandIds.start,
     TaskCommandIds.complete,
     TaskCommandIds.reopen,
@@ -44,10 +46,26 @@ export const TaskCommandInputSchema = TaskLocatorSchema.extend({
 }).strict();
 
 export const TaskStartCommandOptionsSchema = z.object({
+    agentRunner: z.string().trim().min(1).optional(),
+    model: z.string().trim().min(1).optional(),
+    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     terminalSessionName: z.string().trim().min(1).optional()
 }).strict();
 
 export const TaskReworkCommandInputSchema = z.string().trim().min(1);
+
+export const TaskContextArtifactReferenceSchema = z.object({
+    name: z.string().trim().min(1),
+    path: z.string().trim().min(1),
+    selectionPosition: z.number().int().nonnegative()
+}).strict();
+
+export const TaskConfigureCommandOptionsSchema = z.object({
+    agentRunner: z.string().trim().min(1).optional(),
+    model: z.string().trim().min(1).nullable().optional(),
+    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
+    context: z.array(TaskContextArtifactReferenceSchema).optional()
+}).strict();
 
 export const TaskStorageSchema = z.object({
     id: EntityIdSchema,
@@ -62,6 +80,7 @@ export const TaskStorageSchema = z.object({
     pairedTaskId: z.string().trim().min(1).optional(),
     lifecycle: z.string().trim().min(1),
     dependsOn: z.array(z.string().trim().min(1)),
+    context: z.array(TaskContextArtifactReferenceSchema).optional(),
     waitingOnTaskIds: z.array(z.string().trim().min(1)),
     agentRunner: z.string().trim().min(1),
     retries: z.number().int().nonnegative(),
@@ -92,8 +111,10 @@ export type TaskLocatorType = z.infer<typeof TaskLocatorSchema>;
 export type TaskEventSubjectType = z.infer<typeof TaskEventSubjectSchema>;
 export type TaskCommandIdType = z.infer<typeof TaskCommandIdSchema>;
 export type TaskCommandInputType = z.infer<typeof TaskCommandInputSchema>;
+export type TaskConfigureCommandOptionsType = z.infer<typeof TaskConfigureCommandOptionsSchema>;
 export type TaskStartCommandOptionsType = z.infer<typeof TaskStartCommandOptionsSchema>;
 export type TaskReworkCommandInputType = z.infer<typeof TaskReworkCommandInputSchema>;
+export type TaskContextArtifactReferenceType = z.infer<typeof TaskContextArtifactReferenceSchema>;
 export type TaskStorageType = z.infer<typeof TaskStorageSchema>;
 export type TaskDataType = z.infer<typeof TaskDataSchema>;
 export type TaskCommandAcknowledgementType = z.infer<typeof TaskCommandAcknowledgementSchema>;

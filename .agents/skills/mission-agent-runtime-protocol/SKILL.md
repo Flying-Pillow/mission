@@ -16,15 +16,15 @@ Mission state is owned by the daemon and repository. Your claims are advisory si
 
 ## Preferred path: local Mission MCP
 
-If your runtime provides the local `mission_signal` MCP server, use it first.
+If your runtime provides the local `mission` MCP server, use it first.
 
 If the launch context includes Mission MCP env vars, the local bridge command is:
 
 ```text
-mission mcp agent-bridge
+mission-command
 ```
 
-Use these tools for structured signaling:
+Use these tools for structured signaling and allowlisted Entity commands:
 
 1. `mission_report_progress`
 2. `mission_request_operator_input`
@@ -34,6 +34,7 @@ Use these tools for structured signaling:
 6. `mission_report_failure_claim`
 7. `mission_append_session_note`
 8. `mission_report_usage`
+9. `mission_entity_command`
 
 Every MCP tool call must include the session envelope fields:
 
@@ -49,7 +50,7 @@ Use a fresh `eventId` for every distinct signal.
 If the runtime does **not** provide Mission MCP, emit a single-line stdout marker with this exact prefix:
 
 ```text
-MISSION_SIGNAL::
+mission::
 ```
 
 The prefix must be immediately followed by strict JSON on the same line. The JSON shape is:

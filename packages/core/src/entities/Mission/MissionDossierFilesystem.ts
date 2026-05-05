@@ -25,6 +25,7 @@ import {
 	getMissionStageDefinition
 } from '../../workflow/mission/manifest.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
+import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../Task/TaskSchema.js';
 
 export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
 	'.git',
@@ -84,6 +85,7 @@ export type TaskArtifactWrite = {
 	taskKind?: 'implementation' | 'verification';
 	pairedTaskId?: string;
 	dependsOn?: string[];
+	context?: TaskContextArtifactReferenceType[];
 	agent: MissionTaskAgent;
 };
 
@@ -878,6 +880,7 @@ export class MissionDossierFilesystem {
 				...(record.taskKind ? { taskKind: record.taskKind } : {}),
 				...(record.pairedTaskId ? { pairedTaskId: record.pairedTaskId } : {}),
 				...(record.dependsOn ? { dependsOn: record.dependsOn } : {}),
+				...(record.context && record.context.length > 0 ? { context: record.context } : {}),
 				agent: record.agent
 			}),
 			'utf8'
@@ -915,6 +918,7 @@ export class MissionDossierFilesystem {
 			taskKind?: 'implementation' | 'verification';
 			pairedTaskId?: string;
 			dependsOn?: string[];
+			context?: TaskContextArtifactReferenceType[];
 			agent?: MissionTaskAgent;
 		} = {}
 	): string {
@@ -933,6 +937,9 @@ export class MissionDossierFilesystem {
 		}
 		if (options.dependsOn && options.dependsOn.length > 0) {
 			attributes['dependsOn'] = options.dependsOn;
+		}
+		if (options.context && options.context.length > 0) {
+			attributes['context'] = options.context;
 		}
 		if (options.agent) {
 			attributes['agent'] = options.agent;
@@ -975,6 +982,7 @@ export class MissionDossierFilesystem {
 			...(taskKind ? { taskKind } : {}),
 			...(pairedTaskId ? { pairedTaskId } : {}),
 			dependsOn: this.readTaskDependsOn(document.attributes, filePath),
+			context: this.readTaskContext(document.attributes, filePath),
 			waitingOn: [],
 			status: 'pending',
 			agent,
@@ -1006,6 +1014,27 @@ export class MissionDossierFilesystem {
 		});
 
 		return dependencies.filter((entry) => entry.length > 0);
+	}
+
+	private readTaskContext(
+		attributes: Record<string, FrontmatterValue>,
+		filePath: string
+	): TaskContextArtifactReferenceType[] {
+		const value = attributes['context'];
+		if (value === undefined) {
+			return [];
+		}
+		if (!Array.isArray(value)) {
+			throw new ArtifactTypeError(`Task '${filePath}' context must be an array of artifact references.`);
+		}
+
+		return value.map((entry) => {
+			const parsed = TaskContextArtifactReferenceSchema.safeParse(entry);
+			if (!parsed.success) {
+				throw new ArtifactTypeError(`Task '${filePath}' context entries must include name, path, and selectionPosition.`);
+			}
+			return parsed.data;
+		});
 	}
 
 	private readOptionalStringAttribute(

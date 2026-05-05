@@ -21,9 +21,10 @@ import {
 } from '../mcp/AgentSessionMcpAccessProvisioner.js';
 import { buildMissionAgentRuntimeProtocolLaunchContext } from '../mcp/MissionAgentRuntimeProtocolLaunchContext.js';
 import {
-	missionMcpSignalToolNames,
-	type MissionMcpSignalToolName
+	missionMcpSignalToolNames
 } from '../mcp/MissionMcpSignalTools.js';
+import { missionMcpEntityCommandToolName } from '../mcp/MissionMcpEntityCommandTools.js';
+import type { MissionMcpToolName } from '../mcp/MissionMcpSessionRegistry.js';
 
 const RUNNING_SESSION_COMMANDS: AgentCommand['type'][] = ['interrupt', 'checkpoint', 'nudge'];
 const AWAITING_INPUT_SESSION_COMMANDS: AgentCommand['type'][] = ['interrupt', 'checkpoint', 'nudge', 'resume'];
@@ -103,7 +104,7 @@ export abstract class MissionAgentPtyRunner extends AgentRunner {
 
 	private readonly mcpProvisioningPolicy: AgentSessionMcpProvisioningPolicy;
 
-	private readonly allowedMcpTools: readonly MissionMcpSignalToolName[];
+	private readonly allowedMcpTools: readonly MissionMcpToolName[];
 
 	public constructor(options: {
 		id: string;
@@ -113,7 +114,7 @@ export abstract class MissionAgentPtyRunner extends AgentRunner {
 		createSignalPolicy?: () => AgentSessionSignalPolicy;
 		mcpProvisioner?: AgentSessionMcpAccessProvisioner;
 		mcpProvisioningPolicy?: AgentSessionMcpProvisioningPolicy;
-		allowedMcpTools?: readonly MissionMcpSignalToolName[];
+		allowedMcpTools?: readonly MissionMcpToolName[];
 	} & Omit<
 		AgentRunnerTerminalTransportRuntimeOptions,
 		| 'args'
@@ -142,7 +143,10 @@ export abstract class MissionAgentPtyRunner extends AgentRunner {
 		});
 		this.mcpProvisioner = options.mcpProvisioner;
 		this.mcpProvisioningPolicy = options.mcpProvisioningPolicy ?? 'optional';
-		this.allowedMcpTools = options.allowedMcpTools ?? missionMcpSignalToolNames;
+		this.allowedMcpTools = options.allowedMcpTools ?? [
+			...missionMcpSignalToolNames,
+			missionMcpEntityCommandToolName
+		];
 	}
 
 	public override dispose(): void {
@@ -362,7 +366,12 @@ export abstract class MissionAgentPtyRunner extends AgentRunner {
 			missionId: config.missionId,
 			taskId: config.task.taskId,
 			agentSessionId: sessionId,
-			allowedTools: [...this.allowedMcpTools]
+			allowedTools: [...this.allowedMcpTools],
+			allowedEntityCommands: [
+				{ entity: 'Task', method: 'command' },
+				{ entity: 'AgentSession', method: 'command' },
+				{ entity: 'Artifact', method: 'command' }
+			]
 		});
 		const launchContext = buildMissionAgentRuntimeProtocolLaunchContext({
 			provisioning,

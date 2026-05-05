@@ -61,6 +61,7 @@
             instructionsPath,
             skillsPath,
             agentRunner,
+            agentRunners: repository.data.settings.agentRunners,
             ...(defaultAgentMode ? { defaultAgentMode } : {}),
             ...(defaultModel.trim()
                 ? { defaultModel: defaultModel.trim() }

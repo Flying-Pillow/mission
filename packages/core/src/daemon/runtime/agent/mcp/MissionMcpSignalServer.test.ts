@@ -344,4 +344,111 @@ describe('MissionMcpSignalServer', () => {
 		});
 		expect(retryAcknowledgement).toEqual(firstAcknowledgement);
 	});
+
+	it('routes allowlisted entity commands through the daemon entity command executor', async () => {
+		const executed: unknown[] = [];
+		const server = new MissionMcpSignalServer({
+			signalPort: new PolicyBoundAgentSessionSignalPort({
+				sink: {
+					getSnapshot: async () => undefined,
+					commit: async () => undefined
+				}
+			}),
+			executeEntityCommand: async (input) => {
+				executed.push(input);
+				return { ok: true, commandId: (input.payload as { commandId?: string }).commandId };
+			}
+		});
+		const handle = await server.start();
+		await server.registerSession({
+			missionId: 'mission-31',
+			taskId: 'task-3',
+			agentSessionId: 'session-7',
+			allowedTools: ['mission_entity_command'],
+			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
+		});
+
+		await expect(handle.invokeTool('mission_entity_command', {
+			missionId: 'mission-31',
+			taskId: 'task-3',
+			agentSessionId: 'session-7',
+			eventId: 'entity-evt-1',
+			entity: 'Task',
+			method: 'command',
+			payload: {
+				missionId: 'mission-31',
+				taskId: 'task-3',
+				commandId: 'task.complete'
+			}
+		})).resolves.toEqual({
+			accepted: true,
+			outcome: 'entity-command',
+			result: { ok: true, commandId: 'task.complete' }
+		});
+		expect(executed).toEqual([{
+			entity: 'Task',
+			method: 'command',
+			payload: {
+				missionId: 'mission-31',
+				taskId: 'task-3',
+				commandId: 'task.complete'
+			}
+		}]);
+	});
+
+	it('rejects entity commands outside the session allowlist or scope', async () => {
+		const server = new MissionMcpSignalServer({
+			signalPort: new PolicyBoundAgentSessionSignalPort({
+				sink: {
+					getSnapshot: async () => undefined,
+					commit: async () => undefined
+				}
+			}),
+			executeEntityCommand: async () => ({ ok: true })
+		});
+		const handle = await server.start();
+		await server.registerSession({
+			missionId: 'mission-31',
+			taskId: 'task-3',
+			agentSessionId: 'session-7',
+			allowedTools: ['mission_entity_command'],
+			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
+		});
+
+		await expect(handle.invokeTool('mission_entity_command', {
+			missionId: 'mission-31',
+			taskId: 'task-3',
+			agentSessionId: 'session-7',
+			eventId: 'entity-evt-1',
+			entity: 'Task',
+			method: 'command',
+			payload: {
+				missionId: 'mission-31',
+				taskId: 'task-3',
+				commandId: 'task.reopen'
+			}
+		})).resolves.toEqual({
+			accepted: false,
+			outcome: 'rejected',
+			reason: "Entity command 'Task.command:task.reopen' is not allowed for session 'session-7'."
+		});
+
+		await expect(handle.invokeTool('mission_entity_command', {
+			missionId: 'mission-31',
+			taskId: 'task-3',
+			agentSessionId: 'session-7',
+			eventId: 'entity-evt-2',
+			entity: 'Task',
+			method: 'command',
+			payload: {
+				missionId: 'mission-31',
+				taskId: 'task-4',
+				commandId: 'task.complete'
+			}
+		})).resolves.toEqual({
+			accepted: false,
+			outcome: 'rejected',
+			reason: "Task command target 'task-4' did not match MCP envelope task 'task-3'."
+		});
+	});
 });

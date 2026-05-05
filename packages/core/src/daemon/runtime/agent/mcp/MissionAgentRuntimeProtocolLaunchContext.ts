@@ -8,6 +8,7 @@ import {
 	missionMcpAgentBridgeEnvKeys
 } from './MissionMcpAgentBridge.js';
 import { missionMcpSignalToolNames } from './MissionMcpSignalTools.js';
+import { missionMcpEntityCommandToolName } from './MissionMcpEntityCommandTools.js';
 import { MISSION_PROTOCOL_MARKER_PREFIX } from '../signals/MissionProtocolMarkerParser.js';
 
 export type MissionAgentRuntimeProtocolLaunchContext = {
@@ -37,14 +38,16 @@ export function buildMissionAgentRuntimeProtocolLaunchContext(input: {
 function buildValidatedSessionInstructions(): string {
 	const endpointEnvVar = missionMcpAgentBridgeEnvKeys.endpoint;
 	const bridgeCommand = [MISSION_MCP_AGENT_BRIDGE_COMMAND, ...MISSION_MCP_AGENT_BRIDGE_ARGS].join(' ');
-	const toolList = missionMcpSignalToolNames.map((toolName) => `- ${toolName}`).join('\n');
+	const toolList = [...missionMcpSignalToolNames, missionMcpEntityCommandToolName]
+		.map((toolName) => `- ${toolName}`)
+		.join('\n');
 
 	return [
 		'Mission runtime protocol for this session:',
 		'- Mission MCP is available for this session through the local mission server.',
 		`- The session launch environment includes ${endpointEnvVar} and the corresponding Mission session identity fields.`,
 		`- If your tooling needs an explicit MCP bridge command, use: ${bridgeCommand}`,
-		'- Use Mission MCP first for structured progress, needs-input, blocked, ready-for-verification, completion/failure claims, notes, and usage.',
+		'- Use Mission MCP first for structured progress, needs-input, blocked, ready-for-verification, completion/failure claims, notes, usage, and allowlisted Entity commands.',
 		'- Every MCP tool call must include missionId, taskId, agentSessionId, and a unique eventId.',
 		'- Mission acknowledgements and your own claims do not prove verification or completion; they remain advisory until Mission policy and deterministic checks confirm them.',
 		'Available Mission MCP tools:',

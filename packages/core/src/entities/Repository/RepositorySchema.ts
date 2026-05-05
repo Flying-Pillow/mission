@@ -19,6 +19,64 @@ export const RepositoryPlatformKindSchema = z.enum(['github']);
 
 const defaultMissionsRoot = 'missions';
 
+export const RepositoryAgentRunnerModelOptionSchema = z.object({
+    value: z.string().trim().min(1),
+    label: z.string().trim().min(1)
+}).strict();
+
+export const RepositoryAgentRunnerSettingsSchema = z.object({
+    id: MissionAgentRunnerSchema,
+    label: z.string().trim().min(1),
+    models: z.array(RepositoryAgentRunnerModelOptionSchema),
+    reasoningEfforts: z.array(MissionReasoningEffortSchema)
+}).strict();
+
+const defaultAgentRunnerSettings = [
+    {
+        id: 'copilot-cli',
+        label: 'Copilot CLI',
+        models: [],
+        reasoningEfforts: []
+    },
+    {
+        id: 'claude-code',
+        label: 'Claude Code',
+        models: [
+            { value: 'claude-opus-4-7-20260501', label: 'Claude Opus 4.7' },
+            { value: 'claude-sonnet-4-6-20260415', label: 'Claude Sonnet 4.6' },
+            { value: 'claude-haiku-4-5-20260310', label: 'Claude Haiku 4.5' }
+        ],
+        reasoningEfforts: ['low', 'medium', 'high']
+    },
+    {
+        id: 'pi',
+        label: 'Pi',
+        models: [
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
+            { value: 'gpt-5.4', label: 'GPT-5.4' }
+        ],
+        reasoningEfforts: []
+    },
+    {
+        id: 'codex',
+        label: 'Codex',
+        models: [
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
+            { value: 'gpt-5.4', label: 'GPT-5.4' }
+        ],
+        reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
+    },
+    {
+        id: 'opencode',
+        label: 'OpenCode',
+        models: [
+            { value: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5' },
+            { value: 'openai/gpt-5.4', label: 'OpenAI GPT-5.4' }
+        ],
+        reasoningEfforts: []
+    }
+] as const satisfies readonly RepositoryAgentRunnerSettingsType[];
+
 export const RepositoryPlatformRepositorySchema = z.object({
     platform: RepositoryPlatformKindSchema,
     repositoryRef: z.string().trim().min(1),
@@ -60,6 +118,7 @@ export const RepositorySettingsSchema = z.object({
     instructionsPath: z.string().trim().min(1),
     skillsPath: z.string().trim().min(1),
     agentRunner: MissionAgentRunnerSchema,
+    agentRunners: z.array(RepositoryAgentRunnerSettingsSchema).default(() => createDefaultRepositoryAgentRunnerSettings()),
     defaultAgentMode: MissionDefaultAgentModeSchema.optional(),
     defaultModel: z.string().trim().min(1).optional(),
     defaultReasoningEffort: MissionReasoningEffortSchema.optional()
@@ -70,11 +129,27 @@ const defaultRepositorySettings: RepositorySettingsType = {
     trackingProvider: 'github',
     instructionsPath: '.agents',
     skillsPath: '.agents/skills',
-    agentRunner: 'copilot-cli'
+    agentRunner: 'copilot-cli',
+    agentRunners: createDefaultRepositoryAgentRunnerSettings()
 };
+
+export function createDefaultRepositoryAgentRunnerSettings(): RepositoryAgentRunnerSettingsType[] {
+    return defaultAgentRunnerSettings.map((entry) => ({
+        ...entry,
+        models: entry.models.map((model) => ({ ...model })),
+        reasoningEfforts: [...entry.reasoningEfforts]
+    }));
+}
 
 export function createDefaultRepositorySettings(): RepositorySettingsType {
     return structuredClone(defaultRepositorySettings);
+}
+
+export function readRepositoryAgentRunnerSettings(
+    settings: Pick<RepositorySettingsType, 'agentRunners'>,
+    runnerId: string | undefined
+): RepositoryAgentRunnerSettingsType | undefined {
+    return settings.agentRunners.find((entry) => entry.id === runnerId);
 }
 
 export const RepositoryInputSchema = z.object({
@@ -247,6 +322,8 @@ export const RepositorySetupResultSchema = EntityCommandAcknowledgementSchema.ex
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
 export type RepositoryStorageType = z.infer<typeof RepositoryStorageSchema>;
 export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSchema>;
+export type RepositoryAgentRunnerModelOptionType = z.infer<typeof RepositoryAgentRunnerModelOptionSchema>;
+export type RepositoryAgentRunnerSettingsType = z.infer<typeof RepositoryAgentRunnerSettingsSchema>;
 export type RepositoryPlatformRepositoryType = z.infer<typeof RepositoryPlatformRepositorySchema>;
 export type RepositoryFindType = z.infer<typeof RepositoryFindSchema>;
 export type RepositoryFindAvailableType = z.infer<typeof RepositoryFindAvailableSchema>;

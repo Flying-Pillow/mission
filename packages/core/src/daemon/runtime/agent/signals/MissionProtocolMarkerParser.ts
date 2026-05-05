@@ -8,7 +8,7 @@ import {
 	type AgentSessionSignalScope
 } from './AgentSessionSignal.js';
 
-export const MISSION_PROTOCOL_MARKER_PREFIX = 'MISSION_SIGNAL::';
+export const MISSION_PROTOCOL_MARKER_PREFIX = 'mission::';
 
 const boundedText = z.string().trim().min(1).max(MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH);
 

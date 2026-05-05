@@ -5,6 +5,7 @@ import type { IPty } from 'node-pty';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLaunchConfig } from '../AgentRuntimeTypes.js';
 import { Repository } from '../../../../entities/Repository/Repository.js';
+import { createDefaultRepositorySettings } from '../../../../entities/Repository/RepositorySchema.js';
 import { createConfiguredAgentRunners } from './AgentRuntimeFactory.js';
 import { ClaudeCodeAgentRunner } from './ClaudeCodeAgentRunner.js';
 import { CopilotCliAgentRunner } from './CopilotCliAgentRunner.js';
@@ -287,7 +288,7 @@ describe('Mission-owned agent runners', () => {
 		expect(opencode['parseRuntimeOutputLine']('plain text without structured output')).toEqual([{ kind: 'none' }]);
 	});
 
-	it('maps Mission MCP launch support into Copilot, Codex, OpenCode, and Pi launch plans', async () => {
+	it('maps Mission MCP launch support into Copilot, Claude Code, Codex, OpenCode, and Pi launch plans', async () => {
 		const missionMcpEnv = {
 			MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
 			MISSION_MCP_MISSION_ID: 'mission-31',
@@ -301,10 +302,10 @@ describe('Mission-owned agent runners', () => {
 				path.join(workspaceRoot, '.mcp.json'),
 				`${JSON.stringify({
 					mcpServers: {
-						mission_signal: {
+						mission: {
 							type: 'stdio',
-							command: 'mission',
-							args: ['mcp', 'agent-bridge']
+							command: 'mission-command',
+							args: []
 						}
 					}
 				}, null, 2)}\n`,
@@ -315,6 +316,13 @@ describe('Mission-owned agent runners', () => {
 				command: 'copilot',
 				trustedConfigDir: workspaceRoot,
 				env: { PATH: '/usr/bin' }
+			});
+			const claudeCode = new ClaudeCodeAgentRunner({
+				resolveSettings: () => ({
+					model: 'claude-sonnet-4-7',
+					providerEnv: { ANTHROPIC_API_KEY: 'claude-key' },
+					launchEnv: missionMcpEnv
+				})
 			});
 			const codex = new CodexAgentRunner({
 				resolveSettings: () => ({
@@ -346,16 +354,34 @@ describe('Mission-owned agent runners', () => {
 			expect(copilotPlan.args).toContain(`@${path.join(workspaceRoot, '.mcp.json')}`);
 			expect(copilotPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
 
+			const preparedClaudeConfig = await claudeCode['prepareRunnerLaunchConfig'](createLaunchConfig({
+				launchEnv: missionMcpEnv
+			}));
+			const claudeCodePlan = claudeCode.createInteractiveLaunchPlan(preparedClaudeConfig.config);
+			expect(claudeCodePlan.args).toContain('--mcp-config');
+			const mcpConfigIndex = claudeCodePlan.args.indexOf('--mcp-config');
+			expect(mcpConfigIndex).toBeGreaterThanOrEqual(0);
+			const mcpConfigPath = claudeCodePlan.args[mcpConfigIndex + 1];
+			expect(mcpConfigPath).toBeDefined();
+			expect(mcpConfigPath).toContain('mission-claude-mcp-');
+			const mcpConfigContent = await fs.readFile(mcpConfigPath!, 'utf8');
+			expect(mcpConfigContent).toContain('"mission"');
+			expect(mcpConfigContent).toContain('mission-local://mcp-signal/session-1');
+
+			const claudeCodePrintPlan = claudeCode.createPrintLaunchPlan(preparedClaudeConfig.config);
+			expect(claudeCodePrintPlan.command).toContain('--mcp-config');
+			expect(claudeCodePrintPlan.command).toContain('mission-claude-mcp-');
+
 			const codexPlan = codex.createInteractiveLaunchPlan(createLaunchConfig());
 			expect(codexPlan.args).toContain('-c');
-			expect(codexPlan.args).toContain('mcp_servers.mission_signal.enabled=true');
+			expect(codexPlan.args).toContain('mcp_servers.mission.enabled=true');
 
 			const codexPrintPlan = codex.createPrintLaunchPlan(createLaunchConfig());
-			expect(codexPrintPlan.command).toContain("mcp_servers.mission_signal.enabled=true");
-			expect(codexPrintPlan.command).toContain("mcp_servers.mission_signal.command=\"mission\"");
+			expect(codexPrintPlan.command).toContain("mcp_servers.mission.enabled=true");
+			expect(codexPrintPlan.command).toContain("mcp_servers.mission.command=\"mission-command\"");
 
 			const openCodePlan = opencode.createInteractiveLaunchPlan(createLaunchConfig());
-			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission_signal"');
+			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission"');
 			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission-local://mcp-signal/session-1"');
 
 			const preparedPiConfig = await pi['prepareRunnerLaunchConfig'](createLaunchConfig({
@@ -365,6 +391,7 @@ describe('Mission-owned agent runners', () => {
 			const piPlan = pi.createInteractiveLaunchPlan(preparedPiConfig.config);
 			expect(piPlan.args).toContain('-e');
 			expect(piPlan.args).toContain('npm:pi-mcp-extension');
+			await preparedClaudeConfig.cleanup?.();
 			await preparedPiConfig.cleanup?.();
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
@@ -373,11 +400,7 @@ describe('Mission-owned agent runners', () => {
 
 	it('factory registers the four direct Mission-owned coder runners explicitly', async () => {
 		vi.spyOn(Repository, 'readSettingsDocument').mockReturnValue({
-			missionsRoot: 'missions',
-			trackingProvider: 'github',
-			instructionsPath: '.agents',
-			skillsPath: '.agents/skills',
-			agentRunner: 'copilot-cli',
+			...createDefaultRepositorySettings(),
 			defaultModel: 'claude-sonnet-4-7'
 		});
 
@@ -400,11 +423,7 @@ describe('Mission-owned agent runners', () => {
 
 	it('applies repository default model and runner-aware default reasoning effort', async () => {
 		vi.spyOn(Repository, 'readSettingsDocument').mockReturnValue({
-			missionsRoot: 'missions',
-			trackingProvider: 'github',
-			instructionsPath: '.agents',
-			skillsPath: '.agents/skills',
-			agentRunner: 'copilot-cli',
+			...createDefaultRepositorySettings(),
 			defaultModel: 'gpt-5-codex',
 			defaultReasoningEffort: 'high'
 		});

@@ -63,7 +63,7 @@ import type {
 } from '../../daemon/runtime/agent/signals/AgentSessionSignal.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
-import { Task } from '../Task/Task.js';
+import { Task, type TaskConfigureOptions } from '../Task/Task.js';
 import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
 import type { TaskDataType } from '../Task/TaskSchema.js';
 import { Stage } from '../Stage/Stage.js';
@@ -756,12 +756,25 @@ export class Mission extends Entity<MissionDataType, string> {
 		await this.status();
 	}
 
-	public async startTask(taskId: string, options: { terminalSessionName?: string } = {}): Promise<void> {
+	public async startTask(taskId: string, options: { agentRunner?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } = {}): Promise<void> {
 		await (await this.requireTask(taskId)).startFromMissionControl({
 			missionWorkspacePath: this.adapter.getMissionWorkspacePath(this.missionDir),
 			runners: this.agentRunners,
+			...(options.agentRunner?.trim() ? { runnerId: options.agentRunner.trim() } : {}),
+			...(options.model?.trim() ? { model: options.model.trim() } : {}),
+			...(options.reasoningEffort?.trim() ? { reasoningEffort: options.reasoningEffort.trim() } : {}),
 			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
 		});
+	}
+
+	public async configureTask(taskId: string, input: TaskConfigureOptions): Promise<void> {
+		await this.applyWorkflowEvent(this.createWorkflowEvent('task.configured', {
+			taskId,
+			...(input.agentRunner?.trim() ? { agentRunner: input.agentRunner.trim() } : {}),
+			...(Object.prototype.hasOwnProperty.call(input, 'model') ? { model: input.model?.trim() || null } : {}),
+			...(Object.prototype.hasOwnProperty.call(input, 'reasoningEffort') ? { reasoningEffort: input.reasoningEffort ?? null } : {}),
+			...(input.context ? { context: input.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
+		}));
 	}
 
 	public async completeTask(taskId: string): Promise<void> {
@@ -1400,12 +1413,14 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.lastKnownCommandSnapshot = undefined;
 	}
 
-	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<void> {
+	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } = {}): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.queued', {
 			taskId,
 			...(options.runnerId?.trim() ? { runnerId: options.runnerId.trim() } : {}),
 			...(options.prompt?.trim() ? { prompt: options.prompt.trim() } : {}),
 			...(options.workingDirectory?.trim() ? { workingDirectory: options.workingDirectory.trim() } : {}),
+			...(options.model?.trim() ? { model: options.model.trim() } : {}),
+			...(options.reasoningEffort?.trim() ? { reasoningEffort: options.reasoningEffort.trim() } : {}),
 			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
 		}));
 	}

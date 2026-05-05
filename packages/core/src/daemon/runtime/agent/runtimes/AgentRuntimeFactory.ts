@@ -9,7 +9,11 @@ import {
 	OPENCODE_AGENT_RUNNER_ID
 } from './AgentRuntimeIds.js';
 import { Repository } from '../../../../entities/Repository/Repository.js';
-import { createDefaultRepositorySettings } from '../../../../entities/Repository/RepositorySchema.js';
+import {
+	createDefaultRepositorySettings,
+	readRepositoryAgentRunnerSettings,
+	type RepositorySettingsType
+} from '../../../../entities/Repository/RepositorySchema.js';
 import type { AgentRunner } from '../AgentRunner.js';
 import { AgentSessionMcpAccessProvisioner } from '../mcp/AgentSessionMcpAccessProvisioner.js';
 import type { MissionMcpSignalServer } from '../mcp/MissionMcpSignalServer.js';
@@ -23,8 +27,7 @@ export async function createConfiguredAgentRunners(options: {
 }): Promise<AgentRunner[]> {
 	const settings = Repository.readSettingsDocument(options.repositoryRootPath) ?? createDefaultRepositorySettings();
 	const resolveProviderSettings = createProviderSettingsResolver({
-		defaultModel: settings.defaultModel,
-		defaultReasoningEffort: settings.defaultReasoningEffort
+		settings
 	});
 	const mcpProvisioner = options.mcpSignalServer
 		? new AgentSessionMcpAccessProvisioner({ signalServer: options.mcpSignalServer })
@@ -65,21 +68,22 @@ export async function createConfiguredAgentRunners(options: {
 }
 
 function createProviderSettingsResolver(
-	defaults: {
-		defaultModel: string | undefined;
-		defaultReasoningEffort: string | undefined;
-	}
+	defaults: { settings: RepositorySettingsType }
 ): MissionAgentRunnerSettingsResolver<typeof CLAUDE_CODE_AGENT_RUNNER_ID | typeof CODEX_AGENT_RUNNER_ID | typeof OPENCODE_AGENT_RUNNER_ID | 'pi'> {
 	return (config, runnerId) => {
 		const defaultReasoningEffort = supportsDefaultReasoningEffort(runnerId)
-			? defaults.defaultReasoningEffort?.trim()
+			? readStringMetadata(config, 'reasoningEffort')
+			?? defaults.settings.defaultReasoningEffort?.trim()
+			?? readRepositoryAgentRunnerSettings(defaults.settings, runnerId)?.reasoningEfforts[0]
 			: undefined;
+		const defaultModel = defaults.settings.defaultModel?.trim()
+			?? readRepositoryAgentRunnerSettings(defaults.settings, runnerId)?.models[0]?.value;
 		const settings = {
-			model: readStringMetadata(config, 'model') ?? defaults.defaultModel?.trim() ?? '',
+			model: readStringMetadata(config, 'model') ?? defaultModel ?? '',
 			launchMode: 'interactive' as const,
 			runtimeEnv: process.env
 		};
-		const reasoningEffort = readStringMetadata(config, 'reasoningEffort') ?? defaultReasoningEffort;
+		const reasoningEffort = defaultReasoningEffort;
 		const dangerouslySkipPermissions = readBooleanMetadata(config, 'dangerouslySkipPermissions');
 		const resumeSession = readStringMetadata(config, 'resumeSession');
 		const captureSessions = readBooleanMetadata(config, 'captureSessions');

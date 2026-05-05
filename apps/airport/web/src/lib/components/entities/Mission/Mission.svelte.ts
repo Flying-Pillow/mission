@@ -48,6 +48,7 @@ import {
     Task,
     type TaskSnapshot
 } from '$lib/components/entities/Task/Task.svelte.js';
+import { qry } from '../../../../routes/api/entities/remote/query.remote';
 
 export type MissionDataLoader = (missionId: string) => Promise<MissionSnapshotType>;
 type MissionQueryExecutionContext = 'event' | 'render';
@@ -824,6 +825,16 @@ export class Mission implements EntityModel<MissionSnapshotType> {
                     missionId: this.missionId,
                     id,
                     ...(input?.executionContext ? { executionContext: input.executionContext } : {})
+                });
+            },
+            bodyForRender: (id) => {
+                return qry({
+                    entity: artifactEntityName,
+                    method: 'body',
+                    payload: {
+                        missionId: this.missionId,
+                        id
+                    }
                 });
             },
             commandBody: async (id, body) => {

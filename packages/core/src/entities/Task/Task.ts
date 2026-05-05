@@ -21,6 +21,7 @@ import {
 	TaskDataSchema,
 	TaskCommandAcknowledgementSchema,
 	TaskCommandInputSchema,
+	TaskConfigureCommandOptionsSchema,
 	TaskStartCommandOptionsSchema,
 	TaskReworkCommandInputSchema,
 	TaskLocatorSchema,
@@ -38,7 +39,8 @@ export type TaskOwner = {
 	missionId: string;
 	isMissionDelivered(): boolean;
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
-	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string }): Promise<void>;
+	configureTask(taskId: string, input: TaskConfigureOptions): Promise<void>;
+	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string }): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
 	reworkTask(taskId: string, input: {
@@ -58,6 +60,13 @@ export type TaskOwner = {
 	): Promise<AgentSessionSnapshot>;
 	recordStartedTaskSession(snapshot: AgentSessionSnapshot): Promise<AgentSession>;
 	recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void>;
+};
+
+export type TaskConfigureOptions = {
+	agentRunner?: string;
+	model?: string | null;
+	reasoningEffort?: string | null;
+	context?: NonNullable<MissionTaskState['context']>;
 };
 
 export type TaskVerificationReworkRequest = {
@@ -86,10 +95,13 @@ export class Task extends Entity<TaskDataType, string> {
 			sequence: task.sequence,
 			title: task.subject,
 			instruction: task.instruction,
+			...(task.model ? { model: task.model } : {}),
+			...(task.reasoningEffort ? { reasoningEffort: task.reasoningEffort } : {}),
 			...(task.taskKind ? { taskKind: task.taskKind } : {}),
 			...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
 			lifecycle: task.status,
 			dependsOn: [...task.dependsOn],
+			context: [...(task.context ?? [])],
 			waitingOnTaskIds: [...task.waitingOn],
 			agentRunner: task.agent,
 			retries: task.retries,
@@ -177,9 +189,12 @@ export class Task extends Entity<TaskDataType, string> {
 			subject: Task.resolveWorkflowSubject(task, fileTask, fileName),
 			instruction: task.instruction,
 			body: task.instruction,
+			...(task.model ? { model: task.model } : {}),
+			...(task.reasoningEffort ? { reasoningEffort: task.reasoningEffort } : {}),
 			...(taskKind ? { taskKind } : {}),
 			...(pairedTaskId ? { pairedTaskId } : {}),
 			dependsOn: [...task.dependsOn],
+			context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
 			agent: task.agentRunner ?? fileTask?.agent ?? DEFAULT_AGENT_RUNNER_ID,
@@ -255,7 +270,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return structuredClone(this.requireState());
 	}
 
-	public async start(options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<MissionTaskState> {
+	public async start(options: { runnerId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } = {}): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('start');
 		const state = this.requireState();
@@ -266,18 +281,31 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
+	public async configure(options: TaskConfigureOptions): Promise<MissionTaskState> {
+		await this.refresh();
+		await this.requireOwner().configureTask(this.requireState().taskId, options);
+		await this.refresh();
+		return this.toState();
+	}
+
 	public async startFromMissionControl(input: {
 		missionWorkspacePath: string;
 		runners: ReadonlyMap<string, AgentRunner>;
+		runnerId?: string;
+		model?: string;
+		reasoningEffort?: string;
 		terminalSessionName?: string;
 	}): Promise<MissionTaskState> {
 		await this.refresh();
 		const taskState = this.toState();
-		const runnerId = Task.resolveStartRunnerId(taskState, input.runners);
+		const requestedRunnerId = input.runnerId?.trim();
+		const runnerId = requestedRunnerId || Task.resolveStartRunnerId(taskState, input.runners);
 		return this.start({
 			...(runnerId ? { runnerId } : {}),
 			prompt: buildTaskLaunchPrompt(taskState, input.missionWorkspacePath),
 			workingDirectory: input.missionWorkspacePath,
+			...(input.model?.trim() ? { model: input.model.trim() } : {}),
+			...(input.reasoningEffort?.trim() ? { reasoningEffort: input.reasoningEffort.trim() } : {}),
 			...(input.terminalSessionName?.trim() ? { terminalSessionName: input.terminalSessionName.trim() } : {})
 		});
 	}
@@ -359,6 +387,9 @@ export class Task extends Entity<TaskDataType, string> {
 		try {
 			Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
 			switch (input.commandId) {
+				case TaskCommandIds.configure:
+					await mission.configureTask(input.taskId, Task.readConfigureCommandOptions(input.input));
+					break;
 				case TaskCommandIds.start:
 					await mission.startTask(input.taskId, Task.readStartCommandOptions(input.input));
 					break;
@@ -402,9 +433,24 @@ export class Task extends Entity<TaskDataType, string> {
 		}
 	}
 
-	private static readStartCommandOptions(input: unknown): { terminalSessionName?: string } {
+	private static readStartCommandOptions(input: unknown): { agentRunner?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } {
 		const options = TaskStartCommandOptionsSchema.optional().parse(input);
-		return options?.terminalSessionName ? { terminalSessionName: options.terminalSessionName } : {};
+		return {
+			...(options?.agentRunner ? { agentRunner: options.agentRunner } : {}),
+			...(options?.model ? { model: options.model } : {}),
+			...(options?.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+			...(options?.terminalSessionName ? { terminalSessionName: options.terminalSessionName } : {})
+		};
+	}
+
+	private static readConfigureCommandOptions(input: unknown): TaskConfigureOptions {
+		const options = TaskConfigureCommandOptionsSchema.parse(input);
+		return {
+			...(options.agentRunner ? { agentRunner: options.agentRunner } : {}),
+			...(Object.prototype.hasOwnProperty.call(options, 'model') ? { model: options.model ?? null } : {}),
+			...(Object.prototype.hasOwnProperty.call(options, 'reasoningEffort') ? { reasoningEffort: options.reasoningEffort ?? null } : {}),
+			...(options.context ? { context: options.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
+		};
 	}
 
 	private assertCanTransition(intent: MissionTaskStatusIntent): void {

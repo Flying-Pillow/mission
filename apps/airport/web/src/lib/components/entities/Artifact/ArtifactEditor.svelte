@@ -118,18 +118,6 @@
             return;
         }
 
-        if (!artifact || artifactBodyStatus !== "idle") {
-            return;
-        }
-
-        void artifact.refreshBody({ executionContext: "render" });
-    });
-
-    $effect(() => {
-        if (!id || !isEditableTextArtifact) {
-            return;
-        }
-
         if (artifactBodyStatus !== "loaded") {
             return;
         }
@@ -536,10 +524,10 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <!-- <div class="flex items-center gap-2 text-xs text-muted-foreground">
             <Icon icon="lucide:save" class="size-3.5" />
             <span>{statusMessage}</span>
-        </div>
+        </div> -->
 
         {#if artifactBodyError}
             <p class="text-sm text-rose-600">{artifactBodyError}</p>

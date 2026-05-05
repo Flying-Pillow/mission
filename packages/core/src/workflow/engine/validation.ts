@@ -136,6 +136,10 @@ export function getMissionWorkflowEventValidationErrors(
             }
             break;
         }
+        case 'task.configured': {
+            requireTask(findTask(event.taskId), event.taskId, errors, event.type);
+            break;
+        }
         case 'task.completed': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task && task.lifecycle !== 'ready' && task.lifecycle !== 'running') {
@@ -227,13 +231,14 @@ function lifecycleForSessionEvent(
     }
 }
 
-function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; model?: string; reasoningEffort?: string; dependsOn: string[]; agentRunner?: string }): boolean {
+function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; model?: string; reasoningEffort?: string; dependsOn: string[]; context?: MissionTaskRuntimeState['context']; agentRunner?: string }): boolean {
     return task.taskId === payload.taskId &&
         task.title === payload.title &&
         task.instruction === payload.instruction &&
-    task.model === payload.model &&
-    task.reasoningEffort === payload.reasoningEffort &&
+        task.model === payload.model &&
+        task.reasoningEffort === payload.reasoningEffort &&
         JSON.stringify(task.dependsOn) === JSON.stringify(payload.dependsOn) &&
+        JSON.stringify(task.context ?? []) === JSON.stringify(payload.context ?? []) &&
         task.agentRunner === payload.agentRunner;
 }
 

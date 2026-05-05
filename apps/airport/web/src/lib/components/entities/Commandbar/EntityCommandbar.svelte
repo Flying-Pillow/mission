@@ -15,6 +15,7 @@
         entity,
         label,
         onCommandExecuted,
+        resolveCommandInput,
         class: className,
         buttonClass = "",
         defaultVariant = "default",
@@ -29,6 +30,7 @@
             result: unknown,
             command: EntityCommandDescriptorType,
         ) => Promise<void>;
+        resolveCommandInput?: (command: EntityCommandDescriptorType) => unknown;
         class?: string;
         buttonClass?: string;
         defaultVariant?: ButtonVariant;
@@ -155,6 +157,7 @@
         try {
             const result = await commandEntity.executeCommand(
                 command.commandId,
+                resolveCommandInput?.(command),
             );
             await onCommandExecuted(result, command);
             return true;

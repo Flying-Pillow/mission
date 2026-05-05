@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { TaskCommandIds, type TaskDataType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import { TaskCommandIds, type TaskDataType, type TaskStartCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskSnapshot = {
@@ -9,6 +9,9 @@ export type TaskSnapshot = {
 };
 
 export type TaskStartOptions = {
+    agentRunner?: string;
+    model?: string;
+    reasoningEffort?: TaskStartCommandOptionsType['reasoningEffort'];
     terminalSessionName?: string;
 };
 
@@ -67,8 +70,24 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.snapshot.task.lifecycle;
     }
 
+    public get agentRunner(): string {
+        return this.snapshot.task.agentRunner;
+    }
+
+    public get model(): string | undefined {
+        return this.snapshot.task.model;
+    }
+
+    public get reasoningEffort(): TaskStartCommandOptionsType['reasoningEffort'] | undefined {
+        return this.snapshot.task.reasoningEffort;
+    }
+
     public get dependsOn(): string[] {
         return [...this.snapshot.task.dependsOn];
+    }
+
+    public get context(): NonNullable<TaskDataType['context']> {
+        return this.snapshot.task.context?.map((contextArtifact) => ({ ...contextArtifact })) ?? [];
     }
 
     public get waitingOnTaskIds(): string[] {

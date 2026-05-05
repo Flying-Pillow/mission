@@ -68,6 +68,19 @@ export function buildOpenCodeMissionMcpConfigContent(env: Record<string, string>
 	});
 }
 
+export function buildClaudeCodeMissionMcpConfigContent(env: Record<string, string>): string {
+	return JSON.stringify({
+		mcpServers: {
+			mission: {
+				transport: 'stdio',
+				command: MISSION_MCP_AGENT_BRIDGE_COMMAND,
+				args: [...MISSION_MCP_AGENT_BRIDGE_ARGS],
+				env: buildMissionMcpBridgeServerEnv(env)
+			}
+		}
+	});
+}
+
 export function findNearestMissionMcpConfigPath(workingDirectory: string): string | undefined {
 	let current = path.resolve(workingDirectory);
 	while (true) {

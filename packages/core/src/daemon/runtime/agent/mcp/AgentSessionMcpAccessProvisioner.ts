@@ -1,10 +1,13 @@
 import type { AgentRunnerId } from '../AgentRuntimeTypes.js';
-import type { MissionMcpSignalToolName } from './MissionMcpSignalTools.js';
+import type {
+	MissionMcpAllowedEntityCommand
+} from './MissionMcpEntityCommandTools.js';
 import type {
 	MissionMcpRegisteredSession,
 	MissionMcpSignalServer
 } from './MissionMcpSignalServer.js';
 import { MissionMcpAgentBridge } from './MissionMcpAgentBridge.js';
+import type { MissionMcpToolName } from './MissionMcpSessionRegistry.js';
 
 export type AgentSessionMcpAccessState =
 	| 'mcp-validated'
@@ -20,7 +23,8 @@ export type AgentSessionMcpRegistration = {
 	missionId: string;
 	taskId: string;
 	agentSessionId: string;
-	allowedTools: MissionMcpSignalToolName[];
+	allowedTools: MissionMcpToolName[];
+	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 	endpoint: string;
 };
 
@@ -66,7 +70,8 @@ export class AgentSessionMcpAccessProvisioner {
 		missionId: string;
 		taskId: string;
 		agentSessionId: string;
-		allowedTools: MissionMcpSignalToolName[];
+		allowedTools: MissionMcpToolName[];
+		allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 	}): Promise<AgentSessionMcpProvisioningResult> {
 		if (input.policy === 'disabled') {
 			return {
@@ -86,7 +91,10 @@ export class AgentSessionMcpAccessProvisioner {
 				missionId: input.missionId,
 				taskId: input.taskId,
 				agentSessionId: input.agentSessionId,
-				allowedTools: [...input.allowedTools]
+				allowedTools: [...input.allowedTools],
+				...(input.allowedEntityCommands ? {
+					allowedEntityCommands: input.allowedEntityCommands.map((command) => ({ ...command }))
+				} : {})
 			});
 
 			const registration = this.createRegistration(registeredSession);
@@ -122,6 +130,9 @@ export class AgentSessionMcpAccessProvisioner {
 			taskId: registeredSession.taskId,
 			agentSessionId: registeredSession.agentSessionId,
 			allowedTools: [...registeredSession.allowedTools],
+			...(registeredSession.allowedEntityCommands ? {
+				allowedEntityCommands: registeredSession.allowedEntityCommands.map((command) => ({ ...command }))
+			} : {}),
 			endpoint: registeredSession.endpoint
 		};
 	}

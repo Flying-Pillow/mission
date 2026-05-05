@@ -1,6 +1,5 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import Icon from "@iconify/svelte";
@@ -16,15 +15,12 @@
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
-    import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
-    import { isArtifactTextEditable } from "$lib/components/entities/Artifact/ArtifactPresentation.js";
-    import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
     import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
+    import Task from "$lib/components/entities/Task/Task.svelte";
     import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
@@ -86,12 +82,8 @@
     let missionViewError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
     let commandRefreshNonce = $state(0);
-    let artifactPanelMode = $state<"view" | "edit">("view");
     let leftPanelMode = $state<"mission" | "files">("mission");
-    let rightPanelMode = $state<"terminal" | "agent">("terminal");
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
-    let artifactPanelSourceKey = $state<string | null>(null);
-    let displayArtifact = $state<ArtifactEntity | undefined>(undefined);
     let missionViewRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
@@ -235,15 +227,47 @@
             ? activeMission.getTask(displayTaskId)
             : undefined,
     );
-    const showArtifactEditor = $derived.by(() => {
-        if (!displayArtifact) {
-            return false;
+    const displayArtifacts = $derived.by(() => {
+        if (!activeMission) {
+            return [];
         }
 
-        return (
-            artifactPanelMode === "edit" &&
-            isArtifactTextEditable(displayArtifact.bodyLocationLabel)
-        );
+        const artifacts = activeMission.listArtifacts();
+        const contextArtifacts = displayTask
+            ? [...displayTask.context]
+                  .sort(
+                      (left, right) =>
+                          left.selectionPosition - right.selectionPosition,
+                  )
+                  .map((contextArtifact) =>
+                      resolveContextArtifact(artifacts, contextArtifact.path),
+                  )
+                  .filter((artifact): artifact is (typeof artifacts)[number] =>
+                      Boolean(artifact),
+                  )
+            : [];
+        const taskArtifacts = displayTaskId
+            ? artifacts.filter(
+                  (candidate) => candidate.taskId === displayTaskId,
+              )
+            : [];
+        const stageArtifacts = displayStageId
+            ? artifacts.filter(
+                  (candidate) =>
+                      candidate.stageId === displayStageId && !candidate.taskId,
+              )
+            : [];
+        const artifactById = new Map<string, (typeof artifacts)[number]>();
+        for (const candidate of contextArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        for (const candidate of taskArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        for (const candidate of stageArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        return [...artifactById.values()];
     });
     const resolvedSession = $derived(
         selectionState.activeSessionId && activeMission
@@ -255,30 +279,6 @@
                 )
               : undefined,
     );
-
-    $effect(() => {
-        if (!missionView) {
-            return;
-        }
-
-        const activeSessionId = resolvedSession?.sessionId ?? null;
-        if (
-            activeSessionId &&
-            (selectionState.activeSessionId ||
-                selectionState.resolvedSelection?.taskId)
-        ) {
-            rightPanelMode = "agent";
-        }
-    });
-
-    $effect(() => {
-        if (!activeMission || !activeArtifactSelection) {
-            displayArtifact = undefined;
-            return;
-        }
-
-        displayArtifact = activeMission.getArtifact(activeArtifactSelection);
-    });
 
     $effect(() => {
         if (!selectedNodeId) {
@@ -296,16 +296,6 @@
         }
 
         appContext.setActiveMissionOutline(missionOutline);
-    });
-
-    $effect(() => {
-        const nextSourceKey = activeArtifactSelection ?? null;
-        if (artifactPanelSourceKey === nextSourceKey) {
-            return;
-        }
-
-        artifactPanelSourceKey = nextSourceKey;
-        artifactPanelMode = "view";
     });
 
     $effect(() => {
@@ -359,6 +349,36 @@
             default:
                 return "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300";
         }
+    }
+
+    function resolveContextArtifact<
+        T extends {
+            filePath?: string;
+            relativePath?: string;
+            fileName: string;
+        },
+    >(artifacts: T[], contextPath: string): T | undefined {
+        const normalizedContextPath = normalizeArtifactPath(contextPath);
+        return artifacts.find((artifact) => {
+            const artifactPaths = [
+                artifact.relativePath,
+                artifact.filePath,
+                artifact.fileName,
+            ]
+                .filter((path): path is string => Boolean(path))
+                .map(normalizeArtifactPath);
+
+            return artifactPaths.some(
+                (artifactPath) =>
+                    artifactPath === normalizedContextPath ||
+                    normalizedContextPath.endsWith(`/${artifactPath}`) ||
+                    artifactPath.endsWith(`/${normalizedContextPath}`),
+            );
+        });
+    }
+
+    function normalizeArtifactPath(value: string): string {
+        return value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
     }
 
     async function refreshMissionView(): Promise<void> {
@@ -502,21 +522,6 @@
 
     function handleSelectWorktreeNode(node: MissionFileTreeNode): void {
         selectedWorktreeNode = node.kind === "file" ? node : null;
-    }
-
-    function handleEditArtifact(): void {
-        if (
-            !displayArtifact ||
-            !isArtifactTextEditable(displayArtifact.bodyLocationLabel)
-        ) {
-            return;
-        }
-
-        artifactPanelMode = "edit";
-    }
-
-    function handleCloseArtifactEditor(): void {
-        artifactPanelMode = "view";
     }
 
     function resolvePreferredTaskSession(
@@ -836,11 +841,6 @@
                     <div
                         class="flex items-start gap-2 self-start xl:justify-end"
                     >
-                        <MissionCommandbar
-                            refreshNonce={commandRefreshNonce}
-                            mission={activeMission}
-                            onCommandExecuted={handleMissionMutated}
-                        />
                         <Button
                             type="button"
                             variant="outline"
@@ -893,6 +893,14 @@
                     class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
                 >
                     <div class="border-b">
+                        <div class="border-b p-2">
+                            <MissionCommandbar
+                                refreshNonce={commandRefreshNonce}
+                                mission={activeMission}
+                                onCommandExecuted={handleMissionMutated}
+                            />
+                        </div>
+
                         <Tabs.List class="w-full">
                             <Tabs.Trigger value="mission"
                                 >Mission Tree</Tabs.Trigger
@@ -933,68 +941,43 @@
             <ResizableHandle withHandle />
 
             <ResizablePane
-                defaultSize={38}
+                defaultSize={76}
                 minSize={24}
                 class="flex h-full min-h-0 flex-col"
             >
-                {#if showArtifactEditor}
-                    <ArtifactEditor
-                        artifact={displayArtifact}
-                        onCloseRequested={handleCloseArtifactEditor}
-                    />
-                {:else}
-                    <ArtifactViewer
-                        refreshNonce={commandRefreshNonce}
-                        artifact={displayArtifact}
-                        task={displayTask}
-                        onEditRequested={handleEditArtifact}
-                        onCommandExecuted={handleMissionMutated}
-                    />
-                {/if}
-            </ResizablePane>
-
-            <ResizableHandle withHandle />
-
-            <ResizablePane
-                defaultSize={38}
-                minSize={24}
-                class="flex h-full min-h-0 flex-col"
-            >
-                <Tabs.Root
-                    bind:value={rightPanelMode}
-                    class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
+                <ResizablePaneGroup
+                    direction="vertical"
+                    class="min-h-0 flex-1 overflow-hidden"
+                    autoSaveId={`mission-panel:${missionId}`}
                 >
-                    <div class="border-b">
-                        <Tabs.List class="w-full">
-                            <Tabs.Trigger value="terminal"
-                                >Mission Terminal</Tabs.Trigger
-                            >
-                            <Tabs.Trigger value="agent"
-                                >Agent Session</Tabs.Trigger
-                            >
-                        </Tabs.List>
-                    </div>
+                    <ResizablePane
+                        defaultSize={68}
+                        minSize={35}
+                        class="flex h-full min-h-0 flex-col"
+                    >
+                        <Task
+                            refreshNonce={commandRefreshNonce}
+                            agentRunners={activeRepository?.data.settings
+                                .agentRunners ?? []}
+                            artifacts={displayArtifacts}
+                            selectedArtifactId={activeArtifactSelection}
+                            task={displayTask}
+                            session={resolvedSession}
+                            onCommandExecuted={handleMissionMutated}
+                        />
+                    </ResizablePane>
 
-                    <div class="relative min-h-0 flex-1 overflow-hidden p-0">
-                        {#if rightPanelMode === "terminal"}
-                            <div
-                                class="absolute inset-0 min-h-0 overflow-hidden"
-                            >
-                                <MissionTerminal />
-                            </div>
-                        {:else}
-                            <div
-                                class="absolute inset-0 min-h-0 overflow-hidden"
-                            >
-                                <AgentSession
-                                    refreshNonce={commandRefreshNonce}
-                                    session={resolvedSession}
-                                    onCommandExecuted={handleMissionMutated}
-                                />
-                            </div>
-                        {/if}
-                    </div>
-                </Tabs.Root>
+                    <ResizableHandle withHandle />
+
+                    <ResizablePane
+                        defaultSize={32}
+                        minSize={18}
+                        maxSize={60}
+                        class="flex h-full min-h-0 flex-col border bg-card/70 backdrop-blur-sm"
+                    >
+                        <MissionTerminal />
+                    </ResizablePane>
+                </ResizablePaneGroup>
             </ResizablePane>
         </ResizablePaneGroup>
     {/if}

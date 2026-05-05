@@ -171,7 +171,7 @@ async function handleTerminalConnection(
                         data: message.data,
                         ...(message.literal !== undefined ? { literal: message.literal } : {})
                     }
-                }).catch(() => {});
+                }).catch(() => { });
                 return;
             }
             const nextState = AgentSessionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
@@ -338,14 +338,7 @@ async function handleMissionTerminalConnection(
         const hasChunk = typeof state.chunk === 'string' && state.chunk.length > 0;
 
         if (hasChunk && !nextDisconnected) {
-            sendOutput({
-                missionId,
-                chunk: state.chunk,
-                dead: state.dead,
-                exitCode: state.dead ? state.exitCode : null,
-                ...(state.truncated ? { truncated: true } : {}),
-                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
-            });
+            sendOutput(state);
         } else {
             sendSnapshot(state, nextDisconnected ? 'disconnected' : 'snapshot');
         }
@@ -366,7 +359,7 @@ async function handleMissionTerminalConnection(
                         data: message.data,
                         ...(message.literal !== undefined ? { literal: message.literal } : {})
                     }
-                }).catch(() => {});
+                }).catch(() => { });
                 return;
             }
             const nextState = MissionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {

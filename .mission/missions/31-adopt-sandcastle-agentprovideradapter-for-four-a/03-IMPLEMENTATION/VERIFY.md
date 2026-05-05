@@ -116,7 +116,7 @@ Branch: mission/31-adopt-sandcastle-agentprovideradapter-for-four-a
 - **Result:** **Failed**
 - **Checks:**
   - Confirmed the Mission-owned signal boundary distinguishes the required sources explicitly in `packages/core/src/daemon/runtime/agent/signals/AgentSessionSignal.ts`: `mcp-validated`, `provider-structured`, `agent-declared`, and `terminal-heuristic`, each with explicit confidence levels and decision outcomes.
-  - Confirmed `MissionProtocolMarkerParser` accepts only strict `MISSION_SIGNAL::` markers, schema-validates the claimed Mission scope plus supported signal shapes, and downgrades malformed or oversized markers to `diagnostic` observations instead of promotable workflow truth.
+  - Confirmed `MissionProtocolMarkerParser` accepts only strict `mission::` markers, schema-validates the claimed Mission scope plus supported signal shapes, and downgrades malformed or oversized markers to `diagnostic` observations instead of promotable workflow truth.
   - Confirmed `ProviderOutputSignalParser` preserves provider-structured messages and usage as high-confidence observations, but converts provider session and tool-call output into diagnostics only, so provider parsing does not directly claim progress, verification, completion, or failure authority.
   - Confirmed `AgentSessionObservationRouter` keeps origins distinguishable at routing time, trusts strict markers only from stdout, routes MCP signals through the MCP boundary, and reduces terminal heuristics to diagnostic observations instead of promotable state.
   - Confirmed `AgentSessionSignalPolicy` is the only component in this slice that can return `update-session`, `emit-message`, `record-observation-only`, or `reject`, and its validation rejects scope mismatches, duplicate observations, source/origin mismatches, unsupported type/origin combinations, confidence spoofing, oversized payloads, and promotable claims after session end.
@@ -208,7 +208,7 @@ Branch: mission/31-adopt-sandcastle-agentprovideradapter-for-four-a
 - **Result:** **Focused MCP provisioning checks passed; required package test gate still fails outside this slice**
 - **Checks:**
   - Confirmed `AgentSessionMcpAccessProvisioner` remains the daemon-owned access boundary: it starts the local signal server, registers the session before materialization, injects Mission/session identity through `MissionMcpAgentBridge.createLaunchEnv(...)`, merges that identity into the returned `launchEnv`, and unregisters the session on degraded provisioning, cleanup, and materialization failure.
-  - Confirmed the supported runner materializers stay runner-specific rather than assuming a universal MCP client config: Claude writes `.mcp.json` with `mcpServers.mission_signal` plus env placeholders only, Codex appends a managed `[mcp_servers.mission_signal]` block to `.codex/config.toml`, and OpenCode targets `opencode.json`, `opencode.jsonc`, or legacy `.opencode.json` with the current or legacy shape as appropriate.
+  - Confirmed the supported runner materializers stay runner-specific rather than assuming a universal MCP client config: Claude writes `.mcp.json` with `mcpServers.mission` plus env placeholders only, Codex appends a managed `[mcp_servers.mission]` block to `.codex/config.toml`, and OpenCode targets `opencode.json`, `opencode.jsonc`, or legacy `.opencode.json` with the current or legacy shape as appropriate.
   - Confirmed Pi remains explicitly unavailable until proven: `PiMcpConfigMaterializer.detectSupport()` returns `supported: false` with an availability reason, and optional provisioning returns `mcp-unavailable` without launch env, generated files, or server registration.
   - Confirmed required versus optional provisioning stays honest: unsupported runners and materialization failures raise `AgentSessionMcpProvisioningError` when policy is `required`, while optional sessions degrade to `mcp-unavailable` or `mcp-degraded` with an explicit reason instead of looking like validated launch success.
   - Confirmed unsupported capability is surfaced instead of leaked through partial launch state: if a materializer returns anything other than `mcp-validated`, the provisioner runs materializer cleanup, unregisters the session, clears generated files and launch env, and reports the degraded state explicitly.
@@ -229,9 +229,9 @@ Branch: mission/31-adopt-sandcastle-agentprovideradapter-for-four-a
 - **Paired task:** `implementation/06-agent-skill-protocol-and-launch-instructions`
 - **Result:** **Focused protocol checks passed; required package test gate still fails outside this slice**
 - **Checks:**
-  - Confirmed `.agents/skills/mission-agent-runtime-protocol/SKILL.md` defines the required MCP-first behavior, names the local `mission_signal` server, enumerates the Mission MCP tools, requires the `missionId` / `taskId` / `agentSessionId` / `eventId` envelope on every MCP call, and states that MCP acknowledgements, fallback markers, `ready_for_verification`, and `completed_claim` are advisory rather than deterministic verification proof.
-  - Confirmed the Skill requires the exact fallback marker prefix `MISSION_SIGNAL::`, followed immediately by strict same-line JSON containing `version`, `missionId`, `taskId`, `agentSessionId`, `eventId`, and `signal`, with the supported signal payloads limited to `progress`, `needs_input`, `blocked`, `ready_for_verification`, `completed_claim`, `failed_claim`, and `message`.
-  - Confirmed `packages/core/src/daemon/runtime/agent/signals/MissionProtocolMarkerParser.ts` enforces that exact marker boundary in code: markers must start with `MISSION_SIGNAL::`, parse as strict JSON, satisfy the bounded schema, and malformed or oversized markers are downgraded to diagnostics instead of being accepted as authoritative state.
+  - Confirmed `.agents/skills/mission-agent-runtime-protocol/SKILL.md` defines the required MCP-first behavior, names the local `mission` server, enumerates the Mission MCP tools, requires the `missionId` / `taskId` / `agentSessionId` / `eventId` envelope on every MCP call, and states that MCP acknowledgements, fallback markers, `ready_for_verification`, and `completed_claim` are advisory rather than deterministic verification proof.
+  - Confirmed the Skill requires the exact fallback marker prefix `mission::`, followed immediately by strict same-line JSON containing `version`, `missionId`, `taskId`, `agentSessionId`, `eventId`, and `signal`, with the supported signal payloads limited to `progress`, `needs_input`, `blocked`, `ready_for_verification`, `completed_claim`, `failed_claim`, and `message`.
+  - Confirmed `packages/core/src/daemon/runtime/agent/signals/MissionProtocolMarkerParser.ts` enforces that exact marker boundary in code: markers must start with `mission::`, parse as strict JSON, satisfy the bounded schema, and malformed or oversized markers are downgraded to diagnostics instead of being accepted as authoritative state.
   - Confirmed `packages/core/src/daemon/runtime/agent/signals/AgentSessionSignalPolicy.ts` keeps agent claims observational: `ready_for_verification` returns `record-observation-only` with the reason `Ready-for-verification claims are not deterministic verification authority.`, and non-authoritative `completed_claim` returns `record-observation-only` with the reason `Completion claims stay observational unless the daemon is authoritative.`
   - Confirmed `packages/core/src/daemon/runtime/agent/mcp/MissionAgentRuntimeProtocolLaunchContext.ts` consumes provisioner output honestly: `mcp-validated` sessions pass through the provisioned `launchEnv` and emit MCP-first instructions, while `mcp-degraded` / `mcp-unavailable` sessions drop `launchEnv`, surface the degraded reason in session instructions, and switch guidance to lower-confidence fallback markers scoped to the provided mission/task/session ids.
   - Confirmed `packages/core/src/daemon/runtime/agent/mcp/AgentSessionMcpAccessProvisioner.ts` and its focused tests preserve the same honesty boundary upstream: only `mcp-validated` materialization returns launch env, while optional degraded or unavailable provisioning clears launch env/generated files and reports explicit `mcp-degraded` / `mcp-unavailable` reasons instead of implying unsupported MCP capability.
@@ -324,6 +324,30 @@ Branch: mission/31-adopt-sandcastle-agentprovideradapter-for-four-a
   - `pnpm --filter @flying-pillow/mission-core test` does **not** satisfy this task's validation gate in the current workspace: the run ends with 6 failing tests across `src/system/SystemStatus.test.ts` and `src/entities/Repository/Repository.test.ts`. Those failures are outside the MCP simplification slice verified here.
 - **Fixes applied:** None. Verification only.
 - **Ignored unrelated failures:** None.
+
+### `verification/09-documentation-and-final-cleanup-verify`
+
+- **Paired task:** `implementation/09-documentation-and-final-cleanup`
+- **Result:** **Focused MCP command architecture checks passed; required package test gate still fails outside this slice**
+- **Checks:**
+  - Confirmed agent MCP launch config now uses the dedicated local bridge executable `mission-command` rather than the Airport-facing `mission` CLI with `mcp agent-bridge` arguments.
+  - Confirmed the daemon-owned MCP singleton still owns session registration, local-only endpoint health, duplicate `eventId` protection, and signal routing through `PolicyBoundAgentSessionSignalPort`.
+  - Confirmed MCP now includes `mission_entity_command` alongside the existing signal tools, and Entity command execution is allowlisted per Agent session.
+  - Confirmed `mission_entity_command` delegates through an injected `executeEntityCommand` function at the MCP boundary, with the daemon wiring that function to canonical Entity command execution instead of duplicating Task, AgentSession, Artifact, or Mission behavior.
+  - Confirmed `mission-command` is a local stdio MCP bridge that serves `initialize`, `tools/list`, and `tools/call`, then forwards tool operations to the daemon over local IPC through `mcp.tools.list` and `mcp.tool.invoke`.
+  - Confirmed Entity command scope is checked against the MCP envelope: command `missionId` must match the registered Mission, Task commands must target the registered task, and AgentSession commands must target the registered Agent session.
+  - Confirmed runner provisioning includes the entity-command tool and default allowlist entries for `Task.command`, `AgentSession.command`, and `Artifact.command`, while command ids can still be narrowed by registration.
+  - Confirmed launch instructions now tell agents that Mission MCP supports both structured signals and allowlisted Entity commands, and list `mission_entity_command` as an available tool.
+  - Ran `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core build`, `pnpm --filter @flying-pillow/mission check`, `pnpm --filter @flying-pillow/mission build`, a built `mission-command` initialize smoke test, and the focused MCP/runner test command.
+- **Validation note:**
+  - `pnpm --filter @flying-pillow/mission-core check` passes.
+  - `pnpm --filter @flying-pillow/mission-core build` passes.
+  - `pnpm --filter @flying-pillow/mission check` passes after rebuilding `@flying-pillow/mission-core` so the CLI package sees the new daemon MCP IPC method types.
+  - `pnpm --filter @flying-pillow/mission build` passes.
+  - Built `mission-command` responds to MCP `initialize` over stdio with server name `mission` and tool capability metadata.
+  - The focused MCP/runner test command reports no failures in the changed MCP/runner files, but the package test runner still executes broader suites and fails outside this slice: `src/system/SystemStatus.test.ts`, `src/entities/Repository/Repository.test.ts`, and `src/workflow/engine/workflowEngine.e2e.test.ts`.
+- **Fixes applied:** Added local MCP Entity command support, changed the bridge command to `mission-command`, added the `mission-command` stdio bridge binary entrypoint, exposed daemon-local MCP IPC methods, and updated task 09 architecture notes.
+- **Ignored unrelated failures:** Current package test failures in SystemStatus, Repository, and workflow e2e are outside this MCP command architecture change.
 
 ## Gaps
 

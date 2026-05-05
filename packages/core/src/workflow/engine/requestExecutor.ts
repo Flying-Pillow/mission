@@ -7,6 +7,7 @@ import {
 } from '../../entities/Mission/MissionSchema.js';
 import type { AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
+import { appendTaskContextArtifactReferences } from '../../entities/Task/taskLaunchPrompt.js';
 import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
@@ -757,6 +758,7 @@ export class MissionWorkflowRequestExecutor {
 					...(task.taskKind ? { taskKind: task.taskKind } : {}),
 					...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
 					...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
+					...(task.context && task.context.length > 0 ? { context: task.context } : {}),
 					agent: task.agentRunner ?? DEFAULT_AGENT_RUNNER_ID
 				}
 			);
@@ -775,7 +777,8 @@ export class MissionWorkflowRequestExecutor {
 			instruction: taskState.instruction,
 			...(taskState.taskKind ? { taskKind: taskState.taskKind } : {}),
 			...(taskState.pairedTaskId ? { pairedTaskId: taskState.pairedTaskId } : {}),
-			dependsOn: [...taskState.dependsOn]
+			dependsOn: [...taskState.dependsOn],
+			context: (taskState.context ?? []).map((contextArtifact) => ({ ...contextArtifact }))
 		}));
 	}
 
@@ -854,6 +857,7 @@ function buildTaskArtifactLaunchPrompt(task: MissionTaskState, missionWorkspaceD
 		`Here are your instructions: @${task.filePath}`,
 		'That task file is authoritative.'
 	];
+	appendTaskContextArtifactReferences(lines, task.context);
 
 	if (instruction.length > 0) {
 		lines.push('', 'Task summary:', instruction);
@@ -874,6 +878,7 @@ function buildRuntimeTaskLaunchPrompt(
 		`Perform the task exactly as specified in <${artifactName}>.`,
 		`Open @${artifactName} and use it as the authoritative task instruction file.`
 	];
+	appendTaskContextArtifactReferences(lines, task.context);
 
 	const instruction = task.instruction.trim();
 	if (instruction.length > 0) {

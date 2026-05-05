@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { MissionAgentRunnerSchema, MissionReasoningEffortSchema } from '../entities/Mission/MissionSchema.js';
 import { StageIdSchema } from '../entities/Stage/StageSchema.js';
-import { TaskIdSchema } from '../entities/Task/TaskSchema.js';
+import { TaskContextArtifactReferenceSchema, TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
 export type WorkflowSettingsValidationError = {
 	code: string;
@@ -42,6 +42,7 @@ export const WorkflowGeneratedTaskDefinitionSchema = z.object({
 	taskKind: z.enum(['implementation', 'verification']).optional(),
 	pairedTaskId: TaskIdSchema.optional(),
 	dependsOn: z.array(TaskIdSchema),
+	context: z.array(TaskContextArtifactReferenceSchema).optional(),
 	agentRunner: MissionAgentRunnerSchema.optional()
 }).strict();
 

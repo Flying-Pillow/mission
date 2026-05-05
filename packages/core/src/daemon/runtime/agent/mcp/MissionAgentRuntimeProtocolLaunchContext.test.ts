@@ -34,7 +34,8 @@ describe('MissionAgentRuntimeProtocolLaunchContext', () => {
 		expect(context.mcpAccessState).toBe('mcp-validated');
 		expect(context.sessionInstructions).toContain('Mission MCP is available for this session');
 		expect(context.sessionInstructions).toContain('MISSION_MCP_ENDPOINT');
-		expect(context.sessionInstructions).toContain('mission mcp agent-bridge');
+		expect(context.sessionInstructions).toContain('mission-command');
+		expect(context.sessionInstructions).toContain('mission_entity_command');
 		expect(context.sessionInstructions).toContain('mission_report_progress');
 		expect(context.sessionInstructions).toContain('mission_report_completion_claim');
 		expect(context.sessionInstructions).toContain('do not prove verification or completion');

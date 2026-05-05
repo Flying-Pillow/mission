@@ -8,6 +8,7 @@ import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/en
 
 export type ArtifactDependencies = {
     body(id: string, input?: ArtifactReadOptions): Promise<ArtifactBodyType>;
+    bodyForRender(id: string): unknown;
     commandBody(id: string, body: ArtifactBodyType): Promise<ArtifactCommandAcknowledgementType>;
 };
 
@@ -111,6 +112,10 @@ export class Artifact implements EntityModel<ArtifactDataType> {
 
     public async read(input: ArtifactReadOptions = {}): Promise<ArtifactBodyType> {
         return this.dependencies.body(this.id, input);
+    }
+
+    public readForRender(): unknown {
+        return this.dependencies.bodyForRender(this.id);
     }
 
     public async refreshBody(input: ArtifactReadOptions = {}): Promise<ArtifactBodyType> {

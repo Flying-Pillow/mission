@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { AgentSessionTerminalHandleSchema, type AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import { MissionReasoningEffortSchema, type MissionAgentRunnerType, type MissionReasoningEffortType } from '../../entities/Mission/MissionSchema.js';
+import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../../entities/Task/TaskSchema.js';
 import {
     WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
@@ -118,6 +119,7 @@ export const MissionTaskRuntimeStateSchema = z.object({
     taskKind: z.enum(['implementation', 'verification']).optional(),
     pairedTaskId: nonEmptyStringSchema.optional(),
     dependsOn: z.array(nonEmptyStringSchema),
+    context: z.array(TaskContextArtifactReferenceSchema).optional(),
     lifecycle: z.enum(MISSION_TASK_LIFECYCLE_STATES),
     waitingOnTaskIds: z.array(nonEmptyStringSchema),
     runtime: MissionTaskRuntimeSettingsSchema,
@@ -155,6 +157,8 @@ export const MissionTaskLaunchRequestSchema = z.object({
     runnerId: nonEmptyStringSchema.optional(),
     prompt: z.string().optional(),
     workingDirectory: nonEmptyStringSchema.optional(),
+    model: nonEmptyStringSchema.optional(),
+    reasoningEffort: MissionReasoningEffortSchema.optional(),
     terminalSessionName: nonEmptyStringSchema.optional(),
     dispatchedAt: nonEmptyStringSchema.optional()
 }).strict();
@@ -257,6 +261,7 @@ export interface MissionGeneratedTaskPayload {
     taskKind?: 'implementation' | 'verification';
     pairedTaskId?: string;
     dependsOn: string[];
+    context?: TaskContextArtifactReferenceType[];
     agentRunner?: MissionAgentRunnerType;
 }
 
@@ -299,12 +304,23 @@ export interface TaskLaunchPolicyChangedEvent extends MissionWorkflowEventBase {
     autostart: boolean;
 }
 
+export interface TaskConfiguredEvent extends MissionWorkflowEventBase {
+    type: 'task.configured';
+    taskId: string;
+    agentRunner?: string;
+    model?: string | null;
+    reasoningEffort?: MissionReasoningEffortType | null;
+    context?: TaskContextArtifactReferenceType[];
+}
+
 export interface TaskQueuedEvent extends MissionWorkflowEventBase {
     type: 'task.queued';
     taskId: string;
     runnerId?: string;
     prompt?: string;
     workingDirectory?: string;
+    model?: string;
+    reasoningEffort?: MissionReasoningEffortType;
     terminalSessionName?: string;
 }
 
@@ -383,6 +399,7 @@ export type MissionWorkflowEvent =
     | MissionDeliveredEvent
     | TasksGeneratedEvent
     | TaskLaunchPolicyChangedEvent
+    | TaskConfiguredEvent
     | TaskQueuedEvent
     | TaskStartedEvent
     | TaskMarkedDoneEvent

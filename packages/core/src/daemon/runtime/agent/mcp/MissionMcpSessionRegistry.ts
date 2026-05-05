@@ -7,12 +7,22 @@ import {
 	missionMcpSignalEnvelopeSchema,
 	missionMcpSignalToolNameSchema
 } from './MissionMcpSignalTools.js';
+import {
+	missionMcpAllowedEntityCommandSchema,
+	missionMcpEntityCommandToolName,
+	type MissionMcpAllowedEntityCommand,
+	type MissionMcpEntityCommandEnvelope,
+	type MissionMcpEntityCommandToolName
+} from './MissionMcpEntityCommandTools.js';
+
+export type MissionMcpToolName = MissionMcpSignalToolName | MissionMcpEntityCommandToolName;
 
 export type MissionMcpSessionRegistration = {
 	missionId: string;
 	taskId: string;
 	agentSessionId: string;
-	allowedTools: MissionMcpSignalToolName[];
+	allowedTools: MissionMcpToolName[];
+	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 };
 
 type MissionMcpSessionRegistryEntry = {
@@ -25,7 +35,11 @@ const missionMcpSessionRegistrationSchema = missionMcpSignalEnvelopeSchema.pick(
 	taskId: true,
 	agentSessionId: true
 }).extend({
-	allowedTools: z.array(missionMcpSignalToolNameSchema)
+	allowedTools: z.array(z.union([
+		missionMcpSignalToolNameSchema,
+		z.literal(missionMcpEntityCommandToolName)
+	])),
+	allowedEntityCommands: z.array(missionMcpAllowedEntityCommandSchema).optional()
 }).strict();
 
 export class MissionMcpSessionRegistry {
@@ -54,7 +68,7 @@ export class MissionMcpSessionRegistry {
 
 	public authorizeTool(input: {
 		envelope: MissionMcpSignalEnvelope;
-		toolName: MissionMcpSignalToolName;
+		toolName: MissionMcpToolName;
 	}): { ok: true; registration: MissionMcpSessionRegistration } | { ok: false; reason: string } {
 		const entry = this.registrations.get(input.envelope.agentSessionId);
 		if (!entry) {
@@ -93,6 +107,28 @@ export class MissionMcpSessionRegistry {
 		};
 	}
 
+	public authorizeEntityCommand(input: {
+		envelope: MissionMcpEntityCommandEnvelope;
+		toolName: MissionMcpEntityCommandToolName;
+		entity: string;
+		method: string;
+		commandId?: string;
+	}): { ok: true; registration: MissionMcpSessionRegistration } | { ok: false; reason: string } {
+		const toolAuthorization = this.authorizeTool(input);
+		if (!toolAuthorization.ok) {
+			return toolAuthorization;
+		}
+		if (!toolAuthorization.registration.allowedEntityCommands?.some((allowedCommand) =>
+			matchesAllowedEntityCommand(allowedCommand, input)
+		)) {
+			return {
+				ok: false,
+				reason: `Entity command '${input.entity}.${input.method}${input.commandId ? `:${input.commandId}` : ''}' is not allowed for session '${input.envelope.agentSessionId}'.`
+			};
+		}
+		return toolAuthorization;
+	}
+
 	public rememberEvent(agentSessionId: string, eventId: string): void {
 		const entry = this.registrations.get(agentSessionId);
 		if (!entry) {
@@ -112,7 +148,10 @@ function parseRegistration(input: MissionMcpSessionRegistration): MissionMcpSess
 		missionId: parsed.data.missionId,
 		taskId: parsed.data.taskId,
 		agentSessionId: parsed.data.agentSessionId,
-		allowedTools: [...new Set(parsed.data.allowedTools)]
+		allowedTools: [...new Set(parsed.data.allowedTools)],
+		...(parsed.data.allowedEntityCommands ? {
+			allowedEntityCommands: dedupeAllowedEntityCommands(parsed.data.allowedEntityCommands)
+		} : {})
 	};
 }
 
@@ -121,8 +160,34 @@ function cloneRegistration(input: MissionMcpSessionRegistration): MissionMcpSess
 		missionId: input.missionId,
 		taskId: input.taskId,
 		agentSessionId: input.agentSessionId,
-		allowedTools: [...input.allowedTools]
+		allowedTools: [...input.allowedTools],
+		...(input.allowedEntityCommands ? {
+			allowedEntityCommands: input.allowedEntityCommands.map((command) => ({ ...command }))
+		} : {})
 	};
+}
+
+function matchesAllowedEntityCommand(
+	allowedCommand: MissionMcpAllowedEntityCommand,
+	input: { entity: string; method: string; commandId?: string }
+): boolean {
+	return allowedCommand.entity === input.entity
+		&& allowedCommand.method === input.method
+		&& (!allowedCommand.commandId || allowedCommand.commandId === input.commandId);
+}
+
+function dedupeAllowedEntityCommands(
+	commands: MissionMcpAllowedEntityCommand[]
+): MissionMcpAllowedEntityCommand[] {
+	const seen = new Set<string>();
+	const deduped: MissionMcpAllowedEntityCommand[] = [];
+	for (const command of commands) {
+		const key = `${command.entity}\u0000${command.method}\u0000${command.commandId ?? ''}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		deduped.push({ ...command });
+	}
+	return deduped;
 }
 
 function formatZodIssues(issues: z.core.$ZodIssue[]): string {

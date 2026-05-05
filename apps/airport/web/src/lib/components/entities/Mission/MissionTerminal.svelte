@@ -397,7 +397,7 @@
     </header>
 
     <div class="flex-1 min-h-0">
-        <div class="h-full min-h-[24rem] overflow-hidden">
+        <div class="h-full min-h-0 overflow-hidden">
             <div class="h-full min-h-0 overflow-hidden bg-slate-950 px-2 py-2">
                 <div bind:this={container} class="h-full w-full min-h-0"></div>
             </div>

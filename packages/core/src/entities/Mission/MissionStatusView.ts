@@ -86,6 +86,7 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 				...task,
 				title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 				dependsOn: [...task.dependsOn],
+				context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 				waitingOnTaskIds: [...task.waitingOnTaskIds],
 				runtime: { ...task.runtime }
 			})),

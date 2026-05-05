@@ -17,6 +17,7 @@ import type {
     MissionTemplateContextInput
 } from './types.js';
 import type { MissionTaskAgent, MissionTaskStatus } from '../../../entities/Mission/MissionSchema.js';
+import { TaskContextArtifactReferenceSchema } from '../../../entities/Task/TaskSchema.js';
 
 const packagedTemplateDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +60,7 @@ export async function renderMissionTaskTemplate(
     const taskKindAttr = document.attributes['taskKind'];
     const pairedTaskIdAttr = document.attributes['pairedTaskId'];
     const dependsOnAttr = document.attributes['dependsOn'];
+    const contextAttr = document.attributes['context'];
     const statusAttr = document.attributes['status'];
     const retriesAttr = document.attributes['retries'];
 
@@ -71,6 +73,10 @@ export async function renderMissionTaskTemplate(
 
     if (Array.isArray(dependsOnAttr)) {
         result.dependsOn = dependsOnAttr.map(String);
+    }
+
+    if (Array.isArray(contextAttr)) {
+        result.context = contextAttr.map((entry) => TaskContextArtifactReferenceSchema.parse(entry));
     }
 
     if (taskKindAttr === 'implementation' || taskKindAttr === 'verification') {
