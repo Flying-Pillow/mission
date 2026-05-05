@@ -73,13 +73,20 @@ export async function sendAgentSessionTerminalInput(input: {
         return resolved ? createAgentSessionTerminalState(resolved) : null;
     }
 
-    if (typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0) {
-        await agentSessionTerminalTransport.sendKeys(resolved.handle, input.terminalInput.data, {
+    const isKeyboardInput = typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0;
+    const isResize = input.terminalInput.cols && input.terminalInput.rows;
+
+    if (isKeyboardInput) {
+        await agentSessionTerminalTransport.sendKeys(resolved.handle, input.terminalInput.data!, {
             ...(input.terminalInput.literal !== undefined ? { literal: input.terminalInput.literal } : {})
         });
     }
-    if (input.terminalInput.cols && input.terminalInput.rows) {
-        await agentSessionTerminalTransport.resizeSession(resolved.handle, input.terminalInput.cols, input.terminalInput.rows);
+    if (isResize) {
+        await agentSessionTerminalTransport.resizeSession(resolved.handle, input.terminalInput.cols!, input.terminalInput.rows!);
+    }
+
+    if (isKeyboardInput && !isResize) {
+        return null;
     }
 
     return createAgentSessionTerminalState(resolved);

@@ -247,7 +247,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	public async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
 		const input = MissionSendTerminalInputSchema.parse(payload);
 		const missionId = this.assertResolvedMissionId(input.missionId);
-		const { sendMissionTerminalInput } = await import('../../daemon/MissionTerminal.js');
+		const { sendMissionTerminalInput, readMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
 		const state = await sendMissionTerminalInput({
 			surfacePath: context.surfacePath,
 			selector: { missionId },
@@ -259,7 +259,11 @@ export class Mission extends Entity<MissionDataType, string> {
 			}
 		});
 		if (!state) {
-			throw new Error(`Mission terminal for '${missionId}' is not available.`);
+			const fallbackState = await readMissionTerminalState({ surfacePath: context.surfacePath, selector: { missionId } });
+			if (!fallbackState) {
+				throw new Error(`Mission terminal for '${missionId}' is not available.`);
+			}
+			return Mission.parseTerminalSnapshot(missionId, fallbackState);
 		}
 		return Mission.parseTerminalSnapshot(missionId, state);
 	}

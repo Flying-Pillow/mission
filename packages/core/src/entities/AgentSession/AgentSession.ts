@@ -188,7 +188,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 
 	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentSessionSendTerminalInputSchema.parse(payload);
-		const { sendAgentSessionTerminalInput } = await import('../../daemon/AgentSessionTerminal.js');
+		const { sendAgentSessionTerminalInput, readAgentSessionTerminalState } = await import('../../daemon/AgentSessionTerminal.js');
 		const data = await AgentSession.requireDataForLocator(input, context);
 		const state = await sendAgentSessionTerminalInput({
 			record: AgentSession.createTerminalRuntimeRecord(context.surfacePath, input.missionId, data),
@@ -201,7 +201,23 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			}
 		});
 		if (!state) {
-			throw new Error(`AgentSession terminal for '${input.sessionId}' is not available.`);
+			const fallbackState = await readAgentSessionTerminalState({
+				record: AgentSession.createTerminalRuntimeRecord(context.surfacePath, input.missionId, data)
+			});
+			if (!fallbackState) {
+				throw new Error(`AgentSession terminal for '${input.sessionId}' is not available.`);
+			}
+			return AgentSessionTerminalSnapshotSchema.parse({
+				missionId: input.missionId,
+				sessionId: input.sessionId,
+				connected: fallbackState.connected,
+				dead: fallbackState.dead,
+				exitCode: fallbackState.dead ? fallbackState.exitCode : null,
+				screen: fallbackState.screen,
+				...(fallbackState.chunk ? { chunk: fallbackState.chunk } : {}),
+				...(fallbackState.truncated ? { truncated: true } : {}),
+				...(fallbackState.terminalHandle ? { terminalHandle: fallbackState.terminalHandle } : {})
+			});
 		}
 		return AgentSessionTerminalSnapshotSchema.parse({
 			missionId: input.missionId,

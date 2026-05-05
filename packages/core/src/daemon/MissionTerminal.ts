@@ -82,10 +82,13 @@ export async function sendMissionTerminalInput(input: {
         return null;
     }
 
-    if (typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0) {
+    const isKeyboardInput = typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0;
+    const isResize = input.terminalInput.cols && input.terminalInput.rows;
+
+    if (isKeyboardInput) {
         await missionTerminalTransport.sendKeys(
             resolved.handle,
-            input.terminalInput.data,
+            input.terminalInput.data!,
             {
                 ...(input.terminalInput.literal !== undefined
                     ? { literal: input.terminalInput.literal }
@@ -93,12 +96,16 @@ export async function sendMissionTerminalInput(input: {
             }
         );
     }
-    if (input.terminalInput.cols && input.terminalInput.rows) {
+    if (isResize) {
         await missionTerminalTransport.resizeSession(
             resolved.handle,
-            input.terminalInput.cols,
-            input.terminalInput.rows
+            input.terminalInput.cols!,
+            input.terminalInput.rows!
         );
+    }
+
+    if (isKeyboardInput && !isResize) {
+        return null;
     }
 
     return createMissionTerminalState(resolved);
