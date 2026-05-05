@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { TaskCommandIds, type TaskDataType, type TaskStartCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import { TaskCommandIds, type TaskConfigureCommandOptionsType, type TaskDataType, type TaskStartCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskSnapshot = {
@@ -14,6 +14,8 @@ export type TaskStartOptions = {
     reasoningEffort?: TaskStartCommandOptionsType['reasoningEffort'];
     terminalSessionName?: string;
 };
+
+export type TaskConfigureOptions = TaskConfigureCommandOptionsType;
 
 export type TaskDependencies = {
     resolveCommands(taskId: string): EntityCommandDescriptorType[];
@@ -100,6 +102,11 @@ export class Task implements EntityModel<TaskSnapshot> {
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
         await this.executeCommand(TaskCommandIds.start, options);
+        return this;
+    }
+
+    public async configure(options: TaskConfigureOptions): Promise<this> {
+        await this.executeCommand(TaskCommandIds.configure, options);
         return this;
     }
 

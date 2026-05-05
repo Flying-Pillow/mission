@@ -12,6 +12,7 @@
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import {
         TaskCommandIds,
+        type TaskConfigureCommandOptionsType,
         type TaskStartCommandOptionsType,
     } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
     import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
@@ -59,6 +60,7 @@
     } = $props();
 
     let initializedTaskId = $state<string | undefined>(undefined);
+    let persistedConfigurationSignature = $state<string | undefined>(undefined);
     let agentRunner = $state<MissionAgentRunnerType>("copilot-cli");
     let model = $state("");
     let customModel = $state("");
@@ -145,6 +147,8 @@
         customModel = "";
         reasoningEffort = task?.reasoningEffort ?? "";
         initializedTaskId = task?.taskId;
+        persistedConfigurationSignature =
+            buildConfigurationSignature(readConfigureInput());
     });
 
     $effect(() => {
@@ -163,6 +167,21 @@
         }
     });
 
+    $effect(() => {
+        if (!task || initializedTaskId !== task.taskId) {
+            return;
+        }
+
+        const input = readConfigureInput();
+        const signature = buildConfigurationSignature(input);
+        if (signature === persistedConfigurationSignature) {
+            return;
+        }
+
+        persistedConfigurationSignature = signature;
+        void persistTaskConfiguration(task, input);
+    });
+
     function resolveCommandInput(
         command: EntityCommandDescriptorType,
     ): TaskStartCommandOptionsType | undefined {
@@ -175,6 +194,33 @@
             ...(model ? { model } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
         };
+    }
+
+    function readConfigureInput(): TaskConfigureCommandOptionsType {
+        return {
+            agentRunner,
+            model: model || null,
+            reasoningEffort: reasoningEffort || null,
+            context: task?.context ?? [],
+        };
+    }
+
+    function buildConfigurationSignature(
+        input: TaskConfigureCommandOptionsType,
+    ): string {
+        return JSON.stringify(input);
+    }
+
+    async function persistTaskConfiguration(
+        currentTask: Task,
+        input: TaskConfigureCommandOptionsType,
+    ): Promise<void> {
+        try {
+            await currentTask.configure(input);
+            await onCommandExecuted();
+        } catch (error) {
+            console.error("Failed to persist task configuration.", error);
+        }
     }
 
     function useCustomModel(): void {
