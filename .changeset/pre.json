@@ -8,5 +8,8 @@
     "@flying-pillow/mission": "0.1.0-alpha.0",
     "@flying-pillow/mission-tsconfig": "0.1.0-alpha.0"
   },
-  "changesets": []
+  "changesets": [
+    "25-generate-a-documentat-added-docs-route-in-web-app-work-mo7pdqxr",
+    "proper-cicd-pipeline"
+  ]
 }
