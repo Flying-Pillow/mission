@@ -300,12 +300,14 @@ export class Task extends Entity<TaskDataType, string> {
 		const taskState = this.toState();
 		const requestedRunnerId = input.runnerId?.trim();
 		const runnerId = requestedRunnerId || Task.resolveStartRunnerId(taskState, input.runners);
+		const model = input.model?.trim() || taskState.model?.trim();
+		const reasoningEffort = input.reasoningEffort?.trim() || taskState.reasoningEffort?.trim();
 		return this.start({
 			...(runnerId ? { runnerId } : {}),
 			prompt: buildTaskLaunchPrompt(taskState, input.missionWorkspacePath),
 			workingDirectory: input.missionWorkspacePath,
-			...(input.model?.trim() ? { model: input.model.trim() } : {}),
-			...(input.reasoningEffort?.trim() ? { reasoningEffort: input.reasoningEffort.trim() } : {}),
+			...(model ? { model } : {}),
+			...(reasoningEffort ? { reasoningEffort } : {}),
 			...(input.terminalSessionName?.trim() ? { terminalSessionName: input.terminalSessionName.trim() } : {})
 		});
 	}

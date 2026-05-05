@@ -1128,6 +1128,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			missionId: this.descriptor.missionId,
 			isMissionDelivered: () => Stage.isMissionDelivered(this.lastKnownStatus?.stages ?? []),
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
+			configureTask: (taskId, input) => this.configureTask(taskId, input),
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
