@@ -334,15 +334,17 @@ async function handleMissionTerminalConnection(
     };
 
     const sendMissionState = (state: MissionTerminalSnapshotType) => {
-        const appendedChunk = state.screen.startsWith(lastScreen)
-            ? state.screen.slice(lastScreen.length)
-            : undefined;
         const nextDisconnected = state.dead || !state.connected;
+        const hasChunk = typeof state.chunk === 'string' && state.chunk.length > 0;
 
-        if (typeof appendedChunk === 'string' && appendedChunk.length > 0 && !nextDisconnected) {
+        if (hasChunk && !nextDisconnected) {
             sendOutput({
-                ...state,
-                chunk: appendedChunk,
+                missionId,
+                chunk: state.chunk,
+                dead: state.dead,
+                exitCode: state.dead ? state.exitCode : null,
+                ...(state.truncated ? { truncated: true } : {}),
+                ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
             });
         } else {
             sendSnapshot(state, nextDisconnected ? 'disconnected' : 'snapshot');
