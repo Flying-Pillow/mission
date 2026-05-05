@@ -32,6 +32,8 @@ const missionTerminalTransport = new TerminalAgentTransport();
 const missionTerminals = new Map<string, MissionTerminalRecord>();
 const missionTerminalSessions = new Map<string, MissionTerminalRecord>();
 const missionTerminalEventEmitter = new MissionAgentEventEmitter<MissionTerminalUpdate>();
+const missionContextCache = new Map<string, { context: { key: string; surfacePath: string; missionId: string; sessionId: string; workingDirectory: string } | undefined; timestamp: number }>();
+const CONTEXT_CACHE_TTL_MS = 60_000;
 
 TerminalAgentTransport.onDidSessionUpdate((event) => {
     const record = missionTerminalSessions.get(event.sessionName);
@@ -178,6 +180,12 @@ async function resolveMissionTerminalContext(input: {
         return undefined;
     }
 
+    const cacheKey = `${surfacePath}:${missionId}`;
+    const cached = missionContextCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CONTEXT_CACHE_TTL_MS) {
+        return cached.context;
+    }
+
     const adapter = new MissionDossierFilesystem(surfacePath);
     const mission = await adapter.resolveKnownMission({ missionId });
     if (!mission) {
@@ -187,13 +195,15 @@ async function resolveMissionTerminalContext(input: {
     const workingDirectory = adapter.getMissionWorkspacePath(mission.missionDir);
     const key = `${path.resolve(surfacePath)}:${missionId}`;
     const sessionId = buildMissionTerminalSessionId(surfacePath, missionId);
-    return {
+    const context = {
         key,
         surfacePath,
         missionId,
         sessionId,
         workingDirectory
     };
+    missionContextCache.set(cacheKey, { context, timestamp: Date.now() });
+    return context;
 }
 
 async function createMissionTerminalState(record: MissionTerminalRecord): Promise<MissionTerminalSnapshotType> {
