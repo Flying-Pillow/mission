@@ -1,5 +1,6 @@
 import type { spawn as spawnPty } from 'node-pty';
-import type { TerminalScreenFactory } from './TerminalScreen.js';
+import type { IPty } from 'node-pty';
+import type { TerminalScreen, TerminalScreenFactory } from './TerminalScreen.js';
 
 export type TerminalExecutorResult = {
     stdout: string;
@@ -79,6 +80,113 @@ export type TerminalRegistryOptions = {
     terminationPollIntervalMs?: number;
     screenFactory?: TerminalScreenFactory;
 };
+
+export type TerminalOptions = {
+    sessionName: string;
+    paneId: string;
+    pty: IPty;
+    workingDirectory: string;
+    screen: TerminalScreen;
+    cols: number;
+    rows: number;
+    processLease: TerminalProcessLease;
+    owner?: TerminalSessionOwner;
+};
+
+export class Terminal {
+    public readonly sessionName: string;
+    public readonly paneId: string;
+    public readonly pty: IPty;
+    public readonly workingDirectory: string;
+    public readonly screen: TerminalScreen;
+    public readonly processLease: TerminalProcessLease;
+    public readonly owner?: TerminalSessionOwner;
+
+    private dead = false;
+    private exitCode: number | null = null;
+    private cols: number;
+    private rows: number;
+
+    public constructor(options: TerminalOptions) {
+        this.sessionName = options.sessionName;
+        this.paneId = options.paneId;
+        this.pty = options.pty;
+        this.workingDirectory = options.workingDirectory;
+        this.screen = options.screen;
+        this.cols = options.cols;
+        this.rows = options.rows;
+        this.processLease = { ...options.processLease };
+        if (options.owner) {
+            this.owner = cloneTerminalSessionOwner(options.owner);
+        }
+    }
+
+    public get isDead(): boolean {
+        return this.dead;
+    }
+
+    public get state(): TerminalSessionState {
+        return {
+            dead: this.dead,
+            exitCode: this.exitCode
+        };
+    }
+
+    public handle(): TerminalSessionHandle {
+        return {
+            sessionName: this.sessionName,
+            paneId: this.paneId
+        };
+    }
+
+    public write(chunk: string): TerminalSessionUpdate {
+        this.screen.write(chunk);
+        return {
+            ...this.snapshot(),
+            chunk
+        };
+    }
+
+    public markExited(exitCode: number): TerminalSessionUpdate {
+        this.dead = true;
+        this.exitCode = exitCode;
+        return {
+            ...this.snapshot(),
+            chunk: ''
+        };
+    }
+
+    public sendKeys(keys: string): void {
+        this.pty.write(keys);
+    }
+
+    public resize(cols: number, rows: number): boolean {
+        if (this.cols === cols && this.rows === rows) {
+            return false;
+        }
+        this.cols = cols;
+        this.rows = rows;
+        this.screen.resize(cols, rows);
+        this.pty.resize(cols, rows);
+        return true;
+    }
+
+    public snapshot(): TerminalSessionSnapshot {
+        const screen = this.screen.snapshot();
+        return {
+            sessionName: this.sessionName,
+            paneId: this.paneId,
+            connected: true,
+            dead: this.dead,
+            exitCode: this.exitCode,
+            screen: screen.screen,
+            truncated: screen.truncated,
+            workingDirectory: this.workingDirectory,
+            processLease: { ...this.processLease },
+            ...(this.owner ? { owner: cloneTerminalSessionOwner(this.owner) } : {})
+        };
+    }
+}
 
 export function cloneTerminalSessionOwner(owner: TerminalSessionOwner): TerminalSessionOwner {
     return { ...owner };
