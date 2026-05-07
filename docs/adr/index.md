@@ -47,6 +47,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Agent Execution Logs As Daemon Audit Material](0011-agent-execution-logs-as-daemon-audit-material.md)
 - [Prompt-Scoped Agent Execution Signals](0017-prompt-scoped-agent-execution-signals.md)
 - [Agent Execution And Agent Adapter Vocabulary](0018-agent-execution-and-agent-adapter-vocabulary.md)
+- [Agent Execution Structured Interaction Vocabulary](0022-agent-execution-structured-interaction-vocabulary.md)
 
 ### Mission Control And Surfaces
 

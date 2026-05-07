@@ -131,7 +131,10 @@ async function handleTerminalConnection(
             connected: state.connected,
             dead: state.dead,
             exitCode: state.dead ? state.exitCode : null,
+            ...(state.cols ? { cols: state.cols } : {}),
+            ...(state.rows ? { rows: state.rows } : {}),
             screen: terminalScreen.screen,
+            ...(state.recording ? { recording: state.recording } : {}),
             ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
             ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
@@ -237,20 +240,32 @@ async function handleTerminalConnection(
                 return;
             }
 
-            const snapshot = AgentExecutionTerminalSnapshotSchema.parse(event.payload);
-            if (!snapshot.connected || snapshot.dead) {
-                sendSnapshot(snapshot, 'disconnected');
-                dispose();
-                webSocket.close();
-                return;
-            }
+            void (async () => {
+                const snapshot = AgentExecutionTerminalSnapshotSchema.parse(event.payload);
+                if (!snapshot.connected || snapshot.dead) {
+                    const completedSnapshot = AgentExecutionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.query', {
+                        entity: 'AgentExecution',
+                        method: 'readTerminal',
+                        payload: {
+                            missionId: query.missionId,
+                            sessionId
+                        }
+                    }));
+                    sendSnapshot(completedSnapshot, 'disconnected');
+                    dispose();
+                    webSocket.close();
+                    return;
+                }
 
-            if (typeof snapshot.chunk === 'string' && snapshot.chunk.length > 0) {
-                sendOutput(snapshot);
-                return;
-            }
+                if (typeof snapshot.chunk === 'string' && snapshot.chunk.length > 0) {
+                    sendOutput(snapshot);
+                    return;
+                }
 
-            sendSnapshot(snapshot);
+                sendSnapshot(snapshot);
+            })().catch((error) => {
+                sendError(error instanceof Error ? error.message : String(error));
+            });
         });
 
         terminalReady = true;

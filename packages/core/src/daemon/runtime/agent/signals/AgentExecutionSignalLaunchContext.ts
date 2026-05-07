@@ -1,4 +1,4 @@
-import { MISSION_PROTOCOL_MARKER_PREFIX } from './MissionProtocolMarkerParser.js';
+import type { AgentExecutionProtocolDescriptorType } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
 
 export type AgentExecutionSignalLaunchContext = {
     launchEnv: Record<string, string>;
@@ -9,8 +9,10 @@ export function buildAgentExecutionSignalLaunchContext(input: {
     missionId: string;
     taskId: string;
     agentExecutionId: string;
+    protocolDescriptor: AgentExecutionProtocolDescriptorType;
 }): AgentExecutionSignalLaunchContext {
-    const markerExample = `${MISSION_PROTOCOL_MARKER_PREFIX}${JSON.stringify({
+    const markerPrefix = input.protocolDescriptor.owner.markerPrefix;
+    const markerExample = `${markerPrefix}${JSON.stringify({
         version: 1,
         missionId: input.missionId,
         taskId: input.taskId,
@@ -25,9 +27,10 @@ export function buildAgentExecutionSignalLaunchContext(input: {
     return {
         launchEnv: {},
         sessionInstructions: [
-            'Mission signal protocol is mandatory for this Agent execution.',
-            '- Mission observes your stdout and parses strict one-line signal markers deterministically.',
-            `- Every structured state signal must start at the beginning of a stdout line with ${MISSION_PROTOCOL_MARKER_PREFIX} followed immediately by strict JSON.`,
+            'Agent execution structured interaction is mandatory for this execution.',
+            `- The owning Entity is ${input.protocolDescriptor.owner.entity} '${input.protocolDescriptor.owner.entityId}'.`,
+            '- Mission observes your stdout and parses strict one-line owner-addressed signal markers deterministically.',
+            `- Every structured state signal must start at the beginning of a stdout line with ${markerPrefix} followed immediately by strict JSON.`,
             '- Do not use prose as a substitute for structured state signals; prose is only explanatory output.',
             '- Use a fresh eventId for every distinct signal. Reusing an eventId is treated as a duplicate.',
             '- Keep every marker on one line. Malformed, oversized, stderr, or wrong-scope markers are rejected or recorded only as diagnostics.',
@@ -37,13 +40,7 @@ export function buildAgentExecutionSignalLaunchContext(input: {
             `- taskId: ${input.taskId}`,
             `- agentExecutionId: ${input.agentExecutionId}`,
             'Supported signal payloads:',
-            '- {"type":"progress","summary":"...","detail":"..."}',
-            '- {"type":"needs_input","question":"...","suggestedResponses":["..."]}',
-            '- {"type":"blocked","reason":"..."}',
-            '- {"type":"ready_for_verification","summary":"..."}',
-            '- {"type":"completed_claim","summary":"..."}',
-            '- {"type":"failed_claim","reason":"..."}',
-            '- {"type":"message","channel":"agent","text":"..."}',
+            ...input.protocolDescriptor.signals.map((signal) => `- ${signal.type}: ${signal.label} (${signal.policy})`),
             'Example marker:',
             markerExample
         ].join('\n')

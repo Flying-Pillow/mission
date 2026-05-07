@@ -1,3 +1,11 @@
+import {
+    MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH as AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+    MAX_AGENT_EXECUTION_MESSAGE_LENGTH as AGENT_EXECUTION_MESSAGE_LENGTH,
+    MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH as AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
+    MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES as AGENT_EXECUTION_SUGGESTED_RESPONSES,
+    MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES
+} from './AgentExecutionSchema.js';
+
 export type AgentId = string;
 export type AgentExecutionId = string;
 export type AgentMetadataValue = string | number | boolean | null;
@@ -279,6 +287,210 @@ export type AgentExecutionEvent =
         reason?: string;
         snapshot: AgentExecutionSnapshot;
     };
+
+export const MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH = AGENT_EXECUTION_SIGNAL_TEXT_LENGTH;
+export const MAX_AGENT_EXECUTION_MESSAGE_LENGTH = AGENT_EXECUTION_MESSAGE_LENGTH;
+export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = AGENT_EXECUTION_USAGE_ENTRIES;
+export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = AGENT_EXECUTION_SUGGESTED_RESPONSES;
+export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = AGENT_DECLARED_SIGNAL_MARKER_LENGTH;
+
+export type AgentExecutionSignalSource =
+    | 'daemon-authoritative'
+    | 'provider-structured'
+    | 'agent-declared'
+    | 'terminal-heuristic';
+
+export type AgentExecutionSignalConfidence =
+    | 'authoritative'
+    | 'high'
+    | 'medium'
+    | 'low'
+    | 'diagnostic';
+
+type AgentExecutionSignalBase = {
+    source: AgentExecutionSignalSource;
+    confidence: AgentExecutionSignalConfidence;
+};
+
+export type AgentExecutionDiagnosticCode =
+    | 'provider-session'
+    | 'tool-call'
+    | 'agent-declared-signal-malformed'
+    | 'agent-declared-signal-oversized'
+    | 'terminal-heuristic';
+
+export type AgentExecutionSignal =
+    | ({
+        type: 'progress';
+        summary: string;
+        detail?: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'needs_input';
+        question: string;
+        suggestedResponses?: string[];
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'blocked';
+        reason: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'ready_for_verification';
+        summary: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'completed_claim';
+        summary: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'failed_claim';
+        reason: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'message';
+        channel: 'agent' | 'system' | 'stdout' | 'stderr';
+        text: string;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'usage';
+        payload: AgentMetadata;
+    } & AgentExecutionSignalBase)
+    | ({
+        type: 'diagnostic';
+        code: AgentExecutionDiagnosticCode;
+        summary: string;
+        detail?: string;
+        payload?: AgentMetadata;
+    } & AgentExecutionSignalBase);
+
+export type AgentExecutionObservationAddress = {
+    agentExecutionId: AgentExecutionId;
+    scope: AgentExecutionScope;
+};
+
+export type AgentExecutionObservationOrigin =
+    | 'daemon'
+    | 'provider-output'
+    | 'agent-declared-signal'
+    | 'terminal-output';
+
+export type AgentExecutionSignalCandidate = {
+    signal: AgentExecutionSignal;
+    dedupeKey?: string;
+    claimedAddress?: AgentExecutionObservationAddress;
+    rawText?: string;
+};
+
+export type AgentExecutionObservation = {
+    observationId: string;
+    observedAt: string;
+    signal: AgentExecutionSignal;
+    route: {
+        origin: AgentExecutionObservationOrigin;
+        address: AgentExecutionObservationAddress;
+    };
+    claimedAddress?: AgentExecutionObservationAddress;
+    rawText?: string;
+};
+
+export type AgentExecutionSignalDecision =
+    | { action: 'reject'; reason: string }
+    | { action: 'record-observation-only'; reason: string }
+    | { action: 'emit-message'; event: AgentExecutionEvent }
+    | {
+        action: 'update-session';
+        eventType: 'execution.updated' | 'execution.awaiting-input' | 'execution.completed' | 'execution.failed';
+        snapshotPatch: Partial<AgentExecutionSnapshot>;
+    };
+
+export function cloneObservationAddress(address: AgentExecutionObservationAddress): AgentExecutionObservationAddress {
+    return {
+        agentExecutionId: address.agentExecutionId,
+        scope: cloneAgentExecutionScope(address.scope)
+    };
+}
+
+export function sameObservationAddress(
+    left: AgentExecutionObservationAddress,
+    right: AgentExecutionObservationAddress
+): boolean {
+    return left.agentExecutionId === right.agentExecutionId
+        && sameAgentExecutionScope(left.scope, right.scope);
+}
+
+export function cloneAgentExecutionScope(scope: AgentExecutionScope): AgentExecutionScope {
+    switch (scope.kind) {
+        case 'system':
+            return { kind: 'system', ...(scope.label ? { label: scope.label } : {}) };
+        case 'repository':
+            return { kind: 'repository', repositoryRootPath: scope.repositoryRootPath };
+        case 'mission':
+            return {
+                kind: 'mission',
+                missionId: scope.missionId,
+                ...(scope.repositoryRootPath ? { repositoryRootPath: scope.repositoryRootPath } : {})
+            };
+        case 'task':
+            return {
+                kind: 'task',
+                missionId: scope.missionId,
+                taskId: scope.taskId,
+                ...(scope.stageId ? { stageId: scope.stageId } : {}),
+                ...(scope.repositoryRootPath ? { repositoryRootPath: scope.repositoryRootPath } : {})
+            };
+        case 'artifact':
+            return {
+                kind: 'artifact',
+                artifactId: scope.artifactId,
+                ...(scope.repositoryRootPath ? { repositoryRootPath: scope.repositoryRootPath } : {}),
+                ...(scope.missionId ? { missionId: scope.missionId } : {}),
+                ...(scope.taskId ? { taskId: scope.taskId } : {}),
+                ...(scope.stageId ? { stageId: scope.stageId } : {})
+            };
+    }
+}
+
+export function sameAgentExecutionScope(left: AgentExecutionScope, right: AgentExecutionScope): boolean {
+    return JSON.stringify(cloneAgentExecutionScope(left)) === JSON.stringify(cloneAgentExecutionScope(right));
+}
+
+export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal {
+    switch (signal.type) {
+        case 'progress':
+            return {
+                ...signal,
+                ...(signal.detail ? { detail: signal.detail } : {})
+            };
+        case 'needs_input':
+            return {
+                ...signal,
+                ...(signal.suggestedResponses ? { suggestedResponses: [...signal.suggestedResponses] } : {})
+            };
+        case 'blocked':
+        case 'ready_for_verification':
+        case 'completed_claim':
+        case 'failed_claim':
+        case 'message':
+            return { ...signal };
+        case 'usage':
+            return {
+                ...signal,
+                payload: { ...signal.payload }
+            };
+        case 'diagnostic':
+            return {
+                ...signal,
+                ...(signal.payload ? { payload: { ...signal.payload } } : {})
+            };
+    }
+}
+
+export function isScalarAgentMetadataValue(value: unknown): value is AgentMetadata[string] {
+    return value === null
+        || typeof value === 'string'
+        || typeof value === 'number'
+        || typeof value === 'boolean';
+}
 
 export function deriveAgentExecutionInteractionCapabilities(input: Pick<
     AgentExecutionSnapshot,

@@ -33,17 +33,36 @@ describe('MissionDossierFilesystem', () => {
 		);
 	});
 
-	it('appends mission session logs through recorded relative log paths', async () => {
+	it('appends mission session terminal recording events through recorded relative log paths', async () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-session-log-'));
 		try {
 			const adapter = new MissionDossierFilesystem('/tmp/repo');
 			const sessionLogPath = adapter.getMissionSessionLogRelativePath('session-1');
 
-			expect(sessionLogPath).toBe('session-logs/session-1.log');
+			expect(sessionLogPath).toBe('session-logs/session-1.terminal.jsonl');
 			await adapter.ensureMissionSessionLogFile(missionDir, sessionLogPath);
-			await adapter.appendMissionSessionLogChunk(missionDir, sessionLogPath, '\u001b[32mready\u001b[0m\n');
+			await adapter.appendMissionSessionLogEvent(missionDir, sessionLogPath, {
+				type: 'output',
+				at: '2026-05-07T00:00:00.000Z',
+				data: '\u001b[32mready\u001b[0m\n'
+			});
 
-			await expect(adapter.readMissionSessionLog(missionDir, sessionLogPath)).resolves.toBe('\u001b[32mready\u001b[0m\n');
+			await expect(adapter.readMissionSessionLogEvents(missionDir, sessionLogPath)).resolves.toEqual([{
+				type: 'output',
+				at: '2026-05-07T00:00:00.000Z',
+				data: '\u001b[32mready\u001b[0m\n'
+			}]);
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
+
+	it('rejects legacy raw mission session log paths', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-legacy-session-log-'));
+		try {
+			const adapter = new MissionDossierFilesystem('/tmp/repo');
+			await expect(adapter.readMissionSessionLogEvents(missionDir, 'session-logs/session-1.log'))
+				.rejects.toThrow('must use session-logs/<sessionId>.terminal.jsonl');
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}

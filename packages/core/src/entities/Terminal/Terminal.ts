@@ -70,6 +70,8 @@ function createTerminalEntitySnapshot(snapshot: RegistryTerminalSnapshot): Termi
         connected: snapshot.connected,
         dead: snapshot.dead,
         exitCode: snapshot.exitCode,
+        ...(snapshot.cols ? { cols: snapshot.cols } : {}),
+        ...(snapshot.rows ? { rows: snapshot.rows } : {}),
         screen: snapshot.screen,
         ...(typeof snapshot.chunk === 'string' ? { chunk: snapshot.chunk } : {}),
         ...(snapshot.truncated ? { truncated: true } : {}),

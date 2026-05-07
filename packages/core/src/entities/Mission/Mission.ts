@@ -56,11 +56,12 @@ import {
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
-import type { AgentExecutionEvent, AgentExecutionSnapshot } from '../AgentExecution/AgentExecutionProtocolTypes.js';
 import type {
+	AgentExecutionEvent,
+	AgentExecutionSnapshot,
 	AgentExecutionObservation,
 	AgentExecutionSignalDecision
-} from '../../daemon/runtime/agent/signals/AgentExecutionSignal.js';
+} from '../AgentExecution/AgentExecutionProtocolTypes.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
 import { Task, type TaskConfigureOptions } from '../Task/Task.js';

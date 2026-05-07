@@ -1,5 +1,5 @@
-import type { AgentProviderObservation } from '../signals/AgentProviderObservation.js';
 import {
+    type AgentAdapterRuntimeOutput,
     type AgentInput,
     getNestedRecord,
     getStringField,
@@ -28,7 +28,7 @@ export const codex = {
     }
 } satisfies AgentInput;
 
-function parseRuntimeOutputLine(line: string): AgentProviderObservation[] {
+function parseRuntimeOutputLine(line: string): AgentAdapterRuntimeOutput[] {
     const parsed = parseJsonLine(line);
     const item = parsed ? getNestedRecord(parsed, 'item') : undefined;
     if (parsed

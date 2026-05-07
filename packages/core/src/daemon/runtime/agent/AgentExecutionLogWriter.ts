@@ -1,13 +1,18 @@
-import { TerminalRegistry, type TerminalSnapshot } from '../../../entities/Terminal/TerminalRegistry.js';
-import type { AgentExecutionRecord } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../../../entities/Terminal/TerminalRegistry.js';
+import {
+    AgentExecutionTerminalRecordingEventSchema,
+    type AgentExecutionRecord,
+    type AgentExecutionTerminalRecordingEventType
+} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import type { MissionDossierFilesystem } from '../../../entities/Mission/MissionDossierFilesystem.js';
 
 type AgentExecutionLogWriterState = {
     execution: AgentExecutionRecord;
-    buffer: string;
+    events: AgentExecutionTerminalRecordingEventType[];
     bufferBytes: number;
     queue: Promise<void>;
     flushTimer: ReturnType<typeof setTimeout> | undefined;
+    wroteExit: boolean;
 };
 
 const SESSION_LOG_FLUSH_THRESHOLD_BYTES = 4096;
@@ -15,6 +20,7 @@ const SESSION_LOG_FLUSH_DELAY_MS = 250;
 
 export class AgentExecutionLogWriter {
     private readonly terminalSubscription: { dispose(): void };
+    private readonly terminalRecordingSubscription: { dispose(): void };
     private readonly writers = new Map<string, AgentExecutionLogWriterState>();
     private readonly sessionIdsByTerminalName = new Map<string, string>();
     private readonly terminalRegistry = TerminalRegistry.shared();
@@ -27,6 +33,9 @@ export class AgentExecutionLogWriter {
     ) {
         this.terminalSubscription = this.terminalRegistry.onDidTerminalUpdate((event) => {
             this.handleTerminalUpdate(event);
+        });
+        this.terminalRecordingSubscription = this.terminalRegistry.onDidTerminalRecordingUpdate((event) => {
+            this.handleTerminalRecordingUpdate(event);
         });
     }
 
@@ -76,6 +85,7 @@ export class AgentExecutionLogWriter {
         }
         this.disposed = true;
         this.terminalSubscription.dispose();
+        this.terminalRecordingSubscription.dispose();
         for (const writer of this.writers.values()) {
             this.flush(writer);
         }
@@ -84,7 +94,7 @@ export class AgentExecutionLogWriter {
     }
 
     private handleTerminalUpdate(event: TerminalSnapshot & { chunk: string }): void {
-        if (this.disposed || event.chunk.length === 0) {
+        if (this.disposed) {
             return;
         }
 
@@ -98,13 +108,42 @@ export class AgentExecutionLogWriter {
             return;
         }
 
-        writer.buffer += event.chunk;
-        writer.bufferBytes += Buffer.byteLength(event.chunk, 'utf8');
+        if (event.chunk.length > 0) {
+            this.enqueueEvent(writer, {
+                type: 'output',
+                at: new Date().toISOString(),
+                data: event.chunk
+            });
+        }
+        if (event.dead && !writer.wroteExit) {
+            writer.wroteExit = true;
+            this.enqueueEvent(writer, {
+                type: 'exit',
+                at: new Date().toISOString(),
+                exitCode: event.exitCode
+            });
+        }
         if (writer.bufferBytes >= SESSION_LOG_FLUSH_THRESHOLD_BYTES || event.dead) {
             this.flush(writer);
             return;
         }
 
+        this.scheduleFlush(writer);
+    }
+
+    private handleTerminalRecordingUpdate(update: TerminalRecordingUpdate): void {
+        if (this.disposed) {
+            return;
+        }
+        const sessionId = this.sessionIdsByTerminalName.get(update.terminalName);
+        if (!sessionId) {
+            return;
+        }
+        const writer = this.writers.get(sessionId);
+        if (!writer) {
+            return;
+        }
+        this.enqueueEvent(writer, update.event);
         this.scheduleFlush(writer);
     }
 
@@ -120,15 +159,17 @@ export class AgentExecutionLogWriter {
 
         const writer: AgentExecutionLogWriterState = {
             execution,
-            buffer: '',
+            events: [],
             bufferBytes: 0,
             queue: Promise.resolve(),
-            flushTimer: undefined
+            flushTimer: undefined,
+            wroteExit: false
         };
         this.writers.set(execution.sessionId, writer);
-        const sessionLogPath = execution.sessionLogPath ?? this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
+        const sessionLogPath = this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
         writer.queue = writer.queue
             .then(() => this.adapter.ensureMissionSessionLogFile(this.missionDir, sessionLogPath))
+            .then(() => this.adapter.appendMissionSessionLogEvent(this.missionDir, sessionLogPath, this.createHeaderEvent(execution)))
             .catch((error) => {
                 console.error(
                     `Failed to create session log for mission '${this.missionId}' session '${execution.sessionId}'.`,
@@ -153,24 +194,52 @@ export class AgentExecutionLogWriter {
             clearTimeout(writer.flushTimer);
             writer.flushTimer = undefined;
         }
-        if (writer.buffer.length === 0) {
+        if (writer.events.length === 0) {
             return;
         }
 
-        const chunk = writer.buffer;
-        writer.buffer = '';
+        const events = writer.events;
+        writer.events = [];
         writer.bufferBytes = 0;
         const execution = writer.execution;
-        const sessionLogPath = execution.sessionLogPath ?? this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
-        const next = writer.queue.then(
-            () => this.adapter.appendMissionSessionLogChunk(this.missionDir, sessionLogPath, chunk),
-            () => this.adapter.appendMissionSessionLogChunk(this.missionDir, sessionLogPath, chunk)
-        );
+        const sessionLogPath = this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
+        const appendEvents = async () => {
+            for (const event of events) {
+                await this.adapter.appendMissionSessionLogEvent(this.missionDir, sessionLogPath, event);
+            }
+        };
+        const next = writer.queue.then(appendEvents, appendEvents);
         writer.queue = next.catch((error) => {
             console.error(
                 `Failed to persist session log for mission '${this.missionId}' session '${execution.sessionId}'.`,
                 error
             );
+        });
+    }
+
+    private enqueueEvent(
+        writer: AgentExecutionLogWriterState,
+        event: AgentExecutionTerminalRecordingEventType
+    ): void {
+        const parsedEvent = AgentExecutionTerminalRecordingEventSchema.parse(event);
+        writer.events.push(parsedEvent);
+        writer.bufferBytes += Buffer.byteLength(JSON.stringify(parsedEvent), 'utf8') + 1;
+    }
+
+    private createHeaderEvent(execution: AgentExecutionRecord): AgentExecutionTerminalRecordingEventType {
+        const terminalSnapshot = execution.terminalHandle
+            ? this.terminalRegistry.readSnapshot(execution.terminalHandle.terminalName)
+            : undefined;
+        return AgentExecutionTerminalRecordingEventSchema.parse({
+            type: 'header',
+            version: 1,
+            kind: 'agent-execution-terminal-recording',
+            missionId: this.missionId,
+            sessionId: execution.sessionId,
+            terminalName: execution.terminalHandle?.terminalName ?? execution.sessionId,
+            cols: terminalSnapshot?.cols ?? 120,
+            rows: terminalSnapshot?.rows ?? 32,
+            createdAt: execution.createdAt
         });
     }
 }

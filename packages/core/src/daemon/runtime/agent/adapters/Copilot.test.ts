@@ -14,7 +14,6 @@ import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
-import { MISSION_PROTOCOL_MARKER_PREFIX } from '../signals/MissionProtocolMarkerParser.js';
 import { createCopilot } from './Copilot.js';
 
 type MockTerminalState = {
@@ -141,8 +140,8 @@ describe('Copilot', () => {
 		expect(state.spawnedArgs).toContain('/tmp/work');
 		expect(state.spawnedArgs).toContain('-i');
 		expect(state.spawnedArgs.some((arg) => arg.includes('Implement the task.'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Mission signal protocol is mandatory'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes(MISSION_PROTOCOL_MARKER_PREFIX))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Agent execution structured interaction is mandatory'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('task::'))).toBe(true);
 		expect(state.writes).not.toContain('Implement the task.');
 	});
 

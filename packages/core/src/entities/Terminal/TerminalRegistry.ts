@@ -50,6 +50,8 @@ export type TerminalSnapshot = {
     connected: boolean;
     dead: boolean;
     exitCode: number | null;
+    cols?: number;
+    rows?: number;
     screen: string;
     truncated: boolean;
     chunk?: string;
@@ -61,6 +63,15 @@ export type TerminalSnapshot = {
 
 export type TerminalUpdate = TerminalSnapshot & {
     chunk: string;
+};
+
+export type TerminalRecordingUpdate = {
+    terminalName: string;
+    terminalPaneId: string;
+    owner?: TerminalOwner;
+    event:
+    | { type: 'input'; at: string; data: string; literal?: boolean }
+    | { type: 'resize'; at: string; cols: number; rows: number };
 };
 
 export type TerminalState = {
@@ -181,6 +192,8 @@ class LiveTerminal {
             connected: true,
             dead: this.dead,
             exitCode: this.exitCode,
+            cols: this.cols,
+            rows: this.rows,
             screen: screen.screen,
             truncated: screen.truncated,
             workingDirectory: this.workingDirectory,
@@ -218,6 +231,7 @@ export class TerminalRegistry {
 
     private readonly terminals = new Map<string, LiveTerminal>();
     private readonly listeners = new Set<(event: TerminalUpdate) => void>();
+    private readonly recordingListeners = new Set<(event: TerminalRecordingUpdate) => void>();
 
     public constructor(private readonly options: TerminalRegistryOptions) { }
 
@@ -315,14 +329,39 @@ export class TerminalRegistry {
 
     public sendKeys(terminalName: string, keys: string, options: { literal?: boolean } = {}): void {
         const terminal = this.requireTerminal(terminalName);
-        terminal.sendKeys(translateKeys(keys, options));
+        const data = translateKeys(keys, options);
+        terminal.sendKeys(data);
+        this.emitRecording({
+            terminalName: terminal.terminalName,
+            terminalPaneId: terminal.terminalPaneId,
+            ...(terminal.owner ? { owner: cloneTerminalOwner(terminal.owner) } : {}),
+            event: {
+                type: 'input',
+                at: new Date().toISOString(),
+                data,
+                ...(options.literal !== undefined ? { literal: options.literal } : {})
+            }
+        });
     }
 
     public resize(terminalName: string, cols: number, rows: number): void {
         const terminal = this.requireTerminal(terminalName);
         const normalizedCols = clampTerminalSize(cols, DEFAULT_COLS);
         const normalizedRows = clampTerminalSize(rows, DEFAULT_ROWS);
-        terminal.resize(normalizedCols, normalizedRows);
+        if (!terminal.resize(normalizedCols, normalizedRows)) {
+            return;
+        }
+        this.emitRecording({
+            terminalName: terminal.terminalName,
+            terminalPaneId: terminal.terminalPaneId,
+            ...(terminal.owner ? { owner: cloneTerminalOwner(terminal.owner) } : {}),
+            event: {
+                type: 'resize',
+                at: new Date().toISOString(),
+                cols: normalizedCols,
+                rows: normalizedRows
+            }
+        });
     }
 
     public async killTerminal(terminalName: string): Promise<TerminalState> {
@@ -346,9 +385,28 @@ export class TerminalRegistry {
         };
     }
 
+    public onDidTerminalRecordingUpdate(listener: (event: TerminalRecordingUpdate) => void): { dispose(): void } {
+        this.recordingListeners.add(listener);
+        return {
+            dispose: () => {
+                this.recordingListeners.delete(listener);
+            }
+        };
+    }
+
     private emit(event: TerminalUpdate): void {
         for (const listener of this.listeners) {
             listener({ ...event });
+        }
+    }
+
+    private emitRecording(event: TerminalRecordingUpdate): void {
+        for (const listener of this.recordingListeners) {
+            listener({
+                ...event,
+                ...(event.owner ? { owner: cloneTerminalOwner(event.owner) } : {}),
+                event: { ...event.event }
+            });
         }
     }
 

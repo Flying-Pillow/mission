@@ -12,10 +12,11 @@ import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
 import type {
     AgentExecutionObservation,
+    AgentExecutionObservationAddress,
     AgentExecutionSignalDecision,
-    AgentExecutionSignalScope
-} from './runtime/agent/signals/AgentExecutionSignal.js';
-import type { AgentExecutionSnapshot } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+    AgentExecutionSnapshot
+} from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,
@@ -85,19 +86,21 @@ export class MissionRegistry {
         this.missionLoads.clear();
     }
 
-    public getRuntimeSessionSnapshot(scope: AgentExecutionSignalScope): AgentExecutionSnapshot | undefined {
-        const mission = this.findLoadedMission(scope.missionId);
-        return mission?.getRuntimeSessionSnapshot(scope.agentExecutionId);
+    public getRuntimeSessionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
+        const missionId = getAgentExecutionScopeMissionId(address.scope);
+        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
+        return mission?.getRuntimeSessionSnapshot(address.agentExecutionId);
     }
 
     public applyRuntimeSessionSignalDecision(input: {
-        scope: AgentExecutionSignalScope;
+        address: AgentExecutionObservationAddress;
         observation: AgentExecutionObservation;
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
     }): AgentExecutionSnapshot | undefined {
-        const mission = this.findLoadedMission(input.scope.missionId);
+        const missionId = getAgentExecutionScopeMissionId(input.address.scope);
+        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
         return mission?.applyRuntimeSessionSignalDecision(
-            input.scope.agentExecutionId,
+            input.address.agentExecutionId,
             input.observation,
             input.decision
         );

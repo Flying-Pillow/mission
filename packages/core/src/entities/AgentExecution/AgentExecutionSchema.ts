@@ -7,6 +7,13 @@ import {
 
 export const agentExecutionEntityName = 'AgentExecution' as const;
 
+export const AgentExecutionTerminalRecordingLogPathSchema = z.string()
+    .trim()
+    .min(1)
+    .refine((value) => /^session-logs\/[^/]+\.terminal\.jsonl$/u.test(value), {
+        message: 'AgentExecution session logs must use session-logs/<sessionId>.terminal.jsonl.'
+    });
+
 export const AgentExecutionCommandIds = {
     complete: 'agentExecution.complete',
     cancel: 'agentExecution.cancel',
@@ -31,6 +38,12 @@ const agentExecutionMetadataValueSchema = z.union([
 export type MissionAgentPrimitiveValue = string | number | boolean | null;
 
 const agentExecutionMetadataSchema = z.record(z.string(), agentExecutionMetadataValueSchema);
+
+export const MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH = 2_000;
+export const MAX_AGENT_EXECUTION_MESSAGE_LENGTH = 8_000;
+export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = 32;
+export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = 6;
+export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = 4_096;
 
 export const AgentExecutionPromptSchema = z.object({
     source: z.enum(['engine', 'operator', 'system']),
@@ -138,11 +151,59 @@ export const AgentExecutionTerminalSnapshotSchema = z.object({
     connected: z.boolean(),
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
     screen: z.string(),
     chunk: z.string().optional(),
     truncated: z.boolean().optional(),
+    recording: z.lazy(() => AgentExecutionTerminalRecordingSchema).optional(),
     terminalHandle: AgentExecutionTerminalHandleSchema.optional()
 }).strict();
+
+export const AgentExecutionTerminalRecordingHeaderEventSchema = z.object({
+    type: z.literal('header'),
+    version: z.literal(1),
+    kind: z.literal('agent-execution-terminal-recording'),
+    missionId: z.string().trim().min(1),
+    sessionId: z.string().trim().min(1),
+    terminalName: z.string().trim().min(1),
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    createdAt: z.string().trim().min(1)
+}).strict();
+
+export const AgentExecutionTerminalRecordingEventSchema = z.discriminatedUnion('type', [
+    AgentExecutionTerminalRecordingHeaderEventSchema,
+    z.object({
+        type: z.literal('output'),
+        at: z.string().trim().min(1),
+        data: z.string()
+    }).strict(),
+    z.object({
+        type: z.literal('input'),
+        at: z.string().trim().min(1),
+        data: z.string(),
+        literal: z.boolean().optional()
+    }).strict(),
+    z.object({
+        type: z.literal('resize'),
+        at: z.string().trim().min(1),
+        cols: z.number().int().positive(),
+        rows: z.number().int().positive()
+    }).strict(),
+    z.object({
+        type: z.literal('exit'),
+        at: z.string().trim().min(1),
+        exitCode: z.number().int().nullable()
+    }).strict()
+]);
+
+export const AgentExecutionTerminalRecordingSchema = z.object({
+    version: z.literal(1),
+    events: z.array(AgentExecutionTerminalRecordingEventSchema)
+}).strict().refine((value) => value.events[0]?.type === 'header', {
+    message: 'Agent execution terminal recording requires a header event.'
+});
 
 export const AgentExecutionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
     z.object({
@@ -220,6 +281,145 @@ export const AgentExecutionMessageDescriptorSchema = z.object({
     input: EntityCommandInputDescriptorSchema.optional()
 }).strict();
 
+export const AgentExecutionScopeSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('system'),
+        label: z.string().trim().min(1).optional()
+    }).strict(),
+    z.object({
+        kind: z.literal('repository'),
+        repositoryRootPath: z.string().trim().min(1)
+    }).strict(),
+    z.object({
+        kind: z.literal('mission'),
+        missionId: z.string().trim().min(1),
+        repositoryRootPath: z.string().trim().min(1).optional()
+    }).strict(),
+    z.object({
+        kind: z.literal('task'),
+        missionId: z.string().trim().min(1),
+        taskId: z.string().trim().min(1),
+        stageId: z.string().trim().min(1).optional(),
+        repositoryRootPath: z.string().trim().min(1).optional()
+    }).strict(),
+    z.object({
+        kind: z.literal('artifact'),
+        artifactId: z.string().trim().min(1),
+        repositoryRootPath: z.string().trim().min(1).optional(),
+        missionId: z.string().trim().min(1).optional(),
+        taskId: z.string().trim().min(1).optional(),
+        stageId: z.string().trim().min(1).optional()
+    }).strict()
+]);
+
+export const AgentExecutionProtocolOwnerEntitySchema = z.enum([
+    'System',
+    'Repository',
+    'Mission',
+    'Task',
+    'Artifact'
+]);
+
+export const AgentExecutionOwnerMarkerPrefixSchema = z.enum([
+    'system::',
+    'repository::',
+    'mission::',
+    'task::',
+    'artifact::'
+]);
+
+export const AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker']);
+
+export const AgentDeclaredSignalPolicySchema = z.enum([
+    'progress',
+    'claim',
+    'input-request',
+    'audit-message',
+    'diagnostic'
+]);
+
+export const AgentDeclaredSignalOutcomeSchema = z.enum([
+    'agent-execution-event',
+    'agent-execution-state',
+    'owner-entity-event',
+    'workflow-event'
+]);
+
+export const AgentDeclaredSignalDescriptorSchema = z.object({
+    type: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    description: z.string().trim().min(1).optional(),
+    payloadSchemaKey: z.string().trim().min(1),
+    delivery: AgentDeclaredSignalDeliverySchema,
+    policy: AgentDeclaredSignalPolicySchema,
+    outcomes: z.array(AgentDeclaredSignalOutcomeSchema).min(1)
+}).strict();
+
+const agentDeclaredSignalBoundedTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
+
+export const AgentDeclaredSignalClaimedTaskAddressSchema = z.object({
+    missionId: agentDeclaredSignalBoundedTextSchema,
+    taskId: agentDeclaredSignalBoundedTextSchema,
+    agentExecutionId: agentDeclaredSignalBoundedTextSchema
+}).strict();
+
+export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('progress'),
+        summary: agentDeclaredSignalBoundedTextSchema,
+        detail: agentDeclaredSignalBoundedTextSchema.optional()
+    }).strict(),
+    z.object({
+        type: z.literal('needs_input'),
+        question: agentDeclaredSignalBoundedTextSchema,
+        suggestedResponses: z.array(agentDeclaredSignalBoundedTextSchema).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES).optional()
+    }).strict(),
+    z.object({
+        type: z.literal('blocked'),
+        reason: agentDeclaredSignalBoundedTextSchema
+    }).strict(),
+    z.object({
+        type: z.literal('ready_for_verification'),
+        summary: agentDeclaredSignalBoundedTextSchema
+    }).strict(),
+    z.object({
+        type: z.literal('completed_claim'),
+        summary: agentDeclaredSignalBoundedTextSchema
+    }).strict(),
+    z.object({
+        type: z.literal('failed_claim'),
+        reason: agentDeclaredSignalBoundedTextSchema
+    }).strict(),
+    z.object({
+        type: z.literal('message'),
+        channel: z.enum(['agent', 'system', 'stdout', 'stderr']),
+        text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH)
+    }).strict()
+]);
+
+export const AgentDeclaredSignalMarkerPayloadSchema = z.object({
+    version: z.literal(1),
+    missionId: agentDeclaredSignalBoundedTextSchema,
+    taskId: agentDeclaredSignalBoundedTextSchema,
+    agentExecutionId: agentDeclaredSignalBoundedTextSchema,
+    eventId: agentDeclaredSignalBoundedTextSchema,
+    signal: AgentDeclaredSignalPayloadSchema
+}).strict();
+
+export const AgentExecutionProtocolOwnerSchema = z.object({
+    entity: AgentExecutionProtocolOwnerEntitySchema,
+    entityId: z.string().trim().min(1),
+    markerPrefix: AgentExecutionOwnerMarkerPrefixSchema
+}).strict();
+
+export const AgentExecutionProtocolDescriptorSchema = z.object({
+    version: z.literal(1),
+    owner: AgentExecutionProtocolOwnerSchema,
+    scope: AgentExecutionScopeSchema,
+    messages: z.array(AgentExecutionMessageDescriptorSchema),
+    signals: z.array(AgentDeclaredSignalDescriptorSchema)
+}).strict();
+
 export const AgentExecutionRuntimeCommandTypeSchema = z.enum([
     'interrupt',
     'checkpoint',
@@ -230,6 +430,9 @@ export const AgentExecutionRuntimeCommandTypeSchema = z.enum([
 export type AgentExecutionTerminalRouteParamsType = z.infer<typeof AgentExecutionTerminalRouteParamsSchema>;
 export type AgentExecutionTerminalQueryType = z.infer<typeof AgentExecutionTerminalQuerySchema>;
 export type AgentExecutionTerminalRouteInputType = z.infer<typeof AgentExecutionTerminalRouteInputSchema>;
+export type AgentExecutionTerminalRecordingHeaderEventType = z.infer<typeof AgentExecutionTerminalRecordingHeaderEventSchema>;
+export type AgentExecutionTerminalRecordingEventType = z.infer<typeof AgentExecutionTerminalRecordingEventSchema>;
+export type AgentExecutionTerminalRecordingType = z.infer<typeof AgentExecutionTerminalRecordingSchema>;
 export type AgentExecutionTerminalSnapshotType = z.infer<typeof AgentExecutionTerminalSnapshotSchema>;
 export type AgentExecutionTerminalSocketClientMessageType = z.infer<typeof AgentExecutionTerminalSocketClientMessageSchema>;
 export type AgentExecutionTerminalOutputType = z.infer<typeof AgentExecutionTerminalOutputSchema>;
@@ -239,6 +442,18 @@ export type AgentExecutionContextArtifactType = z.infer<typeof AgentExecutionCon
 export type AgentExecutionContextInstructionType = z.infer<typeof AgentExecutionContextInstructionSchema>;
 export type AgentExecutionContextType = z.infer<typeof AgentExecutionContextSchema>;
 export type AgentExecutionMessageDescriptorType = z.infer<typeof AgentExecutionMessageDescriptorSchema>;
+export type AgentExecutionScopeType = z.infer<typeof AgentExecutionScopeSchema>;
+export type AgentExecutionProtocolOwnerEntityType = z.infer<typeof AgentExecutionProtocolOwnerEntitySchema>;
+export type AgentExecutionOwnerMarkerPrefixType = z.infer<typeof AgentExecutionOwnerMarkerPrefixSchema>;
+export type AgentDeclaredSignalDeliveryType = z.infer<typeof AgentDeclaredSignalDeliverySchema>;
+export type AgentDeclaredSignalPolicyType = z.infer<typeof AgentDeclaredSignalPolicySchema>;
+export type AgentDeclaredSignalOutcomeType = z.infer<typeof AgentDeclaredSignalOutcomeSchema>;
+export type AgentDeclaredSignalDescriptorType = z.infer<typeof AgentDeclaredSignalDescriptorSchema>;
+export type AgentDeclaredSignalClaimedTaskAddressType = z.infer<typeof AgentDeclaredSignalClaimedTaskAddressSchema>;
+export type AgentDeclaredSignalPayloadType = z.infer<typeof AgentDeclaredSignalPayloadSchema>;
+export type AgentDeclaredSignalMarkerPayloadType = z.infer<typeof AgentDeclaredSignalMarkerPayloadSchema>;
+export type AgentExecutionProtocolOwnerType = z.infer<typeof AgentExecutionProtocolOwnerSchema>;
+export type AgentExecutionProtocolDescriptorType = z.infer<typeof AgentExecutionProtocolDescriptorSchema>;
 export type AgentExecutionRuntimeCommandType = z.infer<typeof AgentExecutionRuntimeCommandTypeSchema>;
 
 export const AgentExecutionLifecycleStateSchema = z.enum([
@@ -367,6 +582,7 @@ export type AgentExecutionState = {
     currentTurnTitle?: string;
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
+    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     scope?: MissionAgentScope;
     awaitingPermission?: MissionAgentPermissionRequest;
     telemetry?: MissionAgentTelemetrySnapshot;
@@ -388,6 +604,7 @@ export type AgentExecutionRecord = {
     currentTurnTitle?: string;
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
+    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     scope?: MissionAgentScope;
     telemetry?: MissionAgentTelemetrySnapshot;
     failureMessage?: string;
@@ -410,7 +627,7 @@ export const AgentExecutionStorageSchema = z.object({
     agentId: z.string().trim().min(1),
     transportId: z.string().trim().min(1).optional(),
     adapterLabel: z.string().trim().min(1),
-    sessionLogPath: z.string().trim().min(1).optional(),
+    sessionLogPath: AgentExecutionTerminalRecordingLogPathSchema.optional(),
     lifecycleState: AgentExecutionLifecycleStateSchema,
     terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
     assignmentLabel: z.string().trim().min(1).optional(),
@@ -420,6 +637,7 @@ export const AgentExecutionStorageSchema = z.object({
     interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
     context: AgentExecutionContextSchema,
     runtimeMessages: z.array(AgentExecutionMessageDescriptorSchema),
+    protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
     scope: z.unknown().optional(),
     telemetry: z.unknown().optional(),
     failureMessage: z.string().trim().min(1).optional(),

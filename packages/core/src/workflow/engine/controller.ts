@@ -11,7 +11,7 @@ import type {
     AgentExecutionReference,
     AgentExecutionSnapshot
 } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionSignalDecision } from '../../daemon/runtime/agent/signals/AgentExecutionSignal.js';
+import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,

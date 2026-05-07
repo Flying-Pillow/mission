@@ -16,3 +16,5 @@ Mission is built around strict ownership:
 - **Adapters** translate external systems into Mission concepts.
 
 Read [System Context](system-context.md), [Semantic Model](semantic-model.md), and [Entity Command Surface](entity-command-surface.md) first. ADR-0012 is the key architectural decision behind the current OOD model.
+
+Temporary working specs are allowed while a refactor is in flight. For Agent execution structured interaction, use [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md) as the current implementation reference until its durable decisions are folded back into `CONTEXT.md` and accepted ADRs.

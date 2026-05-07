@@ -1,5 +1,5 @@
-import type { AgentProviderObservation } from '../signals/AgentProviderObservation.js';
 import {
+    type AgentAdapterRuntimeOutput,
     type AgentInput,
     getNestedRecord,
     getStringField,
@@ -36,7 +36,7 @@ export const claudeCode = {
     }
 } satisfies AgentInput;
 
-function parseRuntimeOutputLine(line: string, agent: AgentInput): AgentProviderObservation[] {
+function parseRuntimeOutputLine(line: string, agent: AgentInput): AgentAdapterRuntimeOutput[] {
     const parsed = parseJsonLine(line);
     if (!parsed) {
         return [{ kind: 'none' }];
@@ -71,7 +71,7 @@ function parseRuntimeOutputLine(line: string, agent: AgentInput): AgentProviderO
         : [{ kind: 'none' }];
 }
 
-function parseSessionUsageContent(content: string): AgentProviderObservation | undefined {
+function parseSessionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
     let usageRecord: Record<string, unknown> | undefined;
     for (const line of content.split('\n')) {
         const parsed = parseJsonLine(line);

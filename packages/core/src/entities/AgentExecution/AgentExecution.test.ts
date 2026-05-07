@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { deriveAgentExecutionInteractionCapabilities, type AgentExecutionSnapshot } from './AgentExecutionProtocolTypes.js';
+import { deriveAgentExecutionProtocolOwner } from './AgentExecutionProtocolDescriptor.js';
 import { AgentExecution } from './AgentExecution.js';
 import { AgentExecutionContract } from './AgentExecutionContract.js';
-import { AgentExecutionDataSchema } from './AgentExecutionSchema.js';
+import { AgentExecutionDataSchema, AgentExecutionProtocolDescriptorSchema } from './AgentExecutionSchema.js';
 import type { AgentExecutionRecord } from './AgentExecutionSchema.js';
 
 describe('AgentExecution', () => {
@@ -110,6 +111,65 @@ describe('AgentExecution', () => {
     it('advertises concrete AgentExecution contract events only', () => {
         expect(Object.keys(AgentExecutionContract.events ?? {})).toEqual(['data.changed', 'terminal']);
     });
+
+    it('derives owner-addressed protocol metadata from AgentExecutionScope', () => {
+        expect(deriveAgentExecutionProtocolOwner({
+            kind: 'task',
+            missionId: 'mission-1',
+            taskId: 'implementation/01-build',
+            stageId: 'implementation'
+        })).toEqual({
+            entity: 'Task',
+            entityId: 'implementation/01-build',
+            markerPrefix: 'task::'
+        });
+
+        expect(deriveAgentExecutionProtocolOwner({
+            kind: 'repository',
+            repositoryRootPath: '/repo/mission'
+        })).toEqual({
+            entity: 'Repository',
+            entityId: '/repo/mission',
+            markerPrefix: 'repository::'
+        });
+    });
+
+    it('exposes the protocol descriptor as the source of truth for messages and signals', () => {
+        const descriptor = AgentExecution.createProtocolDescriptorForSnapshot(createRuntimeSnapshot());
+
+        expect(AgentExecutionProtocolDescriptorSchema.parse(descriptor)).toEqual(descriptor);
+        expect(descriptor.owner).toEqual({
+            entity: 'Task',
+            entityId: 'task-2',
+            markerPrefix: 'task::'
+        });
+        expect(descriptor.messages.map((message) => message.type)).toEqual([
+            'interrupt',
+            'checkpoint',
+            'nudge'
+        ]);
+        expect(descriptor.signals.map((signal) => signal.type)).toEqual([
+            'progress',
+            'needs_input',
+            'blocked',
+            'ready_for_verification',
+            'completed_claim',
+            'failed_claim',
+            'message'
+        ]);
+        expect(new Set(descriptor.signals.map((signal) => signal.delivery))).toEqual(new Set(['stdout-marker']));
+    });
+
+    it('materializes protocol descriptors on live AgentExecution data', () => {
+        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+
+        expect(data.protocolDescriptor?.owner).toEqual({
+            entity: 'Task',
+            entityId: 'task-2',
+            markerPrefix: 'task::'
+        });
+        expect(data.protocolDescriptor?.messages).toEqual(data.runtimeMessages);
+    });
 });
 
 function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {}): AgentExecutionRecord {
@@ -143,5 +203,57 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
             dependsOn: []
         },
         ...overrides
+    };
+}
+
+function createRuntimeSnapshot(): AgentExecutionSnapshot {
+    return {
+        agentId: 'codex',
+        sessionId: 'session-2',
+        scope: {
+            kind: 'task',
+            missionId: 'mission-1',
+            taskId: 'task-2',
+            stageId: 'implementation'
+        },
+        workingDirectory: '/repo',
+        taskId: 'task-2',
+        missionId: 'mission-1',
+        stageId: 'implementation',
+        status: 'running',
+        attention: 'autonomous',
+        progress: {
+            state: 'working',
+            updatedAt: '2026-05-04T00:00:00.000Z'
+        },
+        waitingForInput: false,
+        acceptsPrompts: true,
+        acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+        interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
+            status: 'running',
+            transport: {
+                kind: 'terminal',
+                terminalName: 'mission-agent-execution',
+                terminalPaneId: 'terminal_1'
+            },
+            acceptsPrompts: true,
+            acceptedCommands: ['interrupt', 'checkpoint', 'nudge']
+        }),
+        transport: {
+            kind: 'terminal',
+            terminalName: 'mission-agent-execution',
+            terminalPaneId: 'terminal_1'
+        },
+        reference: {
+            agentId: 'codex',
+            sessionId: 'session-2',
+            transport: {
+                kind: 'terminal',
+                terminalName: 'mission-agent-execution',
+                terminalPaneId: 'terminal_1'
+            }
+        },
+        startedAt: '2026-05-04T00:00:00.000Z',
+        updatedAt: '2026-05-04T00:00:00.000Z'
     };
 }

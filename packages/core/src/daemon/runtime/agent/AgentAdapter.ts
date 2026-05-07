@@ -5,9 +5,9 @@ import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.
 import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
 import type {
     AgentCapabilities,
-    AgentLaunchConfig
+    AgentLaunchConfig,
+    AgentMetadata
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentProviderObservation } from './signals/AgentProviderObservation.js';
 
 export class ProviderInitializationError extends Error {
     public readonly agentId: string;
@@ -105,14 +105,36 @@ export type AgentAdapterTerminalOptions = SharedTerminalRegistryOptions & {
     terminalPrefix?: string;
 };
 
+export type AgentAdapterRuntimeSignal =
+    | {
+        type: 'provider-session';
+        providerName: string;
+        sessionId: string;
+        source: 'provider-structured';
+        confidence: 'high';
+    }
+    | {
+        type: 'tool-call';
+        toolName: string;
+        args: string;
+        source: 'provider-structured';
+        confidence: 'medium';
+    };
+
+export type AgentAdapterRuntimeOutput =
+    | { kind: 'message'; channel: 'agent' | 'system'; text: string }
+    | { kind: 'signal'; signal: AgentAdapterRuntimeSignal }
+    | { kind: 'usage'; payload: AgentMetadata }
+    | { kind: 'none' };
+
 export type AgentAdapterInput = {
     command: string;
     interactive: AgentAdapterLaunchInput;
     providerSettings?: AgentAdapterProviderSettingsInput | false;
     runtimeEnv?: NodeJS.ProcessEnv;
     trustedFolders?: AgentAdapterTrustedFoldersInput;
-    parseRuntimeOutputLine?: (line: string, agent: AgentInput) => AgentProviderObservation[];
-    parseSessionUsageContent?: (content: string, agent: AgentInput) => AgentProviderObservation | undefined;
+    parseRuntimeOutputLine?: (line: string, agent: AgentInput) => AgentAdapterRuntimeOutput[];
+    parseSessionUsageContent?: (content: string, agent: AgentInput) => AgentAdapterRuntimeOutput | undefined;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
 };
 
@@ -123,8 +145,8 @@ export type AgentAdapterOptions = {
     command: string;
     displayName?: string;
     createLaunchPlan(config: AgentLaunchConfig): AgentAdapterLaunchPlan;
-    parseRuntimeOutputLine?: (line: string) => AgentProviderObservation[];
-    parseSessionUsageContent?: (content: string) => AgentProviderObservation | undefined;
+    parseRuntimeOutputLine?: (line: string) => AgentAdapterRuntimeOutput[];
+    parseSessionUsageContent?: (content: string) => AgentAdapterRuntimeOutput | undefined;
     prepareLaunchConfig?: (config: AgentLaunchConfig) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
 };
@@ -133,8 +155,8 @@ export class AgentAdapter {
     public readonly id: string;
     public readonly displayName: string;
     private readonly createLaunchPlanHook: (config: AgentLaunchConfig) => AgentAdapterLaunchPlan;
-    private readonly parseRuntimeOutputLineHook: ((line: string) => AgentProviderObservation[]) | undefined;
-    private readonly parseSessionUsageContentHook: ((content: string) => AgentProviderObservation | undefined) | undefined;
+    private readonly parseRuntimeOutputLineHook: ((line: string) => AgentAdapterRuntimeOutput[]) | undefined;
+    private readonly parseSessionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
     private readonly prepareLaunchConfigHook: ((config: AgentLaunchConfig) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>) | undefined;
     public readonly terminalOptions: Partial<AgentAdapterTerminalOptions>;
 
@@ -173,11 +195,11 @@ export class AgentAdapter {
         return this.createLaunchPlanHook(config);
     }
 
-    public parseRuntimeOutputLine(line: string): AgentProviderObservation[] {
+    public parseRuntimeOutputLine(line: string): AgentAdapterRuntimeOutput[] {
         return this.parseRuntimeOutputLineHook?.(line) ?? [{ kind: 'none' }];
     }
 
-    public parseSessionUsageContent(content: string): AgentProviderObservation | undefined {
+    public parseSessionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
         return this.parseSessionUsageContentHook?.(content);
     }
 

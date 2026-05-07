@@ -1,20 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentProviderObservation } from './AgentProviderObservation.js';
+import type { AgentAdapterRuntimeOutput } from '../AgentAdapter.js';
 import {
 	cloneSignal,
-	cloneSignalScope,
+	cloneObservationAddress,
+	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
 	type AgentExecutionObservation,
 	type AgentExecutionObservationOrigin,
 	type AgentExecutionSignal,
 	type AgentExecutionSignalCandidate,
-	type AgentExecutionSignalScope
-} from './AgentExecutionSignal.js';
+	type AgentExecutionObservationAddress
+} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
-	MISSION_PROTOCOL_MARKER_PREFIX,
-	MissionProtocolMarkerParser
-} from './MissionProtocolMarkerParser.js';
-import { ProviderOutputSignalParser } from './ProviderOutputSignalParser.js';
+	AgentDeclaredSignalClaimedTaskAddressSchema,
+	AgentDeclaredSignalMarkerPayloadSchema,
+	type AgentDeclaredSignalPayloadType,
+	AgentExecutionOwnerMarkerPrefixSchema,
+	type AgentExecutionOwnerMarkerPrefixType
+} from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
 
 const NEEDS_INPUT_PATTERNS = [
 	/\b(waiting for input|awaiting input|needs input|need input)\b/i,
@@ -36,69 +39,59 @@ const PROGRESS_PATTERNS = [
 export type AgentExecutionObservationInput =
 	| {
 		kind: 'provider-output';
-		observation: AgentProviderObservation;
-		scope: AgentExecutionSignalScope;
+		observation: AgentAdapterRuntimeOutput;
+		address: AgentExecutionObservationAddress;
 		observedAt?: string;
 	}
 	| {
-		kind: 'protocol-marker';
+		kind: 'agent-declared-signal';
 		line: string;
-		scope: AgentExecutionSignalScope;
+		address: AgentExecutionObservationAddress;
+		markerPrefix: AgentExecutionOwnerMarkerPrefixType;
 		observedAt?: string;
 	}
 	| {
 		kind: 'terminal-output';
 		line: string;
 		channel: 'stdout' | 'stderr';
-		scope: AgentExecutionSignalScope;
+		address: AgentExecutionObservationAddress;
+		markerPrefix?: AgentExecutionOwnerMarkerPrefixType;
 		observedAt?: string;
 	};
 
 export class AgentExecutionObservationRouter {
-	private readonly providerOutputParser: ProviderOutputSignalParser;
-
-	private readonly protocolMarkerParser: MissionProtocolMarkerParser;
-
-	public constructor(options?: {
-		providerOutputParser?: ProviderOutputSignalParser;
-		protocolMarkerParser?: MissionProtocolMarkerParser;
-	}) {
-		this.providerOutputParser = options?.providerOutputParser ?? new ProviderOutputSignalParser();
-		this.protocolMarkerParser = options?.protocolMarkerParser ?? new MissionProtocolMarkerParser();
-	}
-
 	public route(input: AgentExecutionObservationInput): AgentExecutionObservation[] {
 		const observedAt = input.observedAt ?? new Date().toISOString();
 		if (input.kind === 'provider-output') {
 			return this.toObservations(
-				this.providerOutputParser.parse(input.observation),
+				parseAdapterRuntimeOutput(input.observation),
 				'provider-output',
-				input.scope,
+				input.address,
 				observedAt
 			);
 		}
-		if (input.kind === 'protocol-marker') {
+		if (input.kind === 'agent-declared-signal') {
 			return this.toObservations(
-				this.protocolMarkerParser.parse(input.line),
-				'protocol-marker',
-				input.scope,
+				this.parseAgentDeclaredSignals(input.line, input.markerPrefix),
+				'agent-declared-signal',
+				input.address,
 				observedAt
 			);
 		}
 
-		const markerCandidates = input.channel === 'stdout'
-			? this.protocolMarkerParser.parse(input.line)
+		const markerCandidates = input.channel === 'stdout' && input.markerPrefix
+			? this.parseAgentDeclaredSignals(input.line, input.markerPrefix)
 			: [];
 		if (markerCandidates.length > 0) {
-			return this.toObservations(markerCandidates, 'protocol-marker', input.scope, observedAt);
+			return this.toObservations(markerCandidates, 'agent-declared-signal', input.address, observedAt);
 		}
-		if (input.line.startsWith(MISSION_PROTOCOL_MARKER_PREFIX)) {
+		if (isAgentDeclaredSignalMarkerLine(input.line)) {
 			return [];
 		}
 		return this.toObservations(
 			this.detectTerminalHeuristics(input.line, input.channel),
 			'terminal-output',
-			input.scope,
+			input.address,
 			observedAt
 		);
 	}
@@ -141,6 +134,83 @@ export class AgentExecutionObservationRouter {
 		return [];
 	}
 
+	private parseAgentDeclaredSignals(
+		line: string,
+		markerPrefix: AgentExecutionOwnerMarkerPrefixType
+	): AgentExecutionSignalCandidate[] {
+		const trimmed = line.trimEnd();
+		if (!trimmed.startsWith(markerPrefix)) {
+			return [];
+		}
+		if (trimmed.length > MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH) {
+			return [this.createAgentDeclaredSignalDiagnostic(
+				'agent-declared-signal-oversized',
+				'Agent-declared signal marker exceeded the maximum length.',
+				line
+			)];
+		}
+		const payload = trimmed.slice(markerPrefix.length);
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(payload);
+		} catch {
+			return [this.createAgentDeclaredSignalDiagnostic(
+				'agent-declared-signal-malformed',
+				'Agent-declared signal marker did not contain valid JSON.',
+				line
+			)];
+		}
+		const result = AgentDeclaredSignalMarkerPayloadSchema.safeParse(parsed);
+		if (!result.success) {
+			return [this.createAgentDeclaredSignalDiagnostic(
+				'agent-declared-signal-malformed',
+				'Agent-declared signal marker failed schema validation.',
+				line,
+				result.error.issues[0]?.message
+			)];
+		}
+
+		const claimedTaskAddress = AgentDeclaredSignalClaimedTaskAddressSchema.parse({
+			missionId: result.data.missionId,
+			taskId: result.data.taskId,
+			agentExecutionId: result.data.agentExecutionId
+		});
+		const claimedAddress: AgentExecutionObservationAddress = {
+			agentExecutionId: claimedTaskAddress.agentExecutionId,
+			scope: {
+				kind: 'task',
+				missionId: claimedTaskAddress.missionId,
+				taskId: claimedTaskAddress.taskId
+			}
+		};
+
+		return [{
+			dedupeKey: result.data.eventId,
+			claimedAddress,
+			rawText: line,
+			signal: toAgentDeclaredSignal(result.data.signal)
+		}];
+	}
+
+	private createAgentDeclaredSignalDiagnostic(
+		code: 'agent-declared-signal-malformed' | 'agent-declared-signal-oversized',
+		summary: string,
+		rawText: string,
+		detail?: string
+	): AgentExecutionSignalCandidate {
+		return {
+			rawText,
+			signal: {
+				type: 'diagnostic',
+				code,
+				summary,
+				...(detail ? { detail } : {}),
+				source: 'agent-declared',
+				confidence: 'diagnostic'
+			}
+		};
+	}
+
 	private createTerminalHeuristicDiagnostic(input: {
 		dedupeKey: string;
 		line: string;
@@ -169,7 +239,7 @@ export class AgentExecutionObservationRouter {
 	private toObservations(
 		candidates: AgentExecutionSignalCandidate[],
 		origin: AgentExecutionObservationOrigin,
-		scope: AgentExecutionSignalScope,
+		address: AgentExecutionObservationAddress,
 		observedAt: string
 	): AgentExecutionObservation[] {
 		return candidates.map((candidate, index) => ({
@@ -185,11 +255,135 @@ export class AgentExecutionObservationRouter {
 			signal: cloneSignal(candidate.signal),
 			route: {
 				origin,
-				scope: cloneSignalScope(scope)
+				address: cloneObservationAddress(address)
 			},
-			...(candidate.claimedScope ? { claimedScope: cloneSignalScope(candidate.claimedScope) } : {}),
+			...(candidate.claimedAddress ? { claimedAddress: cloneObservationAddress(candidate.claimedAddress) } : {}),
 			...(candidate.rawText ? { rawText: candidate.rawText } : {})
 		}));
+	}
+}
+
+function isAgentDeclaredSignalMarkerLine(line: string): boolean {
+	return AgentExecutionOwnerMarkerPrefixSchema.options.some((prefix) => line.startsWith(prefix));
+}
+
+function parseAdapterRuntimeOutput(observation: AgentAdapterRuntimeOutput): AgentExecutionSignalCandidate[] {
+	switch (observation.kind) {
+		case 'message':
+			return [{
+				signal: {
+					type: 'message',
+					channel: observation.channel,
+					text: observation.text,
+					source: 'provider-structured',
+					confidence: 'high'
+				}
+			}];
+		case 'usage':
+			return [{
+				signal: {
+					type: 'usage',
+					payload: { ...observation.payload },
+					source: 'provider-structured',
+					confidence: 'high'
+				}
+			}];
+		case 'signal':
+			return [toProviderDiagnosticCandidate(observation)];
+		case 'none':
+			return [];
+	}
+}
+
+function toProviderDiagnosticCandidate(observation: Extract<AgentAdapterRuntimeOutput, { kind: 'signal' }>): AgentExecutionSignalCandidate {
+	if (observation.signal.type === 'provider-session') {
+		return {
+			dedupeKey: `provider-session:${observation.signal.providerName}:${observation.signal.sessionId}`,
+			signal: {
+				type: 'diagnostic',
+				code: 'provider-session',
+				summary: `Provider '${observation.signal.providerName}' reported session '${observation.signal.sessionId}'.`,
+				payload: {
+					providerName: observation.signal.providerName,
+					sessionId: observation.signal.sessionId
+				},
+				source: observation.signal.source,
+				confidence: observation.signal.confidence
+			}
+		};
+	}
+
+	return {
+		dedupeKey: `tool-call:${observation.signal.toolName}:${observation.signal.args}`,
+		signal: {
+			type: 'diagnostic',
+			code: 'tool-call',
+			summary: `Provider invoked tool '${observation.signal.toolName}'.`,
+			detail: observation.signal.args,
+			payload: {
+				toolName: observation.signal.toolName,
+				args: observation.signal.args
+			},
+			source: observation.signal.source,
+			confidence: observation.signal.confidence
+		}
+	};
+}
+
+function toAgentDeclaredSignal(signal: AgentDeclaredSignalPayloadType): AgentExecutionSignalCandidate['signal'] {
+	switch (signal.type) {
+		case 'progress':
+			return {
+				type: 'progress',
+				summary: signal.summary,
+				...(signal.detail ? { detail: signal.detail } : {}),
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'needs_input':
+			return {
+				type: 'needs_input',
+				question: signal.question,
+				...(signal.suggestedResponses ? { suggestedResponses: [...signal.suggestedResponses] } : {}),
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'blocked':
+			return {
+				type: 'blocked',
+				reason: signal.reason,
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'ready_for_verification':
+			return {
+				type: 'ready_for_verification',
+				summary: signal.summary,
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'completed_claim':
+			return {
+				type: 'completed_claim',
+				summary: signal.summary,
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'failed_claim':
+			return {
+				type: 'failed_claim',
+				reason: signal.reason,
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
+		case 'message':
+			return {
+				type: 'message',
+				channel: signal.channel,
+				text: signal.text,
+				source: 'agent-declared',
+				confidence: 'medium'
+			};
 	}
 }
 

@@ -3,6 +3,7 @@ import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.
 import type {
     AgentCommand,
     AgentExecutionEvent,
+    AgentExecutionObservationAddress,
     AgentExecutionReference,
     AgentExecutionScope,
     AgentExecutionSnapshot,
@@ -27,10 +28,10 @@ import {
     type TerminalState
 } from '../../../entities/Terminal/TerminalRegistry.js';
 import type { AgentAdapter } from './AgentAdapter.js';
+import { AgentExecutionObservationPolicy } from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
 import { buildAgentExecutionSignalLaunchContext } from './signals/AgentExecutionSignalLaunchContext.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
-import { AgentExecutionSignalPolicy } from './signals/AgentExecutionSignalPolicy.js';
-import type { AgentExecutionObservation } from './signals/AgentExecutionSignal.js';
+import type { AgentExecutionObservation } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
@@ -42,7 +43,7 @@ type ManagedAgentExecution = {
     adapter: AgentAdapter;
     eventSubscription: { dispose(): void };
     outputLines: string[];
-    signalPolicy: AgentExecutionSignalPolicy;
+    observationPolicy: AgentExecutionObservationPolicy;
     cleanup?: () => Promise<void>;
 };
 
@@ -168,15 +169,40 @@ export class AgentExecutor {
         executionId: string;
     }> {
         const executionId = AgentExecution.createFreshExecutionId(config, agentId);
-        const signalScope = toSignalInstructionScope(config);
-        if (!signalScope) {
+        const instructionScope = toSignalInstructionScope(config);
+        if (!instructionScope) {
             return { config, executionId };
         }
+        const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot({
+            agentId,
+            sessionId: executionId,
+            scope: config.scope,
+            workingDirectory: config.workingDirectory,
+            ...(config.scope.kind === 'mission' ? { missionId: config.scope.missionId } : {}),
+            ...(config.scope.kind === 'task' ? { missionId: config.scope.missionId, taskId: config.scope.taskId, stageId: config.scope.stageId } : {}),
+            ...(config.scope.kind === 'artifact' ? { missionId: config.scope.missionId, taskId: config.scope.taskId, stageId: config.scope.stageId } : {}),
+            status: 'starting',
+            attention: 'autonomous',
+            progress: {
+                state: 'working',
+                updatedAt: new Date().toISOString()
+            },
+            waitingForInput: false,
+            acceptsPrompts: true,
+            acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+            reference: {
+                agentId,
+                sessionId: executionId
+            },
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
 
         const launchContext = buildAgentExecutionSignalLaunchContext({
-            missionId: signalScope.missionId,
-            taskId: signalScope.taskId,
-            agentExecutionId: executionId
+            missionId: instructionScope.missionId,
+            taskId: instructionScope.taskId,
+            agentExecutionId: executionId,
+            protocolDescriptor
         });
         return {
             executionId,
@@ -214,7 +240,7 @@ export class AgentExecutor {
             adapter: input.adapter,
             eventSubscription,
             outputLines: [],
-            signalPolicy: new AgentExecutionSignalPolicy(),
+            observationPolicy: new AgentExecutionObservationPolicy(),
             ...(input.cleanup ? { cleanup: input.cleanup } : {})
         });
     }
@@ -255,15 +281,12 @@ export class AgentExecutor {
         channel: 'stdout' | 'stderr',
         line: string
     ): void {
-        const signalScope = toSignalScope(snapshot);
-        if (!signalScope) {
-            return;
-        }
+        const observationAddress = toObservationAddress(snapshot);
         for (const observation of managed.adapter.parseRuntimeOutputLine(line)) {
             this.applyObservations(managed, this.observationRouter.route({
                 kind: 'provider-output',
                 observation,
-                scope: signalScope,
+                address: observationAddress,
                 observedAt: snapshot.updatedAt
             }));
         }
@@ -271,16 +294,14 @@ export class AgentExecutor {
             kind: 'terminal-output',
             line,
             channel,
-            scope: signalScope,
+            address: observationAddress,
+            markerPrefix: AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix,
             observedAt: snapshot.updatedAt
         }));
     }
 
     private routeUsageObservation(managed: ManagedAgentExecution, snapshot: AgentExecutionSnapshot): void {
-        const signalScope = toSignalScope(snapshot);
-        if (!signalScope) {
-            return;
-        }
+        const observationAddress = toObservationAddress(snapshot);
         const usageObservation = managed.adapter.parseSessionUsageContent(managed.outputLines.join('\n'));
         if (!usageObservation) {
             return;
@@ -288,14 +309,14 @@ export class AgentExecutor {
         this.applyObservations(managed, this.observationRouter.route({
             kind: 'provider-output',
             observation: usageObservation,
-            scope: signalScope,
+            address: observationAddress,
             observedAt: snapshot.updatedAt
         }));
     }
 
     private applyObservations(managed: ManagedAgentExecution, observations: AgentExecutionObservation[]): void {
         for (const observation of observations) {
-            const decision = managed.signalPolicy.evaluate({
+            const decision = managed.observationPolicy.evaluate({
                 snapshot: managed.execution.getSnapshot(),
                 observation
             });
@@ -500,14 +521,10 @@ function toSignalInstructionScope(config: AgentLaunchConfig): { missionId: strin
     return undefined;
 }
 
-function toSignalScope(snapshot: AgentExecutionSnapshot): { missionId: string; taskId: string; agentExecutionId: string } | undefined {
-    if (!snapshot.missionId || !snapshot.taskId) {
-        return undefined;
-    }
+function toObservationAddress(snapshot: AgentExecutionSnapshot): AgentExecutionObservationAddress {
     return {
-        missionId: snapshot.missionId,
-        taskId: snapshot.taskId,
-        agentExecutionId: snapshot.sessionId
+        agentExecutionId: snapshot.sessionId,
+        scope: snapshot.scope
     };
 }
 

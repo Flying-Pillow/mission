@@ -1,5 +1,5 @@
-import type { AgentProviderObservation } from '../signals/AgentProviderObservation.js';
 import {
+    type AgentAdapterRuntimeOutput,
     type AgentInput,
     getNestedRecord,
     getStringField,
@@ -24,7 +24,7 @@ export const pi = {
     }
 } satisfies AgentInput;
 
-function parseRuntimeOutputLine(line: string): AgentProviderObservation[] {
+function parseRuntimeOutputLine(line: string): AgentAdapterRuntimeOutput[] {
     const parsed = parseJsonLine(line);
     if (parsed && getStringField(parsed, 'type') === 'tool_execution_start') {
         const toolName = getStringField(parsed, 'toolName');

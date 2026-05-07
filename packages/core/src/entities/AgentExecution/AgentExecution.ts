@@ -12,9 +12,10 @@ import type {
 } from './AgentExecutionProtocolTypes.js';
 import {
 	deriveAgentExecutionInteractionCapabilities,
-	describeAgentExecutionScope
+	describeAgentExecutionScope,
+	type AgentExecutionSignalDecision
 } from './AgentExecutionProtocolTypes.js';
-import type { AgentExecutionSignalDecision } from '../../daemon/runtime/agent/signals/AgentExecutionSignal.js';
+import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionTaskState } from '../Mission/MissionSchema.js';
 import { Repository } from '../Repository/Repository.js';
@@ -35,12 +36,14 @@ import {
 	AgentExecutionPromptSchema,
 	AgentExecutionCommandSchema,
 	AgentExecutionSendTerminalInputSchema,
+	AgentExecutionTerminalRecordingSchema,
 	AgentExecutionTerminalSnapshotSchema,
 	AgentExecutionDataSchema,
 	AgentExecutionCommandIds,
 	agentExecutionEntityName,
 	type AgentExecutionCommandType,
 	type AgentExecutionMessageDescriptorType,
+	type AgentExecutionProtocolDescriptorType,
 	type AgentExecutionContextType,
 	type AgentExecutionInteractionCapabilitiesType,
 	type AgentExecutionPromptType,
@@ -59,7 +62,12 @@ export type AgentExecutionOwner = {
 	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<AgentExecutionRecord>;
 };
 
-const agentExecutionDataCache = new Map<string, { data: AgentExecutionDataType; timestamp: number }>();
+type LocatedAgentExecutionData = {
+	data: AgentExecutionDataType;
+	missionDir: string;
+};
+
+const agentExecutionDataCache = new Map<string, { located: LocatedAgentExecutionData; timestamp: number }>();
 const SESSION_DATA_CACHE_TTL_MS = 5_000;
 
 type AgentExecutionLaunchRecord = {
@@ -129,6 +137,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...record.interactionCapabilities },
 			context: AgentExecution.createContext(record),
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
+			...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
 			...(record.scope ? { scope: record.scope } : {}),
 			...(record.telemetry ? { telemetry: record.telemetry } : {}),
 			createdAt: record.createdAt,
@@ -169,8 +178,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static async readTerminal(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionLocatorSchema.parse(payload);
-		const data = await AgentExecution.requireDataForLocator(input, context);
-		return AgentExecution.readTerminalData(context.surfacePath, input.missionId, data);
+		const located = await AgentExecution.requireDataForLocator(input, context);
+		return AgentExecution.readTerminalData(located.missionDir, input.missionId, located.data);
 	}
 
 
@@ -218,8 +227,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionSendTerminalInputSchema.parse(payload);
-		const data = await AgentExecution.requireDataForLocator(input, context);
-		const terminalHandle = AgentExecution.requireTerminalHandle(data);
+		const located = await AgentExecution.requireDataForLocator(input, context);
+		const terminalHandle = AgentExecution.requireTerminalHandle(located.data);
 		Terminal.sendInput({
 			terminalName: terminalHandle.terminalName,
 			terminalPaneId: terminalHandle.terminalPaneId,
@@ -228,7 +237,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(input.cols !== undefined ? { cols: input.cols } : {}),
 			...(input.rows !== undefined ? { rows: input.rows } : {})
 		}, context);
-		return AgentExecution.readTerminalData(context.surfacePath, input.missionId, data);
+		return AgentExecution.readTerminalData(located.missionDir, input.missionId, located.data);
 	}
 
 	public static async isCompatibleForLaunch(input: {
@@ -315,6 +324,17 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		].filter((descriptor) => commandTypes.includes(descriptor.type as AgentCommand['type'])));
 	}
 
+	public static createProtocolDescriptorForSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionProtocolDescriptorType {
+		return createAgentExecutionProtocolDescriptor({
+			scope: snapshot.scope,
+			messages: AgentExecution.resolveRuntimeMessages({
+				lifecycleState: snapshot.status,
+				acceptsPrompts: snapshot.acceptsPrompts,
+				acceptedCommands: snapshot.acceptedCommands
+			})
+		});
+	}
+
 	public static buildTaskScope(
 		task: MissionTaskState,
 		missionId?: string,
@@ -348,6 +368,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			? AgentExecution.buildTaskScope(input.task, input.missionId, input.missionDir)
 			: undefined;
 		const terminalFields = getTerminalFields(input.snapshot);
+		const protocolDescriptor = input.snapshot
+			? AgentExecution.createProtocolDescriptorForSnapshot(input.snapshot)
+			: undefined;
 
 		return AgentExecution.cloneRecord({
 			sessionId: input.launch.sessionId,
@@ -393,6 +416,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					? { acceptedCommands: input.snapshot.acceptedCommands }
 					: {})
 			}),
+			...(protocolDescriptor ? { protocolDescriptor } : {}),
 			...(scope ? { scope } : {}),
 			...(input.snapshot?.failureMessage ? { failureMessage: input.snapshot.failureMessage } : {})
 		});
@@ -405,6 +429,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}): AgentExecutionState {
 		const { snapshot, adapterLabel, record } = input;
 		const terminalFields = getTerminalFields(snapshot);
+		const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot(snapshot);
 		return AgentExecution.cloneState({
 			agentId: snapshot.agentId,
 			...(terminalFields.transportId ? { transportId: terminalFields.transportId } : {}),
@@ -437,6 +462,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				acceptsPrompts: snapshot.acceptsPrompts,
 				acceptedCommands: snapshot.acceptedCommands
 			}),
+			protocolDescriptor,
 			...(record?.scope ? { scope: record.scope } : {}),
 			...(snapshot.failureMessage
 				? { failureMessage: snapshot.failureMessage }
@@ -464,6 +490,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
 			interactionCapabilities: { ...record.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
+			...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
 			...(record.scope ? { scope: AgentExecution.cloneScope(record.scope) } : {}),
 			...(telemetry ? { telemetry } : {}),
 			...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
@@ -485,6 +512,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(state.currentTurnTitle ? { currentTurnTitle: state.currentTurnTitle } : {}),
 			interactionCapabilities: { ...state.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(state.runtimeMessages),
+			...(state.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(state.protocolDescriptor) } : {}),
 			...(state.scope ? { scope: AgentExecution.cloneScope(state.scope) } : {}),
 			...(state.awaitingPermission
 				? {
@@ -509,6 +537,21 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...descriptor,
 			...(descriptor.input ? { input: { ...descriptor.input } } : {})
 		}));
+	}
+
+	private static cloneProtocolDescriptor(
+		protocolDescriptor: AgentExecutionProtocolDescriptorType
+	): AgentExecutionProtocolDescriptorType {
+		return {
+			version: protocolDescriptor.version,
+			owner: { ...protocolDescriptor.owner },
+			scope: { ...protocolDescriptor.scope },
+			messages: AgentExecution.cloneRuntimeMessages(protocolDescriptor.messages),
+			signals: protocolDescriptor.signals.map((descriptor) => ({
+				...descriptor,
+				outcomes: [...descriptor.outcomes]
+			}))
+		};
 	}
 
 	private static resolveRuntimeMessages(input: {
@@ -597,6 +640,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				acceptsPrompts: snapshot.acceptsPrompts,
 				acceptedCommands: snapshot.acceptedCommands
 			}),
+			protocolDescriptor: AgentExecution.createProtocolDescriptorForSnapshot(snapshot),
 			...(runtimeScope ? { scope: runtimeScope } : {}),
 			createdAt: snapshot.startedAt,
 			lastUpdatedAt: snapshot.updatedAt,
@@ -869,6 +913,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
 				interactionCapabilities: { ...record.interactionCapabilities },
 				runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
+				...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
 				...(record.scope ? { scope: record.scope } : {}),
 				...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 			});
@@ -1083,26 +1128,29 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	private static async requireDataForLocator(
 		input: { missionId: string; sessionId: string },
 		context: EntityExecutionContext
-	): Promise<AgentExecutionDataType> {
+	): Promise<LocatedAgentExecutionData> {
 		const cacheKey = `${input.missionId}:${input.sessionId}`;
 		const cached = agentExecutionDataCache.get(cacheKey);
 		if (cached && Date.now() - cached.timestamp < SESSION_DATA_CACHE_TTL_MS) {
-			return cached.data;
+			return cached.located;
 		}
 
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			const data = AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-			agentExecutionDataCache.set(cacheKey, { data, timestamp: Date.now() });
-			return data;
+			const located = {
+				data: AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId),
+				missionDir: mission.getMissionDir()
+			};
+			agentExecutionDataCache.set(cacheKey, { located, timestamp: Date.now() });
+			return located;
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	private static async readTerminalData(
-		workspaceRoot: string,
+		missionDir: string,
 		missionId: string,
 		data: AgentExecutionDataType
 	) {
@@ -1112,11 +1160,16 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			terminalPaneId: terminalHandle.terminalPaneId
 		});
 		let screen = terminalSnapshot.screen;
+		let recording: unknown;
 		if (!terminalSnapshot.connected) {
-			const missionDir = AgentExecution.resolveMissionDir(data);
-			screen = data.sessionLogPath && missionDir
-				? await new MissionDossierFilesystem(workspaceRoot).readMissionSessionLog(missionDir, data.sessionLogPath) ?? ''
-				: '';
+			const dossierFilesystem = new MissionDossierFilesystem(Repository.getRepositoryRootFromMissionDir(missionDir));
+			const events = data.sessionLogPath && missionDir
+				? await dossierFilesystem.readMissionSessionLogEvents(missionDir, data.sessionLogPath) ?? []
+				: [];
+			recording = events.length > 0
+				? AgentExecutionTerminalRecordingSchema.parse({ version: 1, events })
+				: undefined;
+			screen = '';
 		}
 		return AgentExecutionTerminalSnapshotSchema.parse({
 			missionId,
@@ -1124,9 +1177,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			connected: terminalSnapshot.connected,
 			dead: terminalSnapshot.dead,
 			exitCode: terminalSnapshot.exitCode,
+			...(terminalSnapshot.cols ? { cols: terminalSnapshot.cols } : {}),
+			...(terminalSnapshot.rows ? { rows: terminalSnapshot.rows } : {}),
 			screen,
 			...(typeof terminalSnapshot.chunk === 'string' ? { chunk: terminalSnapshot.chunk } : {}),
 			...(terminalSnapshot.truncated ? { truncated: true } : {}),
+			...(recording ? { recording } : {}),
 			terminalHandle: {
 				terminalName: terminalHandle.terminalName,
 				terminalPaneId: terminalHandle.terminalPaneId,
@@ -1140,15 +1196,6 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			throw new Error(`AgentExecution '${data.sessionId}' is not backed by a Terminal.`);
 		}
 		return data.terminalHandle;
-	}
-
-	private static resolveMissionDir(data: AgentExecutionDataType): string | undefined {
-		const scope = data.scope;
-		if (!scope || typeof scope !== 'object' || !('missionDir' in scope)) {
-			return undefined;
-		}
-		const missionDir = scope.missionDir;
-		return typeof missionDir === 'string' && missionDir.trim() ? missionDir.trim() : undefined;
 	}
 
 }

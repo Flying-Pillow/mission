@@ -774,10 +774,32 @@
         },
         "agentAdapter": "copilot-cli",
         "retries": 0,
-        "reworkIterationCount": 0,
+        "reworkIterationCount": 1,
+        "reworkRequest": {
+          "requestId": "task.reworked:implementation/09-documentation-and-final-cleanup:2026-05-07T09:10:04.761Z",
+          "requestedAt": "2026-05-07T09:10:04.761Z",
+          "actor": "workflow",
+          "reasonCode": "verification.failed",
+          "summary": "Verification task 'Verify Documentation And Final Cleanup' requested corrective rework for 'Documentation And Final Cleanup'. Review the referenced verification evidence before restarting the implementation task.",
+          "iteration": 1,
+          "maxIterations": 3,
+          "sourceTaskId": "implementation/09-documentation-and-final-cleanup-verify",
+          "launchedAt": "2026-05-07T09:10:21.479Z",
+          "resolvedAt": "2026-05-07T09:19:54.182Z",
+          "artifactRefs": [
+            {
+              "path": "03-IMPLEMENTATION/tasks/09-documentation-and-final-cleanup-verify.md",
+              "title": "Verify Documentation And Final Cleanup"
+            },
+            {
+              "path": "03-IMPLEMENTATION/VERIFY.md",
+              "title": "VERIFY.md"
+            }
+          ]
+        },
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-05T17:58:27.193Z",
-        "completedAt": "2026-05-05T17:58:27.193Z"
+        "updatedAt": "2026-05-07T09:19:54.182Z",
+        "completedAt": "2026-05-07T09:19:54.182Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
@@ -795,11 +817,11 @@
         "runtime": {
           "autostart": false
         },
-        "agentAdapter": "pi",
+        "agentAdapter": "codex",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-06T14:57:01.122Z"
+        "updatedAt": "2026-05-07T09:12:00.164Z"
       },
       {
         "taskId": "audit/01-debrief",
@@ -823,19 +845,124 @@
     ],
     "sessions": [
       {
-        "sessionId": "09-documentation-and-final-cleanup-verify-codex-d7b11fdd",
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-1da1f0c8",
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
         "agentId": "codex",
         "transportId": "terminal",
-        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-d7b11fdd.log",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-1da1f0c8.terminal.jsonl",
         "terminalHandle": {
-          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-d7b11fdd",
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-1da1f0c8",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-07T07:10:47.766Z",
+        "updatedAt": "2026-05-07T07:17:28.987Z",
+        "terminatedAt": "2026-05-07T07:17:28.987Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-4db70f6f",
+        "taskId": "implementation/09-documentation-and-final-cleanup-verify",
+        "agentId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-4db70f6f.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-4db70f6f",
           "terminalPaneId": "pty"
         },
         "lifecycle": "completed",
-        "launchedAt": "2026-05-06T14:55:45.445Z",
-        "updatedAt": "2026-05-06T14:56:00.748Z",
-        "completedAt": "2026-05-06T14:56:00.748Z"
+        "launchedAt": "2026-05-07T07:55:21.358Z",
+        "updatedAt": "2026-05-07T07:56:02.476Z",
+        "completedAt": "2026-05-07T07:56:02.476Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-5c9f801f",
+        "taskId": "implementation/09-documentation-and-final-cleanup-verify",
+        "agentId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-5c9f801f.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-5c9f801f",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-07T08:46:59.512Z",
+        "updatedAt": "2026-05-07T08:47:18.049Z",
+        "terminatedAt": "2026-05-07T08:47:18.049Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-37f6fb8b",
+        "taskId": "implementation/09-documentation-and-final-cleanup-verify",
+        "agentId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-37f6fb8b.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-37f6fb8b",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-07T08:53:26.807Z",
+        "updatedAt": "2026-05-07T08:54:26.704Z",
+        "terminatedAt": "2026-05-07T08:54:26.704Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-96f8a28c",
+        "taskId": "implementation/09-documentation-and-final-cleanup-verify",
+        "agentId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-96f8a28c.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-96f8a28c",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-07T08:56:46.633Z",
+        "updatedAt": "2026-05-07T08:57:48.902Z",
+        "terminatedAt": "2026-05-07T08:57:48.902Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-opencode-86951322",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "agentId": "opencode",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-opencode-86951322.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-opencode-86951322",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "failed",
+        "launchedAt": "2026-05-07T09:10:21.479Z",
+        "updatedAt": "2026-05-07T09:10:22.522Z",
+        "failedAt": "2026-05-07T09:10:22.522Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-a6fe3290",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "agentId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-a6fe3290.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-a6fe3290",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-07T09:12:02.953Z",
+        "updatedAt": "2026-05-07T09:13:59.225Z",
+        "terminatedAt": "2026-05-07T09:13:59.225Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-0bfb8496",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "agentId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-0bfb8496.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-0bfb8496",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "completed",
+        "launchedAt": "2026-05-07T09:18:48.148Z",
+        "updatedAt": "2026-05-07T09:19:54.182Z",
+        "completedAt": "2026-05-07T09:19:54.182Z"
       }
     ],
     "gates": [
@@ -847,7 +974,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-06T14:57:01.122Z"
+        "updatedAt": "2026-05-07T09:19:54.182Z"
       },
       {
         "gateId": "verify",
@@ -857,7 +984,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-06T14:57:01.122Z"
+        "updatedAt": "2026-05-07T09:19:54.182Z"
       },
       {
         "gateId": "audit",
@@ -867,7 +994,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-06T14:57:01.122Z"
+        "updatedAt": "2026-05-07T09:19:54.182Z"
       },
       {
         "gateId": "deliver",
@@ -877,10 +1004,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-06T14:57:01.122Z"
+        "updatedAt": "2026-05-07T09:19:54.182Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-06T14:57:01.122Z"
+    "updatedAt": "2026-05-07T09:19:54.182Z"
   }
 }

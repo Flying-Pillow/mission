@@ -1,12 +1,14 @@
 <script lang="ts">
     import AgentExecutionCommandbar from "$lib/components/entities/AgentExecution/AgentExecutionCommandbar.svelte";
+    import AgentExecutionTerminalReplay from "$lib/components/entities/AgentExecution/AgentExecutionTerminalReplay.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
-    import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import { FitAddon } from "@xterm/addon-fit";
-    import * as XtermModule from "@xterm/xterm";
-    import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
+    import {
+        createAirportTerminalRuntime,
+        type AirportTerminal,
+        type AirportTerminalRuntime,
+    } from "$lib/client/runtime/terminal/GhosttyTerminalRuntime";
     import type {
         AgentExecutionCommandType,
         AgentExecutionTerminalSnapshotType,
@@ -15,35 +17,6 @@
         subscribeMissionSessionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
-    import "@xterm/xterm/css/xterm.css";
-
-    const Terminal = resolveConstructorExport<
-        typeof import("@xterm/xterm").Terminal
-    >(
-        XtermModule as unknown as Record<string, unknown>,
-        "Terminal",
-        "@xterm/xterm",
-    );
-    type XtermTerminal = InstanceType<typeof Terminal>;
-    type XtermFitAddon = InstanceType<typeof FitAddon>;
-
-    function resolveConstructorExport<T>(
-        moduleRecord: Record<string, unknown>,
-        exportName: string,
-        moduleName: string,
-    ): T {
-        const direct = moduleRecord[exportName];
-        const defaultRecord = moduleRecord.default as
-            | Record<string, unknown>
-            | undefined;
-        const resolved = direct ?? defaultRecord?.[exportName];
-        if (!resolved) {
-            throw new Error(
-                `${moduleName} does not expose '${exportName}' in this runtime build.`,
-            );
-        }
-        return resolved as T;
-    }
 
     let {
         refreshNonce,
@@ -65,9 +38,8 @@
     let sendingInput = $state(false);
     let activeTransportKey = $state<string | null>(null);
 
-    let terminal: XtermTerminal | null = null;
-    let fitAddon: XtermFitAddon | null = null;
-    let resizeObserver: ResizeObserver | null = null;
+    let terminal: AirportTerminal | null = null;
+    let terminalRuntime: AirportTerminalRuntime | null = null;
     let terminalTransport =
         $state<SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> | null>(
             null,
@@ -77,13 +49,12 @@
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
     let promptText = $state("");
-    let selectedCommandType = $state<AgentExecutionCommandType["type"] | "">("");
+    let selectedCommandType = $state<AgentExecutionCommandType["type"] | "">(
+        "",
+    );
     let commandReason = $state("");
     let interactionPending = $state<"prompt" | "command" | null>(null);
     let interactionError = $state<string | null>(null);
-
-    const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
-    type TerminalResizeEvent = { cols: number; rows: number };
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
     const runtimeMessages = $derived(session?.runtimeMessages ?? []);
@@ -136,9 +107,6 @@
         Boolean(session && !session.isRunning()) ||
             Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
     );
-    const persistedTranscriptHtml = $derived.by(() =>
-        renderPersistedTranscriptHtml(terminalSnapshot?.screen ?? ""),
-    );
     const terminalStateLabel = $derived.by(() => {
         if (!session) {
             return "No session";
@@ -164,10 +132,8 @@
     });
     $effect(() => {
         if (isPersistedTranscriptSnapshot) {
-            resizeObserver?.disconnect();
-            terminal?.dispose();
-            resizeObserver = null;
-            fitAddon = null;
+            terminalRuntime?.dispose();
+            terminalRuntime = null;
             terminal = null;
             lastRenderedScreen = "";
             return;
@@ -182,9 +148,8 @@
 
         return () => {
             disposed = true;
-            resizeObserver?.disconnect();
-            terminal?.dispose();
-            fitAddon = null;
+            terminalRuntime?.dispose();
+            terminalRuntime = null;
             terminal = null;
             lastRenderedScreen = "";
         };
@@ -289,7 +254,7 @@
         if (!terminal) {
             return;
         }
-        fitAddon?.fit();
+        terminalRuntime?.fit();
     });
 
     $effect(() => {
@@ -409,79 +374,49 @@
         }
     }
 
-    function initializeTerminal(
+    async function initializeTerminal(
         target: HTMLDivElement,
         isDisposed: () => boolean,
-    ): void {
+    ): Promise<void> {
         if (isDisposed()) {
             return;
         }
 
-        terminal = new Terminal({
-            convertEol: true,
-            cursorBlink: true,
-            fontFamily:
-                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-            fontSize: 13,
-            scrollback: 1500,
-            theme: {
-                background: "#000000",
-                foreground: "#e2e8f0",
-                cursor: "#f8fafc",
-                selectionBackground: "#334155",
-                black: "#020617",
-                red: "#f87171",
-                green: "#4ade80",
-                yellow: "#facc15",
-                blue: "#60a5fa",
-                magenta: "#f472b6",
-                cyan: "#22d3ee",
-                white: "#e2e8f0",
-                brightBlack: "#475569",
-                brightRed: "#fb7185",
-                brightGreen: "#86efac",
-                brightYellow: "#fde047",
-                brightBlue: "#93c5fd",
-                brightMagenta: "#f9a8d4",
-                brightCyan: "#67e8f9",
-                brightWhite: "#f8fafc",
+        const runtime = await createAirportTerminalRuntime({
+            target,
+            isDisposed,
+            onResize: ({ cols, rows }) => {
+                if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+                    return;
+                }
+                if (
+                    document.visibilityState !== "visible" ||
+                    !document.hasFocus()
+                ) {
+                    return;
+                }
+                pendingResize = { cols, rows };
+                void flushPendingResize();
+            },
+            onData: (data) => {
+                if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+                    return;
+                }
+                const sanitizedData = sanitizeTerminalInputData(data);
+                if (sanitizedData.length === 0) {
+                    return;
+                }
+                pendingInput += sanitizedData;
+                if (!sendingInput) {
+                    void flushPendingInput();
+                }
             },
         });
-        fitAddon = new FitAddon();
-        terminal.loadAddon(fitAddon);
-        terminal.open(target);
-        fitAddon.fit();
-        terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
-            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
-                return;
-            }
-            if (
-                document.visibilityState !== "visible" ||
-                !document.hasFocus()
-            ) {
-                return;
-            }
-            pendingResize = { cols, rows };
-            void flushPendingResize();
-        });
-        terminal.onData((data: string) => {
-            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
-                return;
-            }
-            const sanitizedData = sanitizeTerminalInputData(data);
-            if (sanitizedData.length === 0) {
-                return;
-            }
-            pendingInput += sanitizedData;
-            if (!sendingInput) {
-                void flushPendingInput();
-            }
-        });
-
-        resizeObserver = new ResizeObserver(() => {
-            fitAddon?.fit();
-        });
-        resizeObserver.observe(target);
+        if (!runtime) {
+            return;
+        }
+        terminalRuntime = runtime;
+        terminal = runtime.terminal;
     }
 
     async function flushPendingResize(): Promise<void> {
@@ -516,50 +451,6 @@
         }
 
         return screen.replace(/\u001b\[\?(?:47|1047|1048|1049)[hl]/g, "");
-    }
-
-    function renderPersistedTranscriptHtml(screen: string): string {
-        if (!screen) {
-            return "No transcript output captured.";
-        }
-
-        const normalizedTranscript = screen
-            .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
-            .replace(
-                /\u001b\[\?(?:47|1047|1048|1049|1002|1004|1006|2004|2026)[hl]/g,
-                "\n",
-            )
-            .replace(/\u001b\[(?:\d+;)*\d*[Hf]/g, "\n")
-            .replace(/\u001b\[2K/g, "")
-            .replace(/\u001b\[(?:\d+;)*\d*[ABCDGJKSTsu]/g, "\n")
-            .replace(/\u001b(?:\(|\))[A-Za-z0-9]/g, "")
-            .replace(/\u001b[A-Z\\]/g, "")
-            .replace(/\r/g, "\n")
-            .replace(/\u0007/g, "")
-            .replace(/[ \t]+\n/g, "\n")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
-
-        return sanitizeBrowserHtml(
-            Anser.ansiToHtml(Anser.escapeForHtml(normalizedTranscript), {
-                use_classes: false,
-            }),
-            {
-                allowedTags: ["br", "span"],
-                allowedAttributes: {
-                    span: ["style"],
-                },
-                allowedStyles: {
-                    span: [
-                        "background-color",
-                        "color",
-                        "font-style",
-                        "font-weight",
-                        "text-decoration",
-                    ],
-                },
-            },
-        );
     }
 
     function sanitizeTerminalInputData(data: string): string {
@@ -616,18 +507,6 @@
 
         return sanitizedData;
     }
-
-    function appendTerminalScreen(
-        currentScreen: string,
-        chunk: string,
-        truncated: boolean,
-    ): string {
-        const nextScreen = `${currentScreen}${chunk}`;
-        if (truncated || nextScreen.length > MAX_TERMINAL_SNAPSHOT_LENGTH) {
-            return nextScreen.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
-        }
-        return nextScreen;
-    }
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -678,21 +557,17 @@
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
                 {#if canShowStructuredComposer}
-                    Mission is not attached to a live PTY for this execution. Use
-                    the structured input controls below to continue the run.
+                    Mission is not attached to a live PTY for this execution.
+                    Use the structured input controls below to continue the run.
                 {:else}
                     {session.interactionReason ??
                         "This session is not terminal-backed, so Mission Control cannot attach an interactive console."}
                 {/if}
             </div>
         {:else if isPersistedTranscriptSnapshot}
-            <div
-                class="h-full min-h-[24rem] overflow-auto bg-slate-950 px-3 py-2"
-            >
-                <div class="agent-execution-transcript">
-                    {@html persistedTranscriptHtml}
-                </div>
-            </div>
+            <AgentExecutionTerminalReplay
+                recording={terminalSnapshot?.recording}
+            />
         {:else}
             <div class="h-full min-h-[24rem] overflow-hidden">
                 <div
@@ -810,22 +685,3 @@
         </section>
     {/if}
 </section>
-
-<style>
-    .agent-execution-transcript {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-family:
-            ui-monospace,
-            SFMono-Regular,
-            Menlo,
-            Monaco,
-            Consolas,
-            Liberation Mono,
-            monospace;
-        font-size: 0.8125rem;
-        line-height: 1.35;
-        color: #e2e8f0;
-    }
-</style>

@@ -1,26 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { AgentExecutionObservationRouter } from './AgentExecutionObservationRouter.js';
-import { MISSION_PROTOCOL_MARKER_PREFIX } from './MissionProtocolMarkerParser.js';
 
-const scope = {
-	missionId: 'mission-31',
-	taskId: 'task-3',
-	agentExecutionId: 'session-7'
+const markerPrefix = 'task::';
+
+const address = {
+	agentExecutionId: 'session-7',
+	scope: {
+		kind: 'task' as const,
+		missionId: 'mission-31',
+		taskId: 'task-3'
+	}
 };
 
 describe('AgentExecutionObservationRouter', () => {
-	it('routes strict stdout markers through the protocol-marker boundary', () => {
+	it('routes strict stdout markers through the agent-declared signal boundary', () => {
 		const router = new AgentExecutionObservationRouter();
 		const observations = router.route({
 			kind: 'terminal-output',
 			channel: 'stdout',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:00:00.000Z',
-			line: `${MISSION_PROTOCOL_MARKER_PREFIX}${JSON.stringify({
+			markerPrefix,
+			line: `${markerPrefix}${JSON.stringify({
 				version: 1,
-				missionId: scope.missionId,
-				taskId: scope.taskId,
-				agentExecutionId: scope.agentExecutionId,
+				missionId: address.scope.missionId,
+				taskId: address.scope.taskId,
+				agentExecutionId: address.agentExecutionId,
 				eventId: 'evt-7',
 				signal: {
 					type: 'needs_input',
@@ -31,13 +36,13 @@ describe('AgentExecutionObservationRouter', () => {
 		});
 
 		expect(observations).toEqual([{
-			observationId: 'protocol-marker:evt-7',
+			observationId: 'agent-declared-signal:evt-7',
 			observedAt: '2026-05-04T12:00:00.000Z',
-			claimedScope: scope,
+			claimedAddress: address,
 			rawText: expect.stringContaining('"eventId":"evt-7"'),
 			route: {
-				origin: 'protocol-marker',
-				scope
+				origin: 'agent-declared-signal',
+				address
 			},
 			signal: {
 				type: 'needs_input',
@@ -49,28 +54,29 @@ describe('AgentExecutionObservationRouter', () => {
 		}]);
 	});
 
-	it('routes malformed stdout markers as protocol-marker diagnostics', () => {
+	it('routes malformed stdout markers as agent-declared signal diagnostics', () => {
 		const router = new AgentExecutionObservationRouter();
 		const observations = router.route({
 			kind: 'terminal-output',
 			channel: 'stdout',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:00:30.000Z',
-			line: `${MISSION_PROTOCOL_MARKER_PREFIX}{not-json}`
+			markerPrefix,
+			line: `${markerPrefix}{not-json}`
 		});
 
 		expect(observations).toEqual([{
-			observationId: expect.stringMatching(/^protocol-marker:[a-f0-9]+:[0-9a-f-]+$/),
+			observationId: expect.stringMatching(/^agent-declared-signal:[a-f0-9]+:[0-9a-f-]+$/),
 			observedAt: '2026-05-04T12:00:30.000Z',
-			rawText: `${MISSION_PROTOCOL_MARKER_PREFIX}{not-json}`,
+			rawText: `${markerPrefix}{not-json}`,
 			route: {
-				origin: 'protocol-marker',
-				scope
+				origin: 'agent-declared-signal',
+				address
 			},
 			signal: {
 				type: 'diagnostic',
-				code: 'protocol-marker-malformed',
-				summary: 'Mission protocol marker did not contain valid JSON.',
+				code: 'agent-declared-signal-malformed',
+				summary: 'Agent-declared signal marker did not contain valid JSON.',
 				source: 'agent-declared',
 				confidence: 'diagnostic'
 			}
@@ -82,7 +88,7 @@ describe('AgentExecutionObservationRouter', () => {
 		const observations = router.route({
 			kind: 'terminal-output',
 			channel: 'stderr',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:01:00.000Z',
 			line: 'Waiting for input: choose yes or no to continue.'
 		});
@@ -93,7 +99,7 @@ describe('AgentExecutionObservationRouter', () => {
 			rawText: 'Waiting for input: choose yes or no to continue.',
 			route: {
 				origin: 'terminal-output',
-				scope
+				address
 			},
 			signal: {
 				type: 'diagnostic',
@@ -110,19 +116,20 @@ describe('AgentExecutionObservationRouter', () => {
 		}]);
 	});
 
-	it('does not trust stderr marker-looking lines as protocol markers', () => {
+	it('does not trust stderr marker-looking lines as agent-declared signals', () => {
 		const router = new AgentExecutionObservationRouter();
 
 		expect(router.route({
 			kind: 'terminal-output',
 			channel: 'stderr',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:01:30.000Z',
-			line: `${MISSION_PROTOCOL_MARKER_PREFIX}${JSON.stringify({
+			markerPrefix,
+			line: `${markerPrefix}${JSON.stringify({
 				version: 1,
-				missionId: scope.missionId,
-				taskId: scope.taskId,
-				agentExecutionId: scope.agentExecutionId,
+				missionId: address.scope.missionId,
+				taskId: address.scope.taskId,
+				agentExecutionId: address.agentExecutionId,
 				eventId: 'stderr-marker',
 				signal: {
 					type: 'progress',
@@ -136,7 +143,7 @@ describe('AgentExecutionObservationRouter', () => {
 		const router = new AgentExecutionObservationRouter();
 		const firstObservation = router.route({
 			kind: 'provider-output',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:03:00.000Z',
 			observation: {
 				kind: 'message',
@@ -146,7 +153,7 @@ describe('AgentExecutionObservationRouter', () => {
 		});
 		const secondObservation = router.route({
 			kind: 'provider-output',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:03:00.000Z',
 			observation: {
 				kind: 'message',
@@ -168,7 +175,7 @@ describe('AgentExecutionObservationRouter', () => {
 		expect(router.route({
 			kind: 'terminal-output',
 			channel: 'stdout',
-			scope,
+			address,
 			observedAt: '2026-05-04T12:03:00.000Z',
 			line: 'npm notice using cached metadata'
 		})).toEqual([]);

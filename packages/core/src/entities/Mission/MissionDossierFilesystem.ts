@@ -545,7 +545,7 @@ export class MissionDossierFilesystem {
 	}
 
 	public getMissionSessionLogRelativePath(sessionId: string): string {
-		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.log`);
+		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.terminal.jsonl`);
 	}
 
 	public getMissionSessionMetadataRelativePath(sessionId: string): string {
@@ -553,7 +553,7 @@ export class MissionDossierFilesystem {
 	}
 
 	public getMissionSessionLogPath(missionDir: string, sessionId: string): string {
-		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.log`);
+		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.terminal.jsonl`);
 	}
 
 	public getMissionSessionLogPathFromRelativePath(missionDir: string, sessionLogPath: string): string | undefined {
@@ -565,12 +565,19 @@ export class MissionDossierFilesystem {
 	}
 
 	public resolveMissionSessionLogPath(missionDir: string, sessionLogPath: string): string | undefined {
+		if (!this.isMissionTerminalRecordingLogPath(sessionLogPath)) {
+			throw new ArtifactFormatError(`Mission session log path '${sessionLogPath}' must use session-logs/<sessionId>.terminal.jsonl.`);
+		}
 		const resolvedLogPath = path.resolve(missionDir, sessionLogPath);
 		const relativeLogPath = path.relative(missionDir, resolvedLogPath);
 		if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
 			return undefined;
 		}
 		return resolvedLogPath;
+	}
+
+	private isMissionTerminalRecordingLogPath(sessionLogPath: string): boolean {
+		return /^session-logs\/[^/]+\.terminal\.jsonl$/u.test(sessionLogPath.trim());
 	}
 
 	public async readMissionStateDataFile(
@@ -641,20 +648,17 @@ export class MissionDossierFilesystem {
 		await fs.rename(temporaryPath, filePath);
 	}
 
-	public async appendMissionSessionLogChunk(
+	public async appendMissionSessionLogEvent(
 		missionDir: string,
 		sessionLogPath: string,
-		chunk: string
+		event: unknown
 	): Promise<void> {
-		if (chunk.length === 0) {
-			return;
-		}
 		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
 		if (!filePath) {
 			return;
 		}
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
-		await fs.appendFile(filePath, chunk, 'utf8');
+		await fs.appendFile(filePath, `${JSON.stringify(event)}\n`, 'utf8');
 	}
 
 	public async ensureMissionSessionLogFile(
@@ -669,16 +673,29 @@ export class MissionDossierFilesystem {
 		await fs.appendFile(filePath, '', 'utf8');
 	}
 
-	public async readMissionSessionLog(
+	public async readMissionSessionLogEvents(
 		missionDir: string,
 		sessionLogPath: string
-	): Promise<string | undefined> {
+	): Promise<unknown[] | undefined> {
 		const filePath = this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
 		if (!filePath) {
 			return undefined;
 		}
 		try {
-			return await fs.readFile(filePath, 'utf8');
+			const content = await fs.readFile(filePath, 'utf8');
+			return content
+				.split('\n')
+				.filter((line) => line.trim().length > 0)
+				.map((line, index) => {
+					try {
+						return JSON.parse(line) as unknown;
+					} catch (error) {
+						if (error instanceof SyntaxError) {
+							throw new ArtifactFormatError(`Mission session log '${filePath}' has invalid JSONL at line ${index + 1}.`);
+						}
+						throw error;
+					}
+				});
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return undefined;

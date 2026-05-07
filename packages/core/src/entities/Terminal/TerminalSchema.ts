@@ -58,6 +58,8 @@ export const TerminalSnapshotSchema = z.object({
     connected: z.boolean(),
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
     screen: z.string(),
     chunk: z.string().optional(),
     truncated: z.boolean().optional(),

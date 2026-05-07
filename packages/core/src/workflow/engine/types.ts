@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { AgentExecutionTerminalHandleSchema, type AgentExecutionTerminalHandleType } from '../../entities/AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionTerminalHandleSchema, AgentExecutionTerminalRecordingLogPathSchema, type AgentExecutionTerminalHandleType } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import { type AgentIdType } from '../../entities/Agent/AgentSchema.js';
 import { MissionReasoningEffortSchema, type MissionReasoningEffortType } from '../../entities/Mission/MissionSchema.js';
 import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../../entities/Task/TaskSchema.js';
@@ -185,7 +185,7 @@ export const AgentExecutionRuntimeStateSchema = z.object({
     taskId: nonEmptyStringSchema,
     agentId: nonEmptyStringSchema,
     transportId: nonEmptyStringSchema.optional(),
-    sessionLogPath: nonEmptyStringSchema.optional(),
+    sessionLogPath: AgentExecutionTerminalRecordingLogPathSchema.optional(),
     terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
     lifecycle: z.enum(MISSION_AGENT_EXECUTION_LIFECYCLE_STATES),
     launchedAt: nonEmptyStringSchema,

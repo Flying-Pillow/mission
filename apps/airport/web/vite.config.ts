@@ -58,6 +58,9 @@ export default defineConfig({
 		missionTerminalWebSocketPlugin()
 	],
 	ssr: {
+		external: [
+			"node-pty"
+		],
 		noExternal: [
 			"@flying-pillow/mission-core",
 			"@flying-pillow/mission"
